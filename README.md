@@ -1,25 +1,25 @@
 # Nelvar
 
-**Nelvar** — пиксельный 2D-рогалик с видом сверху, в котором мутация является одновременно главным инструментом развития персонажа и источником постоянной опасности.
+**Nelvar** is a pixel-art 2D roguelike with a top-down perspective, where mutation serves as both the primary means of character progression and a constant source of danger.
 
-В отличие от традиционных рогаликов, где персонаж постепенно становится сильнее, в Nelvar любое преимущество имеет свою цену.
+Unlike traditional roguelikes, where characters gradually grow stronger, in Nelvar, every advantage comes at a cost.
 
-## Концепция
+## Concept
 
-Мир Nelvar населён существами, для которых мутации являются естественной частью существования.
+The world of Nelvar is inhabited by creatures for whom mutation is a natural part of existence.
 
-Игрок управляет одним из **Странников** — парадоксальных существ, чьё существование нарушает привычные законы реальности.
+Players take control of one of the **Wanderers** — paradoxical beings whose very existence defies the conventional laws of reality.
 
-Каждый Странник вынужден постоянно изменяться, приспосабливаясь к окружающему миру и последствиям собственных мутаций.
+Every Wanderer is forced to constantly evolve, adapting to the surrounding world and the consequences of their own mutations.
 
-**Главный принцип игры: чтобы что-то получить, придётся чем-то пожертвовать.**
+**The game's core principle: to gain something, you must sacrifice something in return.**
 
-## Разработка
+## Development
 
-Nelvar находится на ранней стадии активной разработки.
+Nelvar is currently in the early stages of active development.
 
-Текущий приоритет — создание игрового прототипа с полноценным персонажем и рабочей системой генерации окружения.
+The current priority is to create a playable prototype featuring a fully developed character and a functional procedural environment generation system.
 
-Механики, контент и техническая реализация будут постепенно расширяться по мере развития проекта.
+Gameplay mechanics, content, and technical implementation will gradually expand as the project evolves.
 
-**Nelvar — игра не о бесконечном накоплении силы, а о выживании через постоянную адаптацию.**
+**Nelvar is not a game about endlessly accumulating power, but about surviving through constant adaptation.**
