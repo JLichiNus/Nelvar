@@ -4,8 +4,8 @@ extends Area2D
 @export var travel_distance: float = 360.0
 @export var duration: float = 0.55
 @export var fade_duration: float = 0.20
-@export var start_size := Vector2(70.0, 24.0)
-@export var end_size := Vector2(180.0, 72.0)
+@export var start_size := Vector2(70.0, 70.0)
+@export var end_size := Vector2(180.0, 180.0)
 @export var damage: float = 8.0
 @export var knockback_force: float = 550.0
 
@@ -27,6 +27,9 @@ func launch(
 	if launch_direction.length_squared() > 0.0001:
 		direction = launch_direction.normalized()
 	rotation = direction.angle()
+	scale = Vector2.ONE
+	modulate.a = 1.0
+	_hit_targets.clear()
 	monitoring = collision_enabled
 	monitorable = collision_enabled
 
@@ -37,7 +40,12 @@ func launch(
 		origin + direction * travel_distance,
 		duration
 	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(self, "scale", end_size / start_size, duration)
+	tween.tween_property(
+		self,
+		"scale",
+		end_size / start_size,
+		duration
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.tween_property(
 		self,
 		"modulate:a",
