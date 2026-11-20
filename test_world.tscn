@@ -1,0 +1,83 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://player/player.tscn" id="1_player"]
+
+[node name="TestWorld" type="Node2D"]
+
+[node name="Background" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(0, 0, 3456, 0, 3456, 1944, 0, 1944)
+color = Color(0.0705882, 0.0901961, 0.137255, 1)
+
+[node name="VerticalLine1" type="Line2D" parent="."]
+points = PackedVector2Array(576, 0, 576, 1944)
+width = 2.0
+default_color = Color(0.145098, 0.180392, 0.25098, 1)
+
+[node name="VerticalLine2" type="Line2D" parent="."]
+points = PackedVector2Array(1152, 0, 1152, 1944)
+width = 2.0
+default_color = Color(0.145098, 0.180392, 0.25098, 1)
+
+[node name="VerticalLine3" type="Line2D" parent="."]
+points = PackedVector2Array(1728, 0, 1728, 1944)
+width = 2.0
+default_color = Color(0.145098, 0.180392, 0.25098, 1)
+
+[node name="VerticalLine4" type="Line2D" parent="."]
+points = PackedVector2Array(2304, 0, 2304, 1944)
+width = 2.0
+default_color = Color(0.145098, 0.180392, 0.25098, 1)
+
+[node name="VerticalLine5" type="Line2D" parent="."]
+points = PackedVector2Array(2880, 0, 2880, 1944)
+width = 2.0
+default_color = Color(0.145098, 0.180392, 0.25098, 1)
+
+[node name="HorizontalLine1" type="Line2D" parent="."]
+points = PackedVector2Array(0, 324, 3456, 324)
+width = 2.0
+default_color = Color(0.145098, 0.180392, 0.25098, 1)
+
+[node name="HorizontalLine2" type="Line2D" parent="."]
+points = PackedVector2Array(0, 648, 3456, 648)
+width = 2.0
+default_color = Color(0.145098, 0.180392, 0.25098, 1)
+
+[node name="HorizontalLine3" type="Line2D" parent="."]
+points = PackedVector2Array(0, 972, 3456, 972)
+width = 2.0
+default_color = Color(0.145098, 0.180392, 0.25098, 1)
+
+[node name="HorizontalLine4" type="Line2D" parent="."]
+points = PackedVector2Array(0, 1296, 3456, 1296)
+width = 2.0
+default_color = Color(0.145098, 0.180392, 0.25098, 1)
+
+[node name="HorizontalLine5" type="Line2D" parent="."]
+points = PackedVector2Array(0, 1620, 3456, 1620)
+width = 2.0
+default_color = Color(0.145098, 0.180392, 0.25098, 1)
+
+[node name="LandmarkLeft" type="Polygon2D" parent="."]
+position = Vector2(660, 972)
+polygon = PackedVector2Array(-50, -50, 50, -50, 50, 50, -50, 50)
+color = Color(0.203922, 0.345098, 0.505882, 1)
+
+[node name="LandmarkRight" type="Polygon2D" parent="."]
+position = Vector2(2796, 972)
+polygon = PackedVector2Array(-50, -50, 50, -50, 50, 50, -50, 50)
+color = Color(0.505882, 0.25098, 0.321569, 1)
+
+[node name="Player" parent="." instance=ExtResource("1_player")]
+position = Vector2(1728, 972)
+
+[node name="Interface" type="CanvasLayer" parent="."]
+
+[node name="Instructions" type="Label" parent="Interface"]
+offset_left = 24.0
+offset_top = 20.0
+offset_right = 470.0
+offset_bottom = 56.0
+theme_override_colors/font_color = Color(0.921569, 0.94902, 1, 1)
+theme_override_font_sizes/font_size = 24
+text = "WASD — движение игрока"
