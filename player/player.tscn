@@ -1,12 +1,20 @@
-[gd_scene load_steps=3 format=3 uid="uid://dcaj77phiguvn"]
+[gd_scene load_steps=6 format=3 uid="uid://dcaj77phiguvn"]
 
 [ext_resource type="Script" uid="uid://4psdfeenr6lm" path="res://player/player.gd" id="1_oul6g"]
+[ext_resource type="PackedScene" path="res://attacks/wind_projectile/wind_projectile.tscn" id="2_projectile"]
+[ext_resource type="PackedScene" path="res://attacks/wind_wave/wind_wave.tscn" id="3_wave"]
+[ext_resource type="PackedScene" path="res://attacks/wind_compression/wind_compression.tscn" id="4_compression"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_player"]
 size = Vector2(36, 36)
 
 [node name="Player" type="CharacterBody2D" unique_id=120432351]
+collision_layer = 2
+collision_mask = 1
 script = ExtResource("1_oul6g")
+projectile_scene = ExtResource("2_projectile")
+wave_scene = ExtResource("3_wave")
+compression_scene = ExtResource("4_compression")
 
 [node name="Body" type="Polygon2D" parent="."]
 polygon = PackedVector2Array(-18, -18, 18, -18, 18, 18, -18, 18)
@@ -15,10 +23,25 @@ color = Color(0.188235, 0.784314, 0.639216, 1)
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=1764298744]
 shape = SubResource("RectangleShape2D_player")
 
-[node name="DirectionIndicator" type="Polygon2D" parent="."]
+[node name="AimPivot" type="Node2D" parent="."]
+
+[node name="DirectionIndicator" type="Polygon2D" parent="AimPivot"]
 polygon = PackedVector2Array(5, -7, 25, 0, 5, 7)
 color = Color(1, 0.862745, 0.313726, 1)
+
+[node name="ProjectileSpawn" type="Marker2D" parent="AimPivot"]
+position = Vector2(30, 0)
 
 [node name="Camera2D" type="Camera2D" parent="."]
 zoom = Vector2(1.15, 1.15)
 position_smoothing_enabled = false
+limit_left = 0
+limit_top = 0
+limit_right = 3456
+limit_bottom = 1944
+
+[node name="BoostDuration" type="Timer" parent="."]
+one_shot = true
+
+[node name="BoostCooldown" type="Timer" parent="."]
+one_shot = true

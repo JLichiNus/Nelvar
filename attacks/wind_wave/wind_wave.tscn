@@ -1,0 +1,24 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://attacks/wind_wave/wind_wave.gd" id="1_script"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_wave"]
+size = Vector2(70, 24)
+
+[node name="WindWave" type="Area2D"]
+collision_layer = 4
+collision_mask = 8
+monitoring = true
+monitorable = false
+script = ExtResource("1_script")
+
+[node name="Body" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(-35, -12, 35, -12, 35, 12, -35, 12)
+color = Color(0.682353, 0.713726, 0.760784, 0.55)
+
+[node name="Core" type="Polygon2D" parent="."]
+polygon = PackedVector2Array(-29, -4, 29, -4, 29, 4, -29, 4)
+color = Color(0.952941, 0.956863, 0.964706, 0.85)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_wave")
