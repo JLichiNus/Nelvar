@@ -1,0 +1,27 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Godot: Launch Project",
+			"type": "godot",
+			"request": "launch",
+			"project": "${workspaceFolder}",
+			"scene": "main"
+		},
+		{
+			"name": "Godot: Launch Current Scene",
+			"type": "godot",
+			"request": "launch",
+			"project": "${workspaceFolder}",
+			"scene": "current"
+		},
+		{
+			"name": "Godot: Launch Project (debug collisions)",
+			"type": "godot",
+			"request": "launch",
+			"project": "${workspaceFolder}",
+			"scene": "main",
+			"debug_collisions": true
+		}
+	]
+}

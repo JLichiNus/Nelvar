@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3 uid="uid://dcaj77phiguvn"]
+[gd_scene load_steps=7 format=3 uid="uid://dcaj77phiguvn"]
 
 [ext_resource type="Script" uid="uid://4psdfeenr6lm" path="res://player/player.gd" id="1_oul6g"]
 [ext_resource type="PackedScene" path="res://attacks/wind_projectile/wind_projectile.tscn" id="2_projectile"]
@@ -7,6 +7,9 @@
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_player"]
 size = Vector2(36, 36)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_hurtbox"]
+size = Vector2(32, 32)
 
 [node name="Player" type="CharacterBody2D" unique_id=120432351]
 collision_layer = 2
@@ -45,3 +48,11 @@ one_shot = true
 
 [node name="BoostCooldown" type="Timer" parent="."]
 one_shot = true
+
+[node name="Hurtbox" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 8
+monitorable = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hurtbox"]
+shape = SubResource("RectangleShape2D_hurtbox")
