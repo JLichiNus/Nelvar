@@ -32,9 +32,6 @@ const ATTACK_PRIORITY := {
 @export var speed_boost_cooldown: float = 10.0
 @export var flight_height: float = 14.0
 @export var flight_lift_duration: float = 0.12
-# Тень есть всегда — элементаль парит; в полёте она сжимается.
-@export var ground_shadow_scale: float = 0.8
-@export var flight_shadow_scale: float = 0.55
 # Покачивание корпуса над смерчем: на сколько текселей и с каким периодом.
 @export var hover_bob_texels: float = 1.0
 @export var hover_bob_period: float = 1.3
@@ -92,7 +89,6 @@ var _hover_time := 0.0
 @onready var body_visual: Node2D = $Body
 @onready var vortex_sprite: AnimatedSprite2D = $Body/Vortex
 @onready var torso_sprite: AnimatedSprite2D = $Body/Torso
-@onready var shadow: Polygon2D = $Shadow
 @onready var wind_trail: CPUParticles2D = $WindTrail
 @onready var hurtbox: Area2D = $Hurtbox
 @onready var camera: Camera2D = $Camera2D
@@ -104,8 +100,6 @@ func _ready() -> void:
 	(collision_shape.shape as CircleShape2D).radius = BODY_RADIUS
 	_body_scale = body_visual.scale.abs()
 	_body_rest_position = body_visual.position
-	shadow.scale = Vector2.ONE * ground_shadow_scale
-	shadow.visible = true
 	torso_sprite.animation_finished.connect(_on_torso_animation_finished)
 	boost_duration_timer.timeout.connect(_on_boost_duration_timeout)
 	boost_cooldown_timer.timeout.connect(_on_boost_cooldown_timeout)
@@ -308,7 +302,6 @@ func _die() -> void:
 	if _flight_tween != null:
 		_flight_tween.kill()
 	body_visual.position = _body_rest_position
-	shadow.visible = false
 	aim_pivot.visible = false
 	hurtbox.set_deferred("monitoring", false)
 	died.emit()
@@ -406,35 +399,21 @@ func _instantiate_attack(scene: PackedScene, attack_name: String) -> Node:
 
 
 func _play_lift_off() -> void:
-	var tween := _restart_flight_tween().set_parallel(true)
-	tween.tween_property(
+	_restart_flight_tween().tween_property(
 		body_visual,
 		"position:y",
 		_body_rest_position.y - flight_height,
 		flight_lift_duration
 	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(
-		shadow,
-		"scale",
-		Vector2.ONE * flight_shadow_scale,
-		flight_lift_duration
-	)
 
 
 func _play_landing() -> void:
-	var tween := _restart_flight_tween().set_parallel(true)
-	tween.tween_property(
+	_restart_flight_tween().tween_property(
 		body_visual,
 		"position:y",
 		_body_rest_position.y,
 		flight_lift_duration
 	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tween.tween_property(
-		shadow,
-		"scale",
-		Vector2.ONE * ground_shadow_scale,
-		flight_lift_duration
-	)
 
 
 func _restart_flight_tween() -> Tween:

@@ -63,8 +63,4 @@ func _draw() -> void:
 		draw_texture_rect(cloud.texture, Rect2(at, cloud.size), false,
 			Color(1, 1, 1, cloud.opacity))
 	for art in terrain_art:
-		draw_texture_rect(art.surface_texture,
-			Rect2(art.world_rect.position + Vector2(16, 100), art.world_rect.size),
-			false, Color(0.16, 0.23, 0.27, 0.2))
-	for art in terrain_art:
 		draw_texture_rect(art.underside_texture, art.world_rect, false)
