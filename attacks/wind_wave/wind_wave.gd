@@ -1,9 +1,16 @@
 extends Area2D
 
+# Спрайтшит генерирует tools/gen_wind_wave.py: колонки — кадры расширения,
+# строки — направления 0..90°, прочие квадранты получаются отражением.
+# Кадры уже нарисованы нужного размера, поэтому Visual не масштабируется
+# и не вращается вместе с узлом — пиксели остаются ровными и одного размера
+# с пикселями игрока. При смене duration/start_size/end_size — перегенерировать.
+const SHEET_TEXEL := 1.5
+
 
 @export var travel_distance: float = 360.0
 @export var duration: float = 0.55
-@export var fade_duration: float = 0.20
+@export var fade_duration: float = 0.10  # текстура сама рассыпается, это лишь добивка
 @export var start_size := Vector2(70.0, 70.0)
 @export var end_size := Vector2(180.0, 180.0)
 @export var damage: float = 8.0
@@ -11,6 +18,8 @@ extends Area2D
 
 var direction := Vector2.RIGHT
 var _hit_targets: Dictionary = {}
+var _sheet_row := 0
+var _visual: Sprite2D
 
 
 func _ready() -> void:
@@ -30,6 +39,7 @@ func launch(
 	scale = Vector2.ONE
 	modulate.a = 1.0
 	_hit_targets.clear()
+	_setup_visual()
 	monitoring = collision_enabled
 	monitorable = collision_enabled
 
@@ -52,7 +62,29 @@ func launch(
 		0.0,
 		minf(fade_duration, duration)
 	).set_delay(maxf(duration - fade_duration, 0.0))
+	# Последним в том же tween — чтобы спрайт брал уже обновлённый масштаб узла.
+	tween.tween_method(_update_visual, 0.0, 1.0, duration)
 	tween.chain().tween_callback(queue_free)
+
+
+func _setup_visual() -> void:
+	# launch() может прийти раньше _ready, поэтому без @onready.
+	_visual = $Visual
+	var row_count := _visual.vframes
+	var base_angle := atan2(absf(direction.y), absf(direction.x))
+	_sheet_row = clampi(
+		roundi(base_angle / (PI * 0.5) * (row_count - 1)), 0, row_count - 1
+	)
+	_visual.flip_h = direction.x < 0.0
+	_visual.flip_v = direction.y < 0.0
+	_update_visual(0.0)
+
+
+func _update_visual(progress: float) -> void:
+	var column := mini(int(progress * _visual.hframes), _visual.hframes - 1)
+	_visual.frame_coords = Vector2i(column, _sheet_row)
+	_visual.global_rotation = 0.0
+	_visual.global_scale = Vector2(SHEET_TEXEL, SHEET_TEXEL)
 
 
 func _on_body_entered(body: Node) -> void:
