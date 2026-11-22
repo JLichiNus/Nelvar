@@ -28,8 +28,19 @@ enum State { IDLE, JUMPING, DEAD }
 @export var knockback_friction: float = 1800.0
 
 @export_category("Visual")
+## Радиус тела в мировых пикселях; рисуется пиксель-артом по сетке pixel_size.
 @export var body_radius: float = 22.0
-@export var body_segments: int = 24
+@export_range(1, 8, 1) var pixel_size: int = 3
+@export var outline_color := Color("4a182c")
+@export var shade_color := Color("992e4a")
+@export var base_color := Color("d64f5e")
+@export var light_color := Color("ee8382")
+@export var highlight_color := Color("ffe0d6")
+@export var eye_color := Color("3a1222")
+@export var shadow_color := Color(0.0, 0.0, 0.0, 0.35)
+
+# Текстуры одинаковы у всех прыгунов с одинаковыми параметрами — печём один раз.
+static var _texture_cache := {}
 
 var health: float
 var _state := State.IDLE
@@ -42,22 +53,20 @@ var _hold_time_left := 0.0
 var _visual_tween: Tween
 var _flash_tween: Tween
 
-@onready var shadow: Polygon2D = $Shadow
+@onready var shadow: Node2D = $Shadow
+@onready var shadow_sprite: Sprite2D = $Shadow/Sprite
 @onready var visual: Node2D = $Visual
-@onready var body: Polygon2D = $Visual/Body
-@onready var highlight: Polygon2D = $Visual/Highlight
+@onready var body: Sprite2D = $Visual/Body
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
 
 
 func _ready() -> void:
 	health = max_health
-	body.polygon = _ellipse_points(Vector2(body_radius, body_radius))
-	highlight.polygon = _ellipse_points(
-		Vector2(body_radius * 0.3, body_radius * 0.2)
-	)
-	shadow.polygon = _ellipse_points(
-		Vector2(body_radius * 0.9, body_radius * 0.35)
-	)
+	var texel_scale := Vector2.ONE * pixel_size
+	body.texture = _cached_texture("body", _paint_body)
+	body.scale = texel_scale
+	shadow_sprite.texture = _cached_texture("shadow", _paint_shadow)
+	shadow_sprite.scale = texel_scale
 	_enter_idle()
 
 
@@ -249,10 +258,75 @@ func _restart_visual_tween() -> Tween:
 	return _visual_tween
 
 
-func _ellipse_points(radii: Vector2) -> PackedVector2Array:
-	var points := PackedVector2Array()
-	var segments := maxi(body_segments, 8)
-	for i in segments:
-		var angle := TAU * i / segments
-		points.append(Vector2(cos(angle) * radii.x, sin(angle) * radii.y))
-	return points
+func _cached_texture(kind: String, painter: Callable) -> ImageTexture:
+	var key := "%s|%s|%d|%s" % [
+		kind,
+		body_radius,
+		pixel_size,
+		[outline_color, shade_color, base_color, light_color,
+			highlight_color, eye_color, shadow_color],
+	]
+	if not _texture_cache.has(key):
+		_texture_cache[key] = ImageTexture.create_from_image(painter.call())
+	return _texture_cache[key]
+
+
+# Шар чуть шире, чем выше: контур, три тона по свету сверху-слева, блик и глаза.
+func _paint_body() -> Image:
+	var r := maxi(3, roundi(body_radius / pixel_size))
+	var size := 2 * r + 1
+	var radii := Vector2(r + 0.5, r * 0.86 + 0.5)
+	# Низ эллипса прижат к нижнему краю текстуры.
+	var center := Vector2(r, r + (r - radii.y + 0.5))
+	var light := Vector3(-0.45, -0.65, 0.61).normalized()
+	var image := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	for y in size:
+		for x in size:
+			if not _in_ellipse(x, y, center, radii):
+				continue
+			var color := outline_color
+			if _in_ellipse(x + 1, y, center, radii) \
+					and _in_ellipse(x - 1, y, center, radii) \
+					and _in_ellipse(x, y + 1, center, radii) \
+					and _in_ellipse(x, y - 1, center, radii):
+				var d := (Vector2(x, y) - center) / radii
+				var normal := Vector3(d.x, d.y, sqrt(maxf(0.0, 1.0 - d.length_squared())))
+				var brightness := normal.dot(light)
+				if brightness < 0.3:
+					color = shade_color
+				elif brightness < 0.82:
+					color = base_color
+				else:
+					color = light_color
+			image.set_pixel(x, y, color)
+
+	var spot := Vector2i(
+		roundi(center.x - radii.x * 0.42),
+		roundi(center.y - radii.y * 0.5)
+	)
+	for offset in [Vector2i.ZERO, Vector2i.RIGHT, Vector2i.DOWN]:
+		image.set_pixelv(spot + offset, highlight_color)
+
+	var eye_gap := maxi(1, floori(r / 3.0))
+	var eye_y := roundi(center.y)
+	for eye_x in [r - eye_gap, r + eye_gap]:
+		image.set_pixel(eye_x, eye_y - 1, eye_color)
+		image.set_pixel(eye_x, eye_y, eye_color)
+	return image
+
+
+func _paint_shadow() -> Image:
+	var radii := Vector2(body_radius * 0.9, body_radius * 0.35) / pixel_size
+	var half := Vector2i(radii.ceil())
+	var size := half * 2 + Vector2i.ONE
+	var image := Image.create(size.x, size.y, false, Image.FORMAT_RGBA8)
+	for y in size.y:
+		for x in size.x:
+			if _in_ellipse(x, y, Vector2(half), radii + Vector2(0.5, 0.5)):
+				image.set_pixel(x, y, shadow_color)
+	return image
+
+
+func _in_ellipse(x: int, y: int, center: Vector2, radii: Vector2) -> bool:
+	var d := (Vector2(x, y) - center) / radii
+	return d.length_squared() <= 1.0
