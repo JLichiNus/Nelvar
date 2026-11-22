@@ -31,12 +31,20 @@ are required. Each launch generates a new random seed, displayed
 in the upper-left corner and printed to Output.
 
 - **WASD / arrow keys:** walk.
+- **Ctrl:** toggle running.
+- **Shift:** short flight (speed boost); airborne the player ignores contact damage.
+- **LMB:** wind projectile. **RMB:** wind wave. **R:** compression on the enemy nearest to the cursor.
 - **Mouse wheel:** zoom the camera attached to the player.
 - **F3:** show occupied chunks, collision boundaries, trunk circles and island IDs.
 
-The player currently uses a static 32×32 sprite for standing and walking.
-Moving left mirrors the sprite; moving right restores its original orientation.
-Stopping or moving vertically preserves the last horizontal orientation.
+The player (`player/player.tscn`) is drawn from two animated layers: legs play
+the locomotion, the torso follows it or plays an attack on top. The node origin
+is at the feet, under a circular collider of `NelvarPlayer.BODY_RADIUS`; aiming
+and attacks start from the body center (`AimPivot`). Hopper enemies spawn on
+walkable ground around the player, away from trunks. At zero HP the scene
+restarts with a new seed.
+
+`test_world.tscn` is a flat arena for tuning combat without the generator (F6).
 
 The earth map contains 2–3 large floating islands and 6–7 small ones, connected
 by narrow wooden bridges. Shorelines and bridge sides block movement; falling

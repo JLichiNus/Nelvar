@@ -1,4 +1,7 @@
+class_name NelvarPlayer
 extends CharacterBody2D
+## Начало координат — точка у ног: по ней идут Y-сортировка с деревьями
+## и коллизия с миром. Прицел и атаки считаются от центра тела (AimPivot).
 
 
 signal health_changed(current: float, maximum: float)
@@ -6,6 +9,8 @@ signal died
 
 enum SpeedBoostState { READY, ACTIVE, COOLDOWN }
 
+# Радиус круга-«следа» под ногами; на него опираются проверки мира и спавн.
+const BODY_RADIUS := 14.0
 const DEAD_COLOR := Color(0.45, 0.47, 0.5, 1.0)
 # Анимация атаки с большим приоритетом не прерывается меньшей.
 const ATTACK_PRIORITY := {
@@ -15,7 +20,7 @@ const ATTACK_PRIORITY := {
 }
 
 @export_category("Movement")
-@export var base_speed: float = 300.0
+@export var speed: float = 300.0
 @export var run_speed_multiplier: float = 1.5
 @export var speed_boost_multiplier: float = 1.5
 @export var speed_boost_duration: float = 2.0
@@ -45,6 +50,10 @@ const ATTACK_PRIORITY := {
 @export var blink_alpha: float = 0.35
 @export var death_restart_delay: float = 1.5
 
+@export_category("Camera")
+@export var zoom_min: float = 0.18
+@export var zoom_max: float = 1.6
+
 var aim_direction := Vector2.RIGHT
 var _primary_cooldown_left := 0.0
 var _wave_cooldown_left := 0.0
@@ -58,6 +67,8 @@ var _is_dead := false
 var _flight_tween: Tween
 # Масштаб спрайта при взгляде вправо; взгляд влево — отрицательный scale.x.
 var _body_scale := Vector2.ONE
+# Положение тела на земле; полёт поднимает его на flight_height выше.
+var _body_rest_position := Vector2.ZERO
 var _facing_left := false
 # Текущая анимация атаки корпуса; пусто — корпус повторяет локомоцию ног.
 var _attack_animation := &""
@@ -72,11 +83,15 @@ var _attack_facing_left := 0.0
 @onready var torso_sprite: AnimatedSprite2D = $Body/Torso
 @onready var shadow: Polygon2D = $Shadow
 @onready var hurtbox: Area2D = $Hurtbox
+@onready var camera: Camera2D = $Camera2D
+@onready var collision_shape: CollisionShape2D = $CollisionShape2D
 
 
 func _ready() -> void:
 	health = max_health
+	(collision_shape.shape as CircleShape2D).radius = BODY_RADIUS
 	_body_scale = body_visual.scale.abs()
+	_body_rest_position = body_visual.position
 	torso_sprite.animation_finished.connect(_on_torso_animation_finished)
 	boost_duration_timer.timeout.connect(_on_boost_duration_timeout)
 	boost_cooldown_timer.timeout.connect(_on_boost_cooldown_timeout)
@@ -104,10 +119,21 @@ func _process(delta: float) -> void:
 
 
 func _update_aim() -> void:
-	var mouse_offset := get_global_mouse_position() - global_position
+	var mouse_offset := get_global_mouse_position() - get_aim_origin()
 	if mouse_offset.length_squared() > 0.0001:
 		aim_direction = mouse_offset.normalized()
 		aim_pivot.rotation = aim_direction.angle()
+
+
+# Центр тела, от которого целятся и вылетают атаки.
+func get_aim_origin() -> Vector2:
+	return aim_pivot.global_position
+
+
+func adjust_zoom(multiplier: float) -> void:
+	var value := clampf(camera.zoom.x * multiplier, zoom_min, zoom_max)
+	camera.zoom = Vector2.ONE * value
+
 
 func _physics_process(delta: float) -> void:
 	if _is_dead:
@@ -128,7 +154,7 @@ func _physics_process(delta: float) -> void:
 		speed_multiplier = speed_boost_multiplier
 	elif _is_running:
 		speed_multiplier = run_speed_multiplier
-	velocity = direction * base_speed * speed_multiplier
+	velocity = direction * speed * speed_multiplier
 	move_and_slide()
 	_update_animation(direction)
 	# В полёте игрок проходит над врагами и не получает контактного урона.
@@ -242,7 +268,7 @@ func _die() -> void:
 		sprite.stop()
 	if _flight_tween != null:
 		_flight_tween.kill()
-	body_visual.position = Vector2.ZERO
+	body_visual.position = _body_rest_position
 	shadow.visible = false
 	aim_pivot.visible = false
 	hurtbox.set_deferred("monitoring", false)
@@ -277,7 +303,7 @@ func _try_wave_attack() -> void:
 	_wave_cooldown_left = wave_cooldown
 	_is_running = false
 	_play_attack_animation(&"attack_wave")
-	var wave_origin := global_position + aim_direction * wave_spawn_distance
+	var wave_origin := get_aim_origin() + aim_direction * wave_spawn_distance
 	wave.call("launch", wave_origin, aim_direction)
 
 
@@ -302,7 +328,7 @@ func _try_compression() -> void:
 	_compression_cooldown_left = compression_cooldown
 	_is_running = false
 	_play_attack_animation(&"attack_compression")
-	compression.call("start_compression", target, global_position)
+	compression.call("start_compression", target, get_aim_origin())
 
 
 # Ближайший к курсору враг в пределах compression_target_radius от курсора
@@ -316,7 +342,7 @@ func _find_compression_target() -> Node2D:
 		var enemy := node as Node2D
 		if enemy == null:
 			continue
-		var range_sq := global_position.distance_squared_to(enemy.global_position)
+		var range_sq := get_aim_origin().distance_squared_to(enemy.global_position)
 		if range_sq > max_range_sq:
 			continue
 		var distance_sq := cursor.distance_squared_to(enemy.global_position)
@@ -347,7 +373,7 @@ func _play_lift_off() -> void:
 	tween.tween_property(
 		body_visual,
 		"position:y",
-		-flight_height,
+		_body_rest_position.y - flight_height,
 		flight_lift_duration
 	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.tween_property(
@@ -363,7 +389,7 @@ func _play_landing() -> void:
 	tween.tween_property(
 		body_visual,
 		"position:y",
-		0.0,
+		_body_rest_position.y,
 		flight_lift_duration
 	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tween.tween_property(shadow, "scale", Vector2.ONE, flight_lift_duration)
