@@ -34,6 +34,10 @@ in the upper-left corner and printed to Output.
 - **Mouse wheel:** zoom the camera attached to the player.
 - **F3:** show occupied chunks, collision boundaries, trunk circles and island IDs.
 
+The player currently uses a static 32×32 sprite for standing and walking.
+Moving left mirrors the sprite; moving right restores its original orientation.
+Stopping or moving vertically preserves the last horizontal orientation.
+
 The earth map contains 2–3 large floating islands and 6–7 small ones, connected
 by narrow wooden bridges. Shorelines and bridge sides block movement; falling
 and height differences are not implemented yet.
