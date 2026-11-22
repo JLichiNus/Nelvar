@@ -17,6 +17,12 @@
 Персонаж смотрит вправо, ось тела — центр кадра (CX): вокруг неё
 отражается спрайт. Земля — строка GROUND.
 
+Геометрия и свет считаются на дизайн-сетке (DW x DH, 1 ед. = 1.5
+world-единицы), а растр — с крупным пикселем TEXEL: при TEXEL = 3 пиксель
+спрайта = блок 2x2 дизайн-единиц, как у мира и слайма. Пиксель тела
+закрашивается, если блок покрыт хотя бы наполовину, тон — по среднему
+свету блока; контур, штрихи и блики рисуются уже на крупной сетке.
+
 Запуск из корня проекта:
     python3 tools/gen_player_sprites.py
 """
@@ -29,17 +35,29 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "player" / "sprites"
-W, H = 48, 40
+# Дизайн-сетка: все координаты ниже — в этих единицах.
+DESIGN_TEXEL = 1.5     # world-единиц на дизайн-единицу
+DW, DH = 48, 40
 CX = 24
 GROUND = 35
+# Растр: 1 пиксель спрайта = TEXEL world-единиц (синхронно со scale Body
+# в player.tscn и TEXEL в gen_attack_sprites.py).
+TEXEL = 3.0
+K = round(TEXEL / DESIGN_TEXEL)     # дизайн-единиц на пиксель (целое)
+assert K * DESIGN_TEXEL == TEXEL and DW % K == 0 and DH % K == 0
+W, H = DW // K, DH // K
 LOCO_FRAMES = 8
 
-# Приглушённое небо, чтобы не спорить с оливковым миром.
-RAMP = [(70, 104, 150), (112, 152, 196), (162, 198, 226), (214, 236, 246), (246, 252, 254)]
-OUTLINE = (36, 50, 84)
+# Небо со сдвигом оттенка, как рампы мира (деревья, слайм): тени уходят
+# в холодный сланцево-синий, блики — в тёплый кремовый. Контур — тёмный
+# тон той же рампы, а не чистый синий, чтобы не выбиваться из оливкового мира.
+RAMP = [(75, 106, 142), (110, 156, 188), (165, 207, 220), (221, 238, 230), (251, 248, 232)]
+OUTLINE = (40, 54, 82)
 
 FPS = {"idle": 8.0, "walk": 12.0, "run": 16.0, "fly": 16.0}
 TAU = math.tau
+# Доля витка, видимая как полоса: на крупном пикселе полосы должны быть редкими.
+SPIRAL_CUT = 0.8
 
 
 # ------------------------------------------------------------ геометрия
@@ -63,25 +81,31 @@ def sample(pts, t):
 
 
 def blur(a, r):
-    k = np.exp(-np.arange(-2 * r, 2 * r + 1) ** 2 / (2 * r * r))
+    n = math.ceil(2 * r)
+    k = np.exp(-np.arange(-n, n + 1) ** 2 / (2 * r * r))
     k /= k.sum()
-    p = np.pad(a, 2 * r, mode="constant")
+    p = np.pad(a, n, mode="constant")
     p = np.apply_along_axis(lambda v: np.convolve(v, k, "same"), 0, p)
     p = np.apply_along_axis(lambda v: np.convolve(v, k, "same"), 1, p)
-    return p[2 * r:-2 * r, 2 * r:-2 * r]
+    return p[n:-n, n:-n]
 
 
-_YS, _XS = np.mgrid[0:H, 0:W]
+_YS, _XS = np.mgrid[0:DH, 0:DW]
 _XS = _XS + 0.5
 _YS = _YS + 0.5
+
+
+def down(a: np.ndarray) -> np.ndarray:
+    """Среднее по блокам K x K: дизайн-сетка -> крупный пиксель."""
+    return a.reshape(H, K, W, K).mean(axis=(1, 3))
 
 
 class Layer:
     """Маска тела слоя + штрихи ветра поверх/вокруг."""
 
     def __init__(self):
-        self.mask = np.zeros((H, W), bool)
-        self.back = np.zeros((H, W), bool)   # дальний план (на тон темнее)
+        self.mask = np.zeros((DH, DW), bool)   # дизайн-сетка
+        self.back = np.zeros((DH, DW), bool)   # дальний план (на тон темнее)
         self.over = {}                       # (x, y) -> тон поверх тела
         self.wisps = {}                      # (x, y) -> тон, без контура
 
@@ -105,10 +129,14 @@ class Layer:
             self.circle(x, y, r0 + (r1 - r0) * t, back)
 
     def _pixel(self, x, y):
-        xi, yi = int(math.floor(x)), int(math.floor(y))
+        xi, yi = int(math.floor(x / K)), int(math.floor(y / K))
         if 0 <= xi < W and 0 <= yi < H:
             return xi, yi
         return None
+
+    def _on_body(self, x, y):
+        xi, yi = int(math.floor(x)), int(math.floor(y))
+        return 0 <= xi < DW and 0 <= yi < DH and self.mask[yi, xi]
 
     def wisp(self, pts, tone=3, steps=40, gap=0, fade=True):
         """Штрих ветра вне тела (на теле не рисуется)."""
@@ -128,13 +156,14 @@ class Layer:
     def streak(self, pts, tone=3, steps=40):
         """Светлая полоса поверх тела (только внутри маски)."""
         for i in range(steps + 1):
-            p = self._pixel(*sample(pts, i / steps))
-            if p and self.mask[p[1], p[0]]:
+            x, y = sample(pts, i / steps)
+            p = self._pixel(x, y)
+            if p and self._on_body(x, y):
                 self.over[p] = tone if i / steps < 0.75 else tone - 1
 
     def over_px(self, x, y, tone):
         p = self._pixel(x, y)
-        if p and self.mask[p[1], p[0]]:
+        if p and self._on_body(x, y):
             self.over[p] = tone
 
 
@@ -144,14 +173,20 @@ def render(layer: Layer, static: np.ndarray, light=(-0.55, -0.75, 0.55)) -> Imag
     Объём и контур считаются по объединению, а выводятся только пиксели
     своего слоя — так соседние слои стыкуются без контура на шве.
     """
-    own = layer.mask
-    union = own | static
-    hgt = blur(blur(union.astype(float), 3), 2)
+    union_hi = layer.mask | static
+    hgt = blur(blur(union_hi.astype(float), 3), 2)
     gy, gx = np.gradient(hgt)
     nx, ny, nz = -gx * 3, -gy * 3, np.full_like(gx, 0.7)
     n = np.sqrt(nx * nx + ny * ny + nz * nz)
     lv = np.array(light) / np.linalg.norm(light)
-    val = (nx * lv[0] + ny * lv[1] + nz * lv[2]) / n
+    val_hi = (nx * lv[0] + ny * lv[1] + nz * lv[2]) / n
+
+    # дизайн-сетка -> крупный пиксель
+    own = down(layer.mask) >= 0.5
+    union = (down(union_hi) >= 0.5) | own
+    back = down(layer.back) >= 0.5
+    cover = down(union_hi.astype(float))
+    val = down(np.where(union_hi, val_hi, 0.0)) / np.maximum(cover, 1e-6)
 
     def inside(x, y):
         return 0 <= x < W and 0 <= y < H and union[y, x]
@@ -168,7 +203,7 @@ def render(layer: Layer, static: np.ndarray, light=(-0.55, -0.75, 0.55)) -> Imag
                 tone = max(0, tone - 1)
             if not inside(x, y - 1) or not inside(x - 1, y - 1):
                 tone = min(4, tone + 1)
-            if layer.back[y, x]:
+            if back[y, x]:
                 tone = max(0, tone - 1)
             px[x, y] = RAMP[tone] + (255,)
     for (x, y), tone in layer.wisps.items():
@@ -226,7 +261,7 @@ def spiral(lay, axis, r0, r1, turns, phase, strands=1):
             ln = math.hypot(tx, ty) or 1.0
             nx, ny = -ty / ln, tx / ln
             th = TAU * (turns * t - phase - off)
-            if math.cos(th) <= 0.35:
+            if math.cos(th) <= SPIRAL_CUT:
                 continue
             r = (r0 + (r1 - r0) * t) * 0.8
             lay.over_px(x + nx * r * math.sin(th), y + ny * r * math.sin(th),
@@ -234,7 +269,11 @@ def spiral(lay, axis, r0, r1, turns, phase, strands=1):
 
 
 def ring(lay, cx, cy, rx, ry, phase, span=1.25, segs=2, front_tone=4, back_tone=2):
-    """Вращающиеся дуги кольца ветра вокруг смерча."""
+    """Вращающиеся дуги кольца ветра вокруг смерча.
+
+    Рисуются только вне тела: на крупном пикселе дуга поверх смерча
+    читается как рябь, а не как кольцо.
+    """
     for s in range(segs):
         a0 = TAU * (phase + s / segs)
         for i in range(24):
@@ -244,8 +283,6 @@ def ring(lay, cx, cy, rx, ry, phase, span=1.25, segs=2, front_tone=4, back_tone=
             tone = front_tone if front else back_tone
             if i > 17:
                 tone -= 1
-            if front:
-                lay.over_px(x, y, tone)
             lay.dot(x, y, tone)
 
 
@@ -319,7 +356,7 @@ def torso_core_mask() -> np.ndarray:
 
 
 def torso_frame(near, far, *, body_dx=0, head_dx=0, head_dy=0, crest_len=1.0,
-                crest_lift=0.0, flutter=0.0, flutter_amp=0.5, near_r=2.3, far_r=2.0,
+                crest_lift=0.0, flutter=0.0, flutter_amp=0.5, near_r=3.0, far_r=2.6,
                 links=True, back_wisp=True, effects=None):
     lay = Layer()
     tx, ty = TORSO_C[0] + body_dx, TORSO_C[1]
@@ -341,8 +378,9 @@ def torso_frame(near, far, *, body_dx=0, head_dx=0, head_dy=0, crest_len=1.0,
                         y - crest_lift * k + fy))
         lay.stroke([(x + head_dx, y + head_dy) for x, y in pts], r0, r1)
 
-    crest([(CX + 2.5, 8.2), (CX - 1.5, 6.6), (CX - 5.5, 7.0), (CX - 8.5, 9.2)], 2.3, 0.5)
-    crest([(CX, 10.2), (CX - 3.5, 10.6), (CX - 6.2, 12.6)], 1.5, 0.4)
+    # Один толстый поток: второй, тонкий, на крупном пикселе отделялся
+    # от первого зазором в пиксель, и контур рисовал полосы по голове.
+    crest([(CX + 2.5, 8.6), (CX - 1.5, 7.2), (CX - 5.5, 7.8), (CX - 8.5, 10.2)], 2.8, 1.0)
 
     lay.circle(near[0], near[1], near_r)
 
@@ -492,11 +530,11 @@ def torso_attacks():
         torso_frame((nf[0] + 2.4, 10.0), (nf[0] - 0.6, 6.4), body_dx=1, head_dx=1, flutter=0.5,
                     crest_len=1.2, links=False, back_wisp=False,
                     effects=lambda l: l.wisp([(CX - 1, 2.0), (CX + 5, 1.5), (nf[0] + 3, 4.5)], 3, steps=24)),
-        torso_frame((nf[0] + 4.8, 16.0), (nf[0] + 2.4, 13.5), near_r=2.1, far_r=1.9, body_dx=1,
+        torso_frame((nf[0] + 4.8, 16.0), (nf[0] + 2.4, 13.5), near_r=2.8, far_r=2.5, body_dx=1,
                     head_dx=1, crest_len=1.3, crest_lift=0.6, flutter=0.7,
                     effects=lambda l: (crescent(l, nf[0] + 8.5, 15.0, 2.6, 2.4, 4),
                                        puff(l, [(nf[0] + 12.5, 11), (nf[0] + 12.5, 19)], 3))),
-        torso_frame((nf[0] + 4.5, 16.2), (nf[0] + 2.2, 13.8), near_r=2.1, far_r=1.9, body_dx=1,
+        torso_frame((nf[0] + 4.5, 16.2), (nf[0] + 2.2, 13.8), near_r=2.8, far_r=2.5, body_dx=1,
                     head_dx=1, crest_len=1.2, crest_lift=0.4, flutter=0.85,
                     effects=lambda l: puff(l, [(nf[0] + 9, 15), (nf[0] + 10, 13), (nf[0] + 10, 17),
                                                (nf[0] + 11.5, 15)], 4)),

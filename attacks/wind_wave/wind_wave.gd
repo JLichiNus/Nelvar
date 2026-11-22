@@ -5,7 +5,7 @@ extends Area2D
 # Кадры уже нарисованы нужного размера, поэтому Visual не масштабируется
 # и не вращается вместе с узлом — пиксели остаются ровными и одного размера
 # с пикселями игрока. При смене duration/start_size/end_size — перегенерировать.
-const SHEET_TEXEL := 1.5
+const SHEET_TEXEL := 3.0
 
 
 @export var travel_distance: float = 360.0

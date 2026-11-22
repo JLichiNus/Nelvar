@@ -12,8 +12,8 @@ extends Node2D
 
 enum Phase { IDLE, APPROACH, SQUEEZE, FADE }
 
-const SHEET_TEXEL := 1.5
-const ARC_RADIUS := 46.0 * SHEET_TEXEL
+const SHEET_TEXEL := 3.0
+const ARC_RADIUS := 69.0  # = COMPRESSION_RADIUS (46) * 1.5 из gen_attack_sprites.py
 
 @export_category("Motion")
 @export var approach_distance: float = 220.0

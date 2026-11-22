@@ -14,6 +14,9 @@
 Почему так:
   * размер тексела постоянный и равен пикселю игрока (TEXEL world-единиц),
     поэтому рост ПКМ-волны нарисован кадрами, а не масштабом узла;
+  * формы заданы в дизайн-единицах (DESIGN_TEXEL world-единиц), как у
+    игрока, и снимаются с суперсэмплингом K x K на пиксель: пиксель тела —
+    если блок покрыт наполовину, тон — средний по блоку;
   * повёрнутый пиксель-арт с nearest-фильтром рвётся, поэтому направления
     предрендерены: строки листа — углы 0..90° (шаг 90/(ROWS-1)),
     остальные квадранты — flip_h / flip_v в скриптах атак. Свет у форм
@@ -38,9 +41,15 @@ ROOT = Path(__file__).resolve().parent.parent
 PREVIEW = Path(sys.argv[sys.argv.index("--preview") + 1]) if "--preview" in sys.argv[:-1] else None
 
 # --- синхронно с player.tscn / gen_player_sprites.py
-TEXEL = 1.5            # масштаб Body игрока: 1 пиксель спрайта = 1.5 единицы
-RAMP = [(70, 104, 150), (112, 152, 196), (162, 198, 226), (214, 236, 246), (246, 252, 254)]
-OUTLINE = (36, 50, 84)
+TEXEL = 3.0            # масштаб Body игрока: 1 пиксель спрайта = 3 единицы
+DESIGN_TEXEL = 1.5     # world-единиц на дизайн-единицу (размеры форм ниже)
+K = round(TEXEL / DESIGN_TEXEL)
+assert K * DESIGN_TEXEL == TEXEL
+# Небо со сдвигом оттенка, как рампы мира (деревья, слайм): тени уходят
+# в холодный сланцево-синий, блики — в тёплый кремовый. Контур — тёмный
+# тон той же рампы, а не чистый синий, чтобы не выбиваться из оливкового мира.
+RAMP = [(75, 106, 142), (110, 156, 188), (165, 207, 220), (221, 238, 230), (251, 248, 232)]
+OUTLINE = (40, 54, 82)
 
 ROWS = 17              # 0°, 5.625°, ..., 90°
 
@@ -49,10 +58,10 @@ WAVE_ARC_RADIUS = 35.0  # радиус CollisionPolygon2D волны в базо
 WAVE_START_SIZE = 70.0
 WAVE_END_SIZE = 180.0
 WAVE_FRAMES = 16
-WAVE_CELL = 136
+WAVE_CELL = 136        # дизайн-единицы; в листе — WAVE_CELL / K пикселей
 
 # --- R, синхронно с wind_compression.gd (ARC_RADIUS)
-COMPRESSION_RADIUS = 46  # тексели: 46 * 1.5 = 69 world-единиц
+COMPRESSION_RADIUS = 46  # дизайн-единицы: 46 * 1.5 = 69 world-единиц
 COMPRESSION_CELL = 100
 
 # --- ЛКМ
@@ -70,7 +79,7 @@ def smooth(e0: float, e1: float, x: float) -> float:
 
 
 def local_grid(cell: int, theta: float):
-    """Локальные координаты центров пикселей: ось +x — направление атаки."""
+    """Локальные координаты центров дизайн-пикселей: ось +x — направление атаки."""
     half = cell // 2
     ys, xs = np.mgrid[-half:half, -half:half].astype(float)
     xs += 0.5
@@ -79,8 +88,22 @@ def local_grid(cell: int, theta: float):
     return xs * ct + ys * st, -xs * st + ys * ct
 
 
+def down(a: np.ndarray) -> np.ndarray:
+    """Среднее по блокам K x K: дизайн-сетка -> пиксель листа."""
+    h, w = a.shape
+    return a.reshape(h // K, K, w // K, K).mean(axis=(1, 3))
+
+
 def compose(body: np.ndarray, tone: np.ndarray, wisp: np.ndarray, wisp_tone: np.ndarray) -> Image.Image:
-    """Тело с тонами + контур по 4 соседям + штрихи ветра без контура."""
+    """Тело с тонами + контур по 4 соседям + штрихи ветра без контура.
+
+    Вход — на дизайн-сетке, выход — в пикселях листа (в K раз меньше).
+    """
+    cover = down(body.astype(float))
+    tone = np.rint(down(np.where(body, tone, 0)) / np.maximum(cover, 1e-6)).astype(int)
+    body = cover >= 0.5
+    wisp_tone = np.rint(down(np.where(wisp, wisp_tone, 0)) / np.maximum(down(wisp.astype(float)), 1e-6)).astype(int)
+    wisp = down(wisp.astype(float)) >= 0.25
     h, w = body.shape
     img = np.zeros((h, w, 4), np.uint8)
     ramp = np.array(RAMP, np.uint8)
@@ -142,7 +165,7 @@ def crescent(cell, theta, R, W, A, gap=0.0, wisp=True):
 def wave_frame(theta: float, frame: int) -> Image.Image:
     t = (frame + 0.5) / WAVE_FRAMES              # середина кадра по времени
     scale = 1.0 + (WAVE_END_SIZE / WAVE_START_SIZE - 1.0) * ease_out_quad(t)
-    R = WAVE_ARC_RADIUS * scale / TEXEL           # внешний край, тексели
+    R = WAVE_ARC_RADIUS * scale / DESIGN_TEXEL    # внешний край, дизайн-единицы
     birth = smooth(0.0, 0.2, t)                   # серп «наливается»
     decay = smooth(0.55, 1.0, t)                  # распад на куски
     W = (3.0 + 0.09 * R) * (0.7 + 0.3 * birth) * (1.0 - 0.45 * decay)
@@ -185,11 +208,13 @@ def projectile_frame(theta: float, frame: int) -> Image.Image:
 
 
 def build_sheet(cell, frames, render):
-    sheet = Image.new("RGBA", (cell * frames, cell * ROWS))
+    """cell — в дизайн-единицах; ячейка листа — cell / K пикселей."""
+    px = cell // K
+    sheet = Image.new("RGBA", (px * frames, px * ROWS))
     for row in range(ROWS):
         theta = math.radians(90.0 * row / (ROWS - 1))
         for f in range(frames):
-            sheet.paste(render(theta, f), (f * cell, row * cell))
+            sheet.paste(render(theta, f), (f * px, row * px))
     return sheet
 
 
@@ -205,9 +230,10 @@ def preview(sheets, path: Path) -> None:
     picks = [0, ROWS // 2, ROWS - 1]
     blocks = []
     for sheet, cell in sheets:
-        cols = sheet.width // cell
+        cell_px = cell // K
+        cols = sheet.width // cell_px
         for row in picks:
-            blocks.append([sheet.crop((f * cell, row * cell, (f + 1) * cell, (row + 1) * cell))
+            blocks.append([sheet.crop((f * cell_px, row * cell_px, (f + 1) * cell_px, (row + 1) * cell_px))
                            for f in range(0, cols, max(1, cols // 6))])
     width = max(sum(c.width for c in b) for b in blocks)
     height = sum(b[0].height for b in blocks)
@@ -224,6 +250,7 @@ def preview(sheets, path: Path) -> None:
 
 
 def main() -> None:
+    assert all(c % (2 * K) == 0 for c in (PROJECTILE_CELL, WAVE_CELL, COMPRESSION_CELL))
     projectile = build_sheet(PROJECTILE_CELL, PROJECTILE_FRAMES, projectile_frame)
     wave = build_sheet(WAVE_CELL, WAVE_FRAMES, wave_frame)
     compression = build_sheet(COMPRESSION_CELL, 1, lambda th, _f: compression_frame(th))

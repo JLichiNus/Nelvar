@@ -10,227 +10,227 @@
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_idle0"]
 atlas = ExtResource("1_idle")
-region = Rect2(0, 0, 48, 40)
+region = Rect2(0, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_idle1"]
 atlas = ExtResource("1_idle")
-region = Rect2(48, 0, 48, 40)
+region = Rect2(24, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_idle2"]
 atlas = ExtResource("1_idle")
-region = Rect2(96, 0, 48, 40)
+region = Rect2(48, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_idle3"]
 atlas = ExtResource("1_idle")
-region = Rect2(144, 0, 48, 40)
+region = Rect2(72, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_idle4"]
 atlas = ExtResource("1_idle")
-region = Rect2(192, 0, 48, 40)
+region = Rect2(96, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_idle5"]
 atlas = ExtResource("1_idle")
-region = Rect2(240, 0, 48, 40)
+region = Rect2(120, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_idle6"]
 atlas = ExtResource("1_idle")
-region = Rect2(288, 0, 48, 40)
+region = Rect2(144, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_idle7"]
 atlas = ExtResource("1_idle")
-region = Rect2(336, 0, 48, 40)
+region = Rect2(168, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk0"]
 atlas = ExtResource("2_walk")
-region = Rect2(0, 0, 48, 40)
+region = Rect2(0, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk1"]
 atlas = ExtResource("2_walk")
-region = Rect2(48, 0, 48, 40)
+region = Rect2(24, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk2"]
 atlas = ExtResource("2_walk")
-region = Rect2(96, 0, 48, 40)
+region = Rect2(48, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk3"]
 atlas = ExtResource("2_walk")
-region = Rect2(144, 0, 48, 40)
+region = Rect2(72, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk4"]
 atlas = ExtResource("2_walk")
-region = Rect2(192, 0, 48, 40)
+region = Rect2(96, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk5"]
 atlas = ExtResource("2_walk")
-region = Rect2(240, 0, 48, 40)
+region = Rect2(120, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk6"]
 atlas = ExtResource("2_walk")
-region = Rect2(288, 0, 48, 40)
+region = Rect2(144, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk7"]
 atlas = ExtResource("2_walk")
-region = Rect2(336, 0, 48, 40)
+region = Rect2(168, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk_back0"]
 atlas = ExtResource("3_walk_back")
-region = Rect2(0, 0, 48, 40)
+region = Rect2(0, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk_back1"]
 atlas = ExtResource("3_walk_back")
-region = Rect2(48, 0, 48, 40)
+region = Rect2(24, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk_back2"]
 atlas = ExtResource("3_walk_back")
-region = Rect2(96, 0, 48, 40)
+region = Rect2(48, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk_back3"]
 atlas = ExtResource("3_walk_back")
-region = Rect2(144, 0, 48, 40)
+region = Rect2(72, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk_back4"]
 atlas = ExtResource("3_walk_back")
-region = Rect2(192, 0, 48, 40)
+region = Rect2(96, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk_back5"]
 atlas = ExtResource("3_walk_back")
-region = Rect2(240, 0, 48, 40)
+region = Rect2(120, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk_back6"]
 atlas = ExtResource("3_walk_back")
-region = Rect2(288, 0, 48, 40)
+region = Rect2(144, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_walk_back7"]
 atlas = ExtResource("3_walk_back")
-region = Rect2(336, 0, 48, 40)
+region = Rect2(168, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run0"]
 atlas = ExtResource("4_run")
-region = Rect2(0, 0, 48, 40)
+region = Rect2(0, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run1"]
 atlas = ExtResource("4_run")
-region = Rect2(48, 0, 48, 40)
+region = Rect2(24, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run2"]
 atlas = ExtResource("4_run")
-region = Rect2(96, 0, 48, 40)
+region = Rect2(48, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run3"]
 atlas = ExtResource("4_run")
-region = Rect2(144, 0, 48, 40)
+region = Rect2(72, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run4"]
 atlas = ExtResource("4_run")
-region = Rect2(192, 0, 48, 40)
+region = Rect2(96, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run5"]
 atlas = ExtResource("4_run")
-region = Rect2(240, 0, 48, 40)
+region = Rect2(120, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run6"]
 atlas = ExtResource("4_run")
-region = Rect2(288, 0, 48, 40)
+region = Rect2(144, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run7"]
 atlas = ExtResource("4_run")
-region = Rect2(336, 0, 48, 40)
+region = Rect2(168, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run_back0"]
 atlas = ExtResource("5_run_back")
-region = Rect2(0, 0, 48, 40)
+region = Rect2(0, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run_back1"]
 atlas = ExtResource("5_run_back")
-region = Rect2(48, 0, 48, 40)
+region = Rect2(24, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run_back2"]
 atlas = ExtResource("5_run_back")
-region = Rect2(96, 0, 48, 40)
+region = Rect2(48, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run_back3"]
 atlas = ExtResource("5_run_back")
-region = Rect2(144, 0, 48, 40)
+region = Rect2(72, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run_back4"]
 atlas = ExtResource("5_run_back")
-region = Rect2(192, 0, 48, 40)
+region = Rect2(96, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run_back5"]
 atlas = ExtResource("5_run_back")
-region = Rect2(240, 0, 48, 40)
+region = Rect2(120, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run_back6"]
 atlas = ExtResource("5_run_back")
-region = Rect2(288, 0, 48, 40)
+region = Rect2(144, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_run_back7"]
 atlas = ExtResource("5_run_back")
-region = Rect2(336, 0, 48, 40)
+region = Rect2(168, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly0"]
 atlas = ExtResource("6_fly")
-region = Rect2(0, 0, 48, 40)
+region = Rect2(0, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly1"]
 atlas = ExtResource("6_fly")
-region = Rect2(48, 0, 48, 40)
+region = Rect2(24, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly2"]
 atlas = ExtResource("6_fly")
-region = Rect2(96, 0, 48, 40)
+region = Rect2(48, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly3"]
 atlas = ExtResource("6_fly")
-region = Rect2(144, 0, 48, 40)
+region = Rect2(72, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly4"]
 atlas = ExtResource("6_fly")
-region = Rect2(192, 0, 48, 40)
+region = Rect2(96, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly5"]
 atlas = ExtResource("6_fly")
-region = Rect2(240, 0, 48, 40)
+region = Rect2(120, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly6"]
 atlas = ExtResource("6_fly")
-region = Rect2(288, 0, 48, 40)
+region = Rect2(144, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly7"]
 atlas = ExtResource("6_fly")
-region = Rect2(336, 0, 48, 40)
+region = Rect2(168, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly_back0"]
 atlas = ExtResource("7_fly_back")
-region = Rect2(0, 0, 48, 40)
+region = Rect2(0, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly_back1"]
 atlas = ExtResource("7_fly_back")
-region = Rect2(48, 0, 48, 40)
+region = Rect2(24, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly_back2"]
 atlas = ExtResource("7_fly_back")
-region = Rect2(96, 0, 48, 40)
+region = Rect2(48, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly_back3"]
 atlas = ExtResource("7_fly_back")
-region = Rect2(144, 0, 48, 40)
+region = Rect2(72, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly_back4"]
 atlas = ExtResource("7_fly_back")
-region = Rect2(192, 0, 48, 40)
+region = Rect2(96, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly_back5"]
 atlas = ExtResource("7_fly_back")
-region = Rect2(240, 0, 48, 40)
+region = Rect2(120, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly_back6"]
 atlas = ExtResource("7_fly_back")
-region = Rect2(288, 0, 48, 40)
+region = Rect2(144, 0, 24, 20)
 
 [sub_resource type="AtlasTexture" id="AtlasTexture_fly_back7"]
 atlas = ExtResource("7_fly_back")
-region = Rect2(336, 0, 48, 40)
+region = Rect2(168, 0, 24, 20)
 
 [resource]
 animations = [{"frames": [{"duration": 1.0, "texture": SubResource("AtlasTexture_idle0")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_idle1")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_idle2")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_idle3")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_idle4")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_idle5")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_idle6")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_idle7")}], "loop": true, "name": &"idle", "speed": 8.0}, {"frames": [{"duration": 1.0, "texture": SubResource("AtlasTexture_walk0")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_walk1")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_walk2")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_walk3")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_walk4")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_walk5")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_walk6")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_walk7")}], "loop": true, "name": &"walk", "speed": 12.0}, {"frames": [{"duration": 1.0, "texture": SubResource("AtlasTexture_walk_back0")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_walk_back1")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_walk_back2")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_walk_back3")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_walk_back4")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_walk_back5")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_walk_back6")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_walk_back7")}], "loop": true, "name": &"walk_back", "speed": 12.0}, {"frames": [{"duration": 1.0, "texture": SubResource("AtlasTexture_run0")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_run1")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_run2")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_run3")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_run4")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_run5")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_run6")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_run7")}], "loop": true, "name": &"run", "speed": 16.0}, {"frames": [{"duration": 1.0, "texture": SubResource("AtlasTexture_run_back0")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_run_back1")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_run_back2")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_run_back3")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_run_back4")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_run_back5")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_run_back6")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_run_back7")}], "loop": true, "name": &"run_back", "speed": 16.0}, {"frames": [{"duration": 1.0, "texture": SubResource("AtlasTexture_fly0")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_fly1")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_fly2")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_fly3")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_fly4")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_fly5")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_fly6")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_fly7")}], "loop": true, "name": &"fly", "speed": 16.0}, {"frames": [{"duration": 1.0, "texture": SubResource("AtlasTexture_fly_back0")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_fly_back1")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_fly_back2")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_fly_back3")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_fly_back4")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_fly_back5")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_fly_back6")}, {"duration": 1.0, "texture": SubResource("AtlasTexture_fly_back7")}], "loop": true, "name": &"fly_back", "speed": 16.0}]
