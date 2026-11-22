@@ -1,0 +1,41 @@
+extends Node
+## Autoload: player settings that persist between launches (user://settings.cfg).
+## F12 (input action "toggle_info_panel") shows or hides the in-game info panel
+## from anywhere; the menu's settings panel edits the same value.
+
+signal info_panel_changed(shown: bool)
+
+const PATH := "user://settings.cfg"
+
+## In-game panel with the seed, world stats and controls. Hidden by default.
+var show_info_panel := false
+
+
+func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	var config := ConfigFile.new()
+	if config.load(PATH) == OK:
+		show_info_panel = config.get_value("hud", "show_info_panel", show_info_panel)
+
+
+func _input(event: InputEvent) -> void:
+	if event.is_action_pressed("toggle_info_panel"):
+		set_show_info_panel(not show_info_panel)
+		get_viewport().set_input_as_handled()
+
+
+func set_show_info_panel(shown: bool) -> void:
+	if shown == show_info_panel:
+		return
+	show_info_panel = shown
+	_save()
+	info_panel_changed.emit(shown)
+
+
+func _save() -> void:
+	var config := ConfigFile.new()
+	config.load(PATH)  # keep any other sections already saved
+	config.set_value("hud", "show_info_panel", show_info_panel)
+	var error := config.save(PATH)
+	if error != OK:
+		push_warning("Не удалось сохранить настройки: %s" % error_string(error))

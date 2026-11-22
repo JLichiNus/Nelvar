@@ -162,7 +162,7 @@ mouse_filter = 2
 [node name="SettingsPanel" type="PanelContainer" parent="Margin/Layout/Panels" node_paths=PackedStringArray("back_button")]
 unique_name_in_owner = true
 visible = false
-custom_minimum_size = Vector2(450, 0)
+custom_minimum_size = Vector2(480, 0)
 layout_mode = 2
 script = ExtResource("12")
 back_button = NodePath("Rows/SettingsBack")
@@ -200,6 +200,18 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
 theme_override_font_sizes/font_size = 22
 text = "F11 — переключить в любой момент"
+
+[node name="InfoPanel" type="CheckButton" parent="Margin/Layout/Panels/SettingsPanel/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Панель информации в игре"
+
+[node name="InfoHint" type="Label" parent="Margin/Layout/Panels/SettingsPanel/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
+theme_override_font_sizes/font_size = 22
+text = "F12 — показать или скрыть в игре"
 
 [node name="SettingsBack" type="Button" parent="Margin/Layout/Panels/SettingsPanel/Rows"]
 unique_name_in_owner = true

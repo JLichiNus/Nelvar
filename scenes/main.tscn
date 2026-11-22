@@ -36,44 +36,55 @@ offset_left = 20.0
 offset_top = 20.0
 mouse_filter = 2
 
-[node name="Panel" type="PanelContainer" parent="HUD/Margin"]
+[node name="Stack" type="VBoxContainer" parent="HUD/Margin"]
 layout_mode = 2
 mouse_filter = 2
+theme_override_constants/separation = 9
 
-[node name="Padding" type="MarginContainer" parent="HUD/Margin/Panel"]
+[node name="HealthPanel" type="PanelContainer" parent="HUD/Margin/Stack"]
 layout_mode = 2
+size_flags_horizontal = 0
 mouse_filter = 2
 
-[node name="Rows" type="VBoxContainer" parent="HUD/Margin/Panel/Padding"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 6
-
-[node name="Seed" type="Label" parent="HUD/Margin/Panel/Padding/Rows"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.96, 0.9, 0.72, 1)
-theme_override_font_sizes/font_size = 22
-text = "ЗЕМЛЯ"
-
-[node name="Status" type="Label" parent="HUD/Margin/Panel/Padding/Rows"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_font_sizes/font_size = 22
-text = "Генерация…"
-
-[node name="Health" type="Label" parent="HUD/Margin/Panel/Padding/Rows" node_paths=PackedStringArray("player")]
+[node name="Health" type="Label" parent="HUD/Margin/Stack/HealthPanel" node_paths=PackedStringArray("player")]
 layout_mode = 2
 mouse_filter = 2
 theme_override_colors/font_color = Color(1, 0.584314, 0.584314, 1)
 theme_override_font_sizes/font_size = 22
 text = "HP: 100 / 100"
 script = ExtResource("7")
-player = NodePath("../../../../../../Actors/Player")
+player = NodePath("../../../../../Actors/Player")
 
-[node name="Controls" type="Label" parent="HUD/Margin/Panel/Padding/Rows"]
+[node name="Panel" type="PanelContainer" parent="HUD/Margin/Stack"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Padding" type="MarginContainer" parent="HUD/Margin/Stack/Panel"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Rows" type="VBoxContainer" parent="HUD/Margin/Stack/Panel/Padding"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="Seed" type="Label" parent="HUD/Margin/Stack/Panel/Padding/Rows"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.96, 0.9, 0.72, 1)
+theme_override_font_sizes/font_size = 22
+text = "ЗЕМЛЯ"
+
+[node name="Status" type="Label" parent="HUD/Margin/Stack/Panel/Padding/Rows"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 22
+text = "Генерация…"
+
+[node name="Controls" type="Label" parent="HUD/Margin/Stack/Panel/Padding/Rows"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.72, 0.79, 0.83, 1)
 theme_override_font_sizes/font_size = 22
-text = "WASD / стрелки — ходьба   ·   Ctrl — бег   ·   Shift — полёт\nЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)\nКолесо — масштаб   ·   F3 — чанки и коллизии"
+text = "WASD / стрелки — ходьба   ·   Ctrl — бег   ·   Shift — полёт\nЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)\nКолесо — масштаб   ·   F3 — чанки и коллизии   ·   F12 — скрыть панель"

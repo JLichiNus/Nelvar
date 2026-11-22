@@ -10,11 +10,15 @@ var tree_nodes: Array[NelvarTree] = []
 @onready var actors: Node2D = $Actors
 @onready var player: NelvarPlayer = $Actors/Player
 @onready var enemy_spawner: Node2D = $Actors/EnemySpawner
-@onready var seed_label: Label = $HUD/Margin/Panel/Padding/Rows/Seed
-@onready var status_label: Label = $HUD/Margin/Panel/Padding/Rows/Status
+@onready var info_panel: Control = $HUD/Margin/Stack/Panel
+@onready var seed_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Seed
+@onready var status_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Status
 
 
 func _ready() -> void:
+	# Seed, world stats and controls: hidden unless enabled in settings or with F12.
+	info_panel.visible = GameSettings.show_info_panel
+	GameSettings.info_panel_changed.connect(info_panel.set_visible)
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	var world_seed := int(rng.randi())
@@ -29,6 +33,7 @@ func _ready() -> void:
 	if world_data == null:
 		seed_label.text = "Не удалось построить карту · сид %d" % world_seed
 		status_label.text = "Ошибка генерации. Подробности в Output."
+		info_panel.show()  # the error must be visible even if the panel is off
 		player.set_physics_process(false)
 		player.set_process(false)
 		return

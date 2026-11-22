@@ -62,6 +62,7 @@ var _panel_owner: Button
 @onready var settings_panel: NelvarMenuPanel = %SettingsPanel
 @onready var about_panel: NelvarMenuPanel = %AboutPanel
 @onready var fullscreen_check: CheckButton = %Fullscreen
+@onready var info_panel_check: CheckButton = %InfoPanel
 @onready var settings_back: Button = %SettingsBack
 @onready var about_back: Button = %AboutBack
 
@@ -106,6 +107,9 @@ func _ready() -> void:
 	fullscreen_check.set_pressed_no_signal(FullscreenToggle.is_fullscreen())
 	fullscreen_check.toggled.connect(FullscreenToggle.set_fullscreen)
 	FullscreenToggle.fullscreen_changed.connect(fullscreen_check.set_pressed_no_signal)
+	info_panel_check.set_pressed_no_signal(GameSettings.show_info_panel)
+	info_panel_check.toggled.connect(GameSettings.set_show_info_panel)
+	GameSettings.info_panel_changed.connect(info_panel_check.set_pressed_no_signal)
 
 	settings_panel.hide()
 	about_panel.hide()
