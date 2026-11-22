@@ -1,0 +1,69 @@
+extends Node2D
+
+@export var world_config: NelvarWorldConfig
+@export var forest_config: NelvarForestConfig = preload("res://resources/earth_forest_config.tres")
+
+var world_data: NelvarWorldData
+var forest_data: NelvarForestData
+var tree_nodes: Array[NelvarTree] = []
+@onready var world_view: NelvarWorldView = $World
+@onready var actors: Node2D = $Actors
+@onready var player: NelvarPlayer = $Actors/Player
+@onready var seed_label: Label = $HUD/Margin/Panel/Padding/Rows/Seed
+@onready var status_label: Label = $HUD/Margin/Panel/Padding/Rows/Status
+
+
+func _ready() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	var world_seed := int(rng.randi())
+	# An optional command-line override makes reported maps reproducible.
+	# Ordinary editor/game launches always use a fresh random seed.
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--seed="):
+			var value := argument.trim_prefix("--seed=")
+			if value.is_valid_int():
+				world_seed = value.to_int()
+	world_data = NelvarWorldGenerator.new().generate(world_config, world_seed)
+	if world_data == null:
+		seed_label.text = "Не удалось построить карту · сид %d" % world_seed
+		status_label.text = "Ошибка генерации. Подробности в Output."
+		player.set_physics_process(false)
+		return
+	world_view.build(world_data)
+	forest_data = NelvarForestGenerator.new().generate(world_data, forest_config)
+	var tree_painter := NelvarTreePainter.new()
+	for tree in forest_data.trees:
+		var node := NelvarTree.new()
+		node.setup(tree, tree_painter.paint(tree, world_view.terrain_style))
+		actors.add_child(node)
+		tree_nodes.append(node)
+	player.position = world_data.spawn_position
+	player.camera.reset_smoothing()
+	seed_label.text = "ЗЕМЛЯ · СИД %d" % world_data.world_seed
+	var large := 0
+	for island in world_data.islands:
+		if island.large:
+			large += 1
+	status_label.text = "%d крупных · %d малых · %d мостов · %d деревьев" % [
+		large, world_data.islands.size() - large, world_data.bridges.size(), tree_nodes.size()]
+	print("Nelvar seed: %d | islands: %d | bridges: %d | chunks: %d | trees: %d | groves: %d" % [
+		world_data.world_seed, world_data.islands.size(),
+		world_data.bridges.size(), world_data.leaves.size(), tree_nodes.size(), forest_data.clusters.size()])
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_F3:
+			var show_debug := world_view.toggle_chunks()
+			for tree in tree_nodes:
+				tree.show_collision = show_debug
+				tree.queue_redraw()
+			get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			player.adjust_zoom(1.15)
+			get_viewport().set_input_as_handled()
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			player.adjust_zoom(1.0 / 1.15)
+			get_viewport().set_input_as_handled()
