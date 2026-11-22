@@ -38,6 +38,7 @@ var _is_winding_up := false
 var _jump_time := 0.0
 var _jump_velocity := Vector2.ZERO
 var _knockback_velocity := Vector2.ZERO
+var _hold_time_left := 0.0
 var _visual_tween: Tween
 var _flash_tween: Tween
 
@@ -64,11 +65,14 @@ func _physics_process(delta: float) -> void:
 	if _state == State.DEAD:
 		return
 
-	match _state:
-		State.IDLE:
-			_update_idle(delta)
-		State.JUMPING:
-			_update_jump(delta)
+	if _hold_time_left > 0.0:
+		_update_hold(delta)
+	else:
+		match _state:
+			State.IDLE:
+				_update_idle(delta)
+			State.JUMPING:
+				_update_jump(delta)
 
 	velocity = _jump_velocity + _knockback_velocity
 	move_and_slide()
@@ -89,9 +93,28 @@ func take_damage(amount: float) -> void:
 
 
 func apply_knockback(force: Vector2) -> void:
-	if _state == State.DEAD:
+	if _state == State.DEAD or _hold_time_left > 0.0:
 		return
 	_knockback_velocity += force
+
+
+# Удержание (R-сжатие): враг замирает сплющенным, не прыгает и не отлетает.
+func apply_hold(duration: float) -> void:
+	if _state == State.DEAD or duration <= 0.0:
+		return
+	if _state == State.JUMPING:
+		_land()
+	# Замах прерывается: после удержания он проиграется заново.
+	_is_winding_up = false
+	_jump_velocity = Vector2.ZERO
+	_knockback_velocity = Vector2.ZERO
+	_hold_time_left = maxf(_hold_time_left, duration)
+	_restart_visual_tween().tween_property(
+		visual,
+		"scale",
+		windup_scale,
+		0.08
+	)
 
 
 func play_spawn_animation(duration: float) -> void:
@@ -104,6 +127,20 @@ func play_spawn_animation(duration: float) -> void:
 		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_property(shadow, "scale", Vector2.ONE, duration) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+func _update_hold(delta: float) -> void:
+	_jump_velocity = Vector2.ZERO
+	_knockback_velocity = Vector2.ZERO
+	_hold_time_left -= delta
+	if _hold_time_left <= 0.0:
+		_hold_time_left = 0.0
+		_restart_visual_tween().tween_property(
+			visual,
+			"scale",
+			Vector2.ONE,
+			landing_recovery
+		).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 func _enter_idle() -> void:

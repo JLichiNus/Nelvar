@@ -114,7 +114,7 @@ offset_right = 470.0
 offset_bottom = 56.0
 theme_override_colors/font_color = Color(0.921569, 0.94902, 1, 1)
 theme_override_font_sizes/font_size = 24
-text = "WASD — движение | ЛКМ — снаряд | ПКМ — волна | Shift — ускорение | R — сжатие"
+text = "WASD — движение | ЛКМ — снаряд | ПКМ — волна | Shift — полёт | R — сжатие (наведи на врага)"
 
 [node name="HealthLabel" type="Label" parent="Interface" node_paths=PackedStringArray("player")]
 offset_left = 24.0

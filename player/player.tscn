@@ -19,6 +19,12 @@ projectile_scene = ExtResource("2_projectile")
 wave_scene = ExtResource("3_wave")
 compression_scene = ExtResource("4_compression")
 
+[node name="Shadow" type="Polygon2D" parent="."]
+visible = false
+position = Vector2(0, 16)
+color = Color(0, 0, 0, 0.35)
+polygon = PackedVector2Array(18, 0, 16.63, 2.68, 12.73, 4.95, 6.89, 6.47, 0, 7, -6.89, 6.47, -12.73, 4.95, -16.63, 2.68, -18, 0, -16.63, -2.68, -12.73, -4.95, -6.89, -6.47, -0, -7, 6.89, -6.47, 12.73, -4.95, 16.63, -2.68)
+
 [node name="Body" type="Polygon2D" parent="."]
 polygon = PackedVector2Array(-18, -18, 18, -18, 18, 18, -18, 18)
 color = Color(0.188235, 0.784314, 0.639216, 1)

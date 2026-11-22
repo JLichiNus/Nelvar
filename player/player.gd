@@ -11,8 +11,11 @@ const DEAD_COLOR := Color(0.45, 0.47, 0.5, 1.0)
 @export_category("Movement")
 @export var base_speed: float = 300.0
 @export var speed_boost_multiplier: float = 1.5
-@export var speed_boost_duration: float = 5.0
+@export var speed_boost_duration: float = 2.0
 @export var speed_boost_cooldown: float = 10.0
+@export var flight_height: float = 14.0
+@export var flight_lift_duration: float = 0.12
+@export var flight_shadow_scale: float = 0.7
 
 @export_category("Attacks")
 @export var projectile_scene: PackedScene
@@ -22,7 +25,8 @@ const DEAD_COLOR := Color(0.45, 0.47, 0.5, 1.0)
 @export var wave_cooldown: float = 0.80
 @export var compression_cooldown: float = 8.0
 @export var wave_spawn_distance: float = 53.0
-@export var compression_distance: float = 300.0
+@export var compression_max_range: float = 650.0
+@export var compression_target_radius: float = 140.0
 
 @export_category("Health")
 @export var max_health: float = 100.0
@@ -39,12 +43,14 @@ var _speed_boost_state := SpeedBoostState.READY
 var health: float
 var _invulnerability_left := 0.0
 var _is_dead := false
+var _flight_tween: Tween
 
 @onready var aim_pivot: Node2D = $AimPivot
 @onready var projectile_spawn: Marker2D = $AimPivot/ProjectileSpawn
 @onready var boost_duration_timer: Timer = $BoostDuration
 @onready var boost_cooldown_timer: Timer = $BoostCooldown
 @onready var body_visual: Polygon2D = $Body
+@onready var shadow: Polygon2D = $Shadow
 @onready var hurtbox: Area2D = $Hurtbox
 
 
@@ -98,11 +104,18 @@ func _physics_process(delta: float) -> void:
 	)
 	velocity = direction * base_speed * speed_multiplier
 	move_and_slide()
-	_check_enemy_contact()
+	# В полёте игрок проходит над врагами и не получает контактного урона.
+	if not is_airborne():
+		_check_enemy_contact()
+
+
+func is_airborne() -> bool:
+	return _speed_boost_state == SpeedBoostState.ACTIVE
 
 
 func take_damage(amount: float) -> void:
-	if _is_dead or _invulnerability_left > 0.0 or amount <= 0.0:
+	if _is_dead or is_airborne() or _invulnerability_left > 0.0 \
+			or amount <= 0.0:
 		return
 	health = maxf(health - amount, 0.0)
 	health_changed.emit(health, max_health)
@@ -137,6 +150,10 @@ func _die() -> void:
 	velocity = Vector2.ZERO
 	body_visual.modulate.a = 1.0
 	body_visual.color = DEAD_COLOR
+	if _flight_tween != null:
+		_flight_tween.kill()
+	body_visual.position = Vector2.ZERO
+	shadow.visible = false
 	aim_pivot.visible = false
 	hurtbox.set_deferred("monitoring", false)
 	died.emit()
@@ -175,17 +192,42 @@ func _try_speed_boost() -> void:
 		return
 	_speed_boost_state = SpeedBoostState.ACTIVE
 	boost_duration_timer.start(speed_boost_duration)
+	_play_lift_off()
 
 
 func _try_compression() -> void:
 	if _compression_cooldown_left > 0.0:
 		return
+	# Без цели способность не срабатывает и кулдаун не тратится.
+	var target := _find_compression_target()
+	if target == null:
+		return
 	var compression := _instantiate_attack(compression_scene, "R-сжатие")
 	if compression == null:
 		return
 	_compression_cooldown_left = compression_cooldown
-	var effect_point := global_position + aim_direction * compression_distance
-	compression.call("start_at", effect_point, aim_direction)
+	compression.call("start_compression", target, global_position)
+
+
+# Ближайший к курсору враг в пределах compression_target_radius от курсора
+# и compression_max_range от игрока.
+func _find_compression_target() -> Node2D:
+	var cursor := get_global_mouse_position()
+	var max_range_sq := compression_max_range * compression_max_range
+	var best_distance_sq := compression_target_radius * compression_target_radius
+	var best: Node2D = null
+	for node in get_tree().get_nodes_in_group("enemies"):
+		var enemy := node as Node2D
+		if enemy == null:
+			continue
+		var range_sq := global_position.distance_squared_to(enemy.global_position)
+		if range_sq > max_range_sq:
+			continue
+		var distance_sq := cursor.distance_squared_to(enemy.global_position)
+		if distance_sq <= best_distance_sq:
+			best_distance_sq = distance_sq
+			best = enemy
+	return best
 
 
 func _instantiate_attack(scene: PackedScene, attack_name: String) -> Node:
@@ -202,9 +244,48 @@ func _instantiate_attack(scene: PackedScene, attack_name: String) -> Node:
 	return attack
 
 
+func _play_lift_off() -> void:
+	shadow.scale = Vector2.ONE
+	shadow.visible = true
+	var tween := _restart_flight_tween().set_parallel(true)
+	tween.tween_property(
+		body_visual,
+		"position:y",
+		-flight_height,
+		flight_lift_duration
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(
+		shadow,
+		"scale",
+		Vector2.ONE * flight_shadow_scale,
+		flight_lift_duration
+	)
+
+
+func _play_landing() -> void:
+	var tween := _restart_flight_tween().set_parallel(true)
+	tween.tween_property(
+		body_visual,
+		"position:y",
+		0.0,
+		flight_lift_duration
+	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.tween_property(shadow, "scale", Vector2.ONE, flight_lift_duration)
+	tween.chain().tween_callback(shadow.hide)
+
+
+func _restart_flight_tween() -> Tween:
+	if _flight_tween != null:
+		_flight_tween.kill()
+	_flight_tween = create_tween()
+	return _flight_tween
+
+
 func _on_boost_duration_timeout() -> void:
 	_speed_boost_state = SpeedBoostState.COOLDOWN
 	boost_cooldown_timer.start(speed_boost_cooldown)
+	if not _is_dead:
+		_play_landing()
 
 
 func _on_boost_cooldown_timeout() -> void:
