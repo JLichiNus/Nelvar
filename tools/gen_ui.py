@@ -7,7 +7,7 @@
   assets/fonts/nelvar_<стихия>.fnt + .png — стилизованные цветные варианты
       того же шрифта для кнопок меню (земля, огонь, лёд, воздух).
   assets/textures/ui/*.png — рамки кнопок и панелей (9-slice, уже увеличены
-      в UI_SCALE раз), переключатель, курсор.
+      в UI_SCALE раз), переключатель, курсоры стихий.
 
 Запуск из корня проекта:
     python3 tools/gen_ui.py
@@ -1439,21 +1439,6 @@ def make_ui():
     save_scaled(from_rows(off, pal), "toggle_off.png")
     save_scaled(from_rows(on, pal), "toggle_on.png")
 
-    # Курсор-стрелка.
-    cursor = ["o.........",
-              "oo........",
-              "owo.......",
-              "owwo......",
-              "owwwo.....",
-              "owwwwo....",
-              "owwwwwo...",
-              "owwwwwwo..",
-              "owwwwoooo.",
-              "owoowo....",
-              "oo.owwo...",
-              "....owo...",
-              ".....oo..."]
-    save_scaled(from_rows(cursor, {"o": OUTLINE, "w": STONE}), "cursor.png", scale=2)
     print("ui textures saved")
 
 
@@ -1585,10 +1570,66 @@ def make_styled_font(name, style):
     (FONT_DIR / f"nelvar_{name}.fnt").write_text("\n".join(header + lines) + "\n", encoding="utf-8")
 
 
+# --- Курсоры стихий -----------------------------------------------------------
+# Узкий треугольный наконечник остриём вверх-влево с вогнутым основанием.
+# Остриё — в точке (1, 1) картинки (после обводки), это и есть hotspot.
+CURSOR_SCALE = 2
+CURSOR_POLY = [(0.0, 0.0), (2.8, 13.3), (6.2, 9.8), (14.2, 10.0)]
+CURSOR_STYLES = {
+    # обводка, светлая грань, тень, градиент от острия к основанию
+    "earth": ((34, 24, 20), (236, 222, 190), (120, 104, 86),
+              [(214, 200, 170), (190, 172, 142), (160, 142, 116)]),
+    "fire": ((48, 10, 10), (255, 244, 190), (170, 40, 24),
+             [(255, 230, 140), (255, 168, 60), (236, 90, 34)]),
+    "ice": ((42, 52, 70), (255, 255, 255), (170, 188, 206),
+            [(255, 255, 255), (232, 238, 244), (204, 216, 228)]),
+    "air": ((26, 58, 92), (255, 255, 255), (110, 176, 222),
+            [(255, 255, 255), (206, 236, 250), (150, 208, 238)]),
+}
+
+
+def _inside(poly, px, py):
+    inside = False
+    for i in range(len(poly)):
+        (x1, y1), (x2, y2) = poly[i], poly[i - 1]
+        if (y1 > py) != (y2 > py) and px < (x2 - x1) * (py - y1) / (y2 - y1) + x1:
+            inside = not inside
+    return inside
+
+
+def make_cursor(name):
+    outline, light, shade, grad = CURSOR_STYLES[name]
+    fill = {(x, y) for x in range(16) for y in range(18) if _inside(CURSOR_POLY, x + 0.5, y + 0.5)}
+    fill.add((0, 0))  # остриё
+    img = Image.new("RGBA", (18, 20), (0, 0, 0, 0))
+    p = img.load()
+    for x, y in {(x + dx, y + dy) for x, y in fill for dx, dy in EIGHT} - fill:
+        if x >= -1 and y >= -1:
+            p[x + 1, y + 1] = outline + (255,)
+    for x, y in fill:
+        t = min(0.999, (x + y) / 16.5)
+        c = grad[int(t * len(grad))]
+        if (x - 1, y) not in fill or (x, y - 1) not in fill:
+            c = light  # грань к свету
+        elif (x + 1, y) not in fill or (x, y + 1) not in fill:
+            c = shade
+        p[x + 1, y + 1] = c + (255,)
+    if name == "earth":  # мох у основания
+        for x, y in fill:
+            if x + y >= 12 and (x * 7 + y * 3) % 5 < 2:
+                p[x + 1, y + 1] = (104, 156, 70, 255)
+    elif name == "fire":  # раскалённая сердцевина
+        for x, y in fill:
+            if 3 <= x + y <= 10 and abs(x - y * 0.95) < 1.0:
+                p[x + 1, y + 1] = (255, 250, 220, 255)
+    save_scaled(img, f"cursor_{name}.png", scale=CURSOR_SCALE)
+
+
 def make_element_ui():
     for name, style in (("earth", style_earth), ("fire", style_fire), ("ice", style_ice), ("air", style_air)):
         make_styled_font(name, style)
-    print("element fonts saved")
+        make_cursor(name)
+    print("element fonts and cursors saved")
 
 
 if __name__ == "__main__":

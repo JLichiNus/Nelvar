@@ -11,7 +11,8 @@ const PARTICLE_FADE := 0.6
 ## The pixel logo is drawn at this integer scale.
 const LOGO_SCALE := 4
 const PARTICLE_AMOUNT := 90
-const CURSOR := preload("res://assets/textures/ui/cursor.png")
+## Tip of the element cursors (tools/gen_ui.py): art pixel (1, 1) at 2x.
+const CURSOR_HOTSPOT := Vector2(2, 2)
 const IDLE_TEXT := Color(0.78, 0.78, 0.78)
 ## Text inset from the button's left edge; the highlighted text slides one art
 ## pixel further (the theme's button frames are drawn at 3x).
@@ -47,7 +48,7 @@ var _particles: Dictionary = {}
 var _particle_textures: Dictionary = {}
 var _texel := 1.0
 var _wind := 0.0
-var _open_panel: Control
+var _open_panel: NelvarMenuPanel
 var _panel_owner: Button
 
 @onready var background: TextureRect = $Background
@@ -58,8 +59,8 @@ var _panel_owner: Button
 @onready var settings_button: Button = %Settings
 @onready var about_button: Button = %About
 @onready var quit_button: Button = %Quit
-@onready var settings_panel: PanelContainer = %SettingsPanel
-@onready var about_panel: PanelContainer = %AboutPanel
+@onready var settings_panel: NelvarMenuPanel = %SettingsPanel
+@onready var about_panel: NelvarMenuPanel = %AboutPanel
 @onready var fullscreen_check: CheckButton = %Fullscreen
 @onready var settings_back: Button = %SettingsBack
 @onready var about_back: Button = %AboutBack
@@ -75,7 +76,6 @@ func _ready() -> void:
 		quit_button: quit_element,
 	}
 	_mutate_launch()
-	Input.set_custom_mouse_cursor(CURSOR)
 	# The theme's dark pixel frames; the highlight is tinted per reality.
 	_idle_style = play_button.get_theme_stylebox("normal")
 	var base_hover := play_button.get_theme_stylebox("hover") as StyleBoxTexture
@@ -109,6 +109,8 @@ func _ready() -> void:
 
 	settings_panel.hide()
 	about_panel.hide()
+	settings_panel.accent = settings_element.accent
+	about_panel.accent = about_element.accent
 
 	resized.connect(_layout_particles)
 	_layout_particles()
@@ -153,6 +155,7 @@ func _show_instant(element: NelvarMenuElement) -> void:
 	_set_to(element)
 	_material.set_shader_parameter("progress", 0.0)
 	logo_glow.modulate = element.accent
+	_set_cursor(element)
 	for other: NelvarMenuElement in _particles:
 		_particles[other].modulate.a = 1.0 if other == element else 0.0
 
@@ -214,6 +217,7 @@ func _set_to(element: NelvarMenuElement) -> void:
 
 
 func _show_labels_and_particles(element: NelvarMenuElement) -> void:
+	_set_cursor(element)
 	if _accent_tween != null:
 		_accent_tween.kill()
 	_accent_tween = create_tween()
@@ -224,6 +228,11 @@ func _show_labels_and_particles(element: NelvarMenuElement) -> void:
 	for other: NelvarMenuElement in _particles:
 		var target := 1.0 if other == element else 0.0
 		_particle_tween.tween_property(_particles[other], "modulate:a", target, PARTICLE_FADE)
+
+
+## The cursor changes together with the reality behind the menu.
+func _set_cursor(element: NelvarMenuElement) -> void:
+	Input.set_custom_mouse_cursor(element.cursor, Input.CURSOR_ARROW, CURSOR_HOTSPOT)
 
 
 ## Converts a point on screen to background texture UV (the background is drawn "cover").
@@ -384,19 +393,19 @@ func _particle_texture(texture_size: Vector2i) -> Texture2D:
 
 # --- Panels ------------------------------------------------------------------
 
-func _open(panel: Control, owner_button: Button, first_focus: Control) -> void:
+func _open(panel: NelvarMenuPanel, owner_button: Button, first_focus: Control) -> void:
 	if _open_panel != null and _open_panel != panel:
-		_open_panel.hide()
+		_open_panel.close_now()
 	_open_panel = panel
 	_panel_owner = owner_button
-	panel.show()
+	panel.play_open()
 	first_focus.grab_focus.call_deferred()
 
 
 func _close_panel() -> void:
 	if _open_panel == null:
 		return
-	_open_panel.hide()
+	_open_panel.play_close()
 	_open_panel = null
 	if _panel_owner != null:
 		_panel_owner.grab_focus()

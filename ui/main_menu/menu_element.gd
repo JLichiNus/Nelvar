@@ -18,6 +18,8 @@ extends Resource
 @export var font: Font
 ## Optional material for the button text only (air: wind_text.gdshader).
 @export var text_material: Material
+## Mouse cursor while this reality is shown; its tip is at CURSOR_HOTSPOT.
+@export var cursor: Texture2D
 ## Living spots of the landscape: x, y in texture UV, z = radius in UV.y units.
 ## Tuned for tools/gen_menu_backgrounds.py: statue, right tree, pond, far tree.
 @export var breath_points: PackedVector3Array
