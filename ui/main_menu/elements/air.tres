@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="NelvarMenuElement" load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://ui/main_menu/menu_element.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/textures/menu/bg_air.png" id="2"]
+[ext_resource type="Texture2D" path="res://assets/textures/menu/bg_air_fx.png" id="3"]
+
+[resource]
+script = ExtResource("1")
+id = &"air"
+title = "Воздух"
+background = ExtResource("2")
+fx_mask = ExtResource("3")
+glow_color = Color(1, 1, 1, 1)
+accent = Color(0.64, 0.9, 1, 1)
+button_color = Color(0.12, 0.34, 0.52, 0.92)
+breath_points = PackedVector3Array(0.6917, 0.67, 0.11, 0.8875, 0.6, 0.08, 0.4625, 0.874, 0.07, 0.529, 0.64, 0.04)
+particle_color = Color(1, 1, 1, 0.6)
+particle_size = Vector2i(1, 7)
+particle_direction = Vector2(1, 0.08)
+particle_spread = 6.0
+particle_velocity = Vector2(140, 220)
+particle_gravity = Vector2(0, 0)

@@ -1,0 +1,206 @@
+[gd_scene load_steps=11 format=3]
+
+[ext_resource type="Script" path="res://ui/main_menu/main_menu.gd" id="1"]
+[ext_resource type="Shader" path="res://ui/main_menu/menu_background.gdshader" id="2"]
+[ext_resource type="Resource" path="res://ui/main_menu/elements/air.tres" id="3"]
+[ext_resource type="Resource" path="res://ui/main_menu/elements/ice.tres" id="4"]
+[ext_resource type="Resource" path="res://ui/main_menu/elements/earth.tres" id="5"]
+[ext_resource type="Resource" path="res://ui/main_menu/elements/fire.tres" id="6"]
+[ext_resource type="Texture2D" path="res://assets/textures/menu/bg_earth.png" id="7"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_bg"]
+shader = ExtResource("2")
+
+[sub_resource type="Gradient" id="Gradient_shade"]
+offsets = PackedFloat32Array(0, 0.6)
+colors = PackedColorArray(0.02, 0.03, 0.05, 0.7, 0.02, 0.03, 0.05, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_shade"]
+gradient = SubResource("Gradient_shade")
+fill_to = Vector2(1, 0)
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+play_element = ExtResource("3")
+settings_element = ExtResource("4")
+about_element = ExtResource("5")
+quit_element = ExtResource("6")
+
+[node name="Background" type="TextureRect" parent="."]
+texture_filter = 1
+material = SubResource("ShaderMaterial_bg")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("7")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Particles" type="Node2D" parent="."]
+texture_filter = 1
+
+[node name="Shade" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = SubResource("GradientTexture2D_shade")
+expand_mode = 1
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 96
+theme_override_constants/margin_top = 64
+theme_override_constants/margin_right = 96
+theme_override_constants/margin_bottom = 64
+
+[node name="Layout" type="HBoxContainer" parent="Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 64
+
+[node name="Menu" type="VBoxContainer" parent="Margin/Layout"]
+custom_minimum_size = Vector2(320, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="Title" type="Label" parent="Margin/Layout/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_outline_color = Color(0.04, 0.05, 0.07, 1)
+theme_override_constants/outline_size = 12
+theme_override_font_sizes/font_size = 72
+text = "NELVAR"
+
+[node name="Reality" type="Label" parent="Margin/Layout/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_outline_color = Color(0.04, 0.05, 0.07, 1)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 20
+
+[node name="Spacer" type="Control" parent="Margin/Layout/Menu"]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Play" type="Button" parent="Margin/Layout/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "Играть"
+alignment = 0
+
+[node name="Settings" type="Button" parent="Margin/Layout/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "Настройки"
+alignment = 0
+
+[node name="About" type="Button" parent="Margin/Layout/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "Об игре"
+alignment = 0
+
+[node name="Quit" type="Button" parent="Margin/Layout/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "Выход"
+alignment = 0
+
+[node name="Panels" type="CenterContainer" parent="Margin/Layout"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+
+[node name="SettingsPanel" type="PanelContainer" parent="Margin/Layout/Panels"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+
+[node name="Rows" type="VBoxContainer" parent="Margin/Layout/Panels/SettingsPanel"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Header" type="Label" parent="Margin/Layout/Panels/SettingsPanel/Rows"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "Настройки"
+
+[node name="Fullscreen" type="CheckButton" parent="Margin/Layout/Panels/SettingsPanel/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Полный экран"
+
+[node name="Hint" type="Label" parent="Margin/Layout/Panels/SettingsPanel/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.72, 0.7, 1)
+theme_override_font_sizes/font_size = 15
+text = "F11 — переключить в любой момент"
+
+[node name="SettingsBack" type="Button" parent="Margin/Layout/Panels/SettingsPanel/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+theme_override_font_sizes/font_size = 18
+text = "Назад"
+
+[node name="AboutPanel" type="PanelContainer" parent="Margin/Layout/Panels"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(480, 0)
+layout_mode = 2
+
+[node name="Rows" type="VBoxContainer" parent="Margin/Layout/Panels/AboutPanel"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Header" type="Label" parent="Margin/Layout/Panels/AboutPanel/Rows"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 26
+text = "Об игре"
+
+[node name="Body" type="Label" parent="Margin/Layout/Panels/AboutPanel/Rows"]
+custom_minimum_size = Vector2(428, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 17
+text = "Пиксельный экшен-рогалик о Страннике — существе, погибшем во всех четырёх реальностях и всё же продолжающем существовать.
+
+Каждая мутация что-то даёт и что-то отнимает. Чтобы выжить, мало становиться сильнее — придётся меняться.
+
+Ранний прототип."
+autowrap_mode = 3
+
+[node name="AboutBack" type="Button" parent="Margin/Layout/Panels/AboutPanel/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 0
+theme_override_font_sizes/font_size = 18
+text = "Назад"
