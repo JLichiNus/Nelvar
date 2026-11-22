@@ -4,7 +4,7 @@ extends Resource
 ## The background art can be replaced freely; keep breath_points in sync with it.
 
 @export var id: StringName
-## Shown under the game title while this reality is active.
+## Human-readable name of the reality (not shown in the menu at the moment).
 @export var title: String
 @export var background: Texture2D
 ## Effect mask, same size as background: R = glints, G = glow, B = sway.
@@ -12,10 +12,12 @@ extends Resource
 @export var fx_mask: Texture2D
 ## Color added by the mask's glow channel (lava, embers).
 @export var glow_color: Color = Color(1.0, 0.55, 0.2)
-## Title tint, button border and dissolve edge color.
+## Logo glow, highlighted button and wave edge color.
 @export var accent: Color = Color.WHITE
-## Background of the highlighted button.
-@export var button_color: Color = Color(0.1, 0.1, 0.1, 0.9)
+## Stylized pixel font of this reality's menu button (colors are baked in).
+@export var font: Font
+## Optional material for the button text only (air: wind_text.gdshader).
+@export var text_material: Material
 ## Living spots of the landscape: x, y in texture UV, z = radius in UV.y units.
 ## Tuned for tools/gen_menu_backgrounds.py: statue, right tree, pond, far tree.
 @export var breath_points: PackedVector3Array

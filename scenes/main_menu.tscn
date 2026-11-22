@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://ui/main_menu/main_menu.gd" id="1"]
 [ext_resource type="Shader" path="res://ui/main_menu/menu_background.gdshader" id="2"]
@@ -7,9 +7,19 @@
 [ext_resource type="Resource" path="res://ui/main_menu/elements/earth.tres" id="5"]
 [ext_resource type="Resource" path="res://ui/main_menu/elements/fire.tres" id="6"]
 [ext_resource type="Texture2D" path="res://assets/textures/menu/bg_earth.png" id="7"]
+[ext_resource type="Texture2D" path="res://assets/textures/menu/logo.png" id="8"]
+[ext_resource type="Texture2D" path="res://assets/textures/menu/logo_accent.png" id="9"]
+[ext_resource type="Shader" path="res://ui/main_menu/logo_shine.gdshader" id="10"]
+[ext_resource type="Shader" path="res://ui/main_menu/logo_glow.gdshader" id="11"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_bg"]
 shader = ExtResource("2")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_logo"]
+shader = ExtResource("10")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_logo_glow"]
+shader = ExtResource("11")
 
 [sub_resource type="Gradient" id="Gradient_shade"]
 offsets = PackedFloat32Array(0, 0.6)
@@ -20,6 +30,7 @@ gradient = SubResource("Gradient_shade")
 fill_to = Vector2(1, 0)
 
 [node name="MainMenu" type="Control"]
+texture_filter = 1
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -79,57 +90,66 @@ mouse_filter = 2
 theme_override_constants/separation = 64
 
 [node name="Menu" type="VBoxContainer" parent="Margin/Layout"]
-custom_minimum_size = Vector2(320, 0)
+custom_minimum_size = Vector2(348, 0)
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/separation = 14
+theme_override_constants/separation = 12
 alignment = 1
 
-[node name="Title" type="Label" parent="Margin/Layout/Menu"]
+[node name="Logo" type="TextureRect" parent="Margin/Layout/Menu"]
 unique_name_in_owner = true
+texture_filter = 1
+material = SubResource("ShaderMaterial_logo")
 layout_mode = 2
-theme_override_colors/font_outline_color = Color(0.04, 0.05, 0.07, 1)
-theme_override_constants/outline_size = 12
-theme_override_font_sizes/font_size = 72
-text = "NELVAR"
+size_flags_horizontal = 0
+mouse_filter = 2
+texture = ExtResource("8")
+expand_mode = 1
 
-[node name="Reality" type="Label" parent="Margin/Layout/Menu"]
+[node name="LogoGlow" type="TextureRect" parent="Margin/Layout/Menu/Logo"]
 unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_outline_color = Color(0.04, 0.05, 0.07, 1)
-theme_override_constants/outline_size = 6
-theme_override_font_sizes/font_size = 20
+texture_filter = 1
+material = SubResource("ShaderMaterial_logo_glow")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("9")
+expand_mode = 1
 
 [node name="Spacer" type="Control" parent="Margin/Layout/Menu"]
-custom_minimum_size = Vector2(0, 28)
+custom_minimum_size = Vector2(0, 24)
 layout_mode = 2
 mouse_filter = 2
 
 [node name="Play" type="Button" parent="Margin/Layout/Menu"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 33
 text = "Играть"
 alignment = 0
 
 [node name="Settings" type="Button" parent="Margin/Layout/Menu"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 33
 text = "Настройки"
 alignment = 0
 
 [node name="About" type="Button" parent="Margin/Layout/Menu"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 33
 text = "Об игре"
 alignment = 0
 
 [node name="Quit" type="Button" parent="Margin/Layout/Menu"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 33
 text = "Выход"
 alignment = 0
 
@@ -141,7 +161,7 @@ mouse_filter = 2
 [node name="SettingsPanel" type="PanelContainer" parent="Margin/Layout/Panels"]
 unique_name_in_owner = true
 visible = false
-custom_minimum_size = Vector2(420, 0)
+custom_minimum_size = Vector2(450, 0)
 layout_mode = 2
 
 [node name="Rows" type="VBoxContainer" parent="Margin/Layout/Panels/SettingsPanel"]
@@ -150,32 +170,32 @@ theme_override_constants/separation = 14
 
 [node name="Header" type="Label" parent="Margin/Layout/Panels/SettingsPanel/Rows"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 33
 text = "Настройки"
 
 [node name="Fullscreen" type="CheckButton" parent="Margin/Layout/Panels/SettingsPanel/Rows"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 22
 text = "Полный экран"
 
 [node name="Hint" type="Label" parent="Margin/Layout/Panels/SettingsPanel/Rows"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.7, 0.72, 0.7, 1)
-theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
+theme_override_font_sizes/font_size = 22
 text = "F11 — переключить в любой момент"
 
 [node name="SettingsBack" type="Button" parent="Margin/Layout/Panels/SettingsPanel/Rows"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 0
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 22
 text = "Назад"
 
 [node name="AboutPanel" type="PanelContainer" parent="Margin/Layout/Panels"]
 unique_name_in_owner = true
 visible = false
-custom_minimum_size = Vector2(480, 0)
+custom_minimum_size = Vector2(522, 0)
 layout_mode = 2
 
 [node name="Rows" type="VBoxContainer" parent="Margin/Layout/Panels/AboutPanel"]
@@ -184,13 +204,13 @@ theme_override_constants/separation = 14
 
 [node name="Header" type="Label" parent="Margin/Layout/Panels/AboutPanel/Rows"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 33
 text = "Об игре"
 
 [node name="Body" type="Label" parent="Margin/Layout/Panels/AboutPanel/Rows"]
-custom_minimum_size = Vector2(428, 0)
+custom_minimum_size = Vector2(456, 0)
 layout_mode = 2
-theme_override_font_sizes/font_size = 17
+theme_override_font_sizes/font_size = 22
 text = "Пиксельный экшен-рогалик о Страннике — существе, погибшем во всех четырёх реальностях и всё же продолжающем существовать.
 
 Каждая мутация что-то даёт и что-то отнимает. Чтобы выжить, мало становиться сильнее — придётся меняться.
@@ -202,5 +222,5 @@ autowrap_mode = 3
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 0
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 22
 text = "Назад"

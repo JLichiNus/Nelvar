@@ -8,10 +8,15 @@ const TRANSITION_TIME := 0.8
 ## Speed-up for a wave that is interrupted by another hover.
 const HURRY_SPEED := 2.5
 const PARTICLE_FADE := 0.6
+## The pixel logo is drawn at this integer scale.
+const LOGO_SCALE := 4
 const PARTICLE_AMOUNT := 90
-const IDLE_BUTTON_BG := Color(0.05, 0.08, 0.1, 0.72)
-const IDLE_FONT := Color(0.93, 0.9, 0.8)
-const PANEL_BG := Color(0.06, 0.09, 0.12, 0.92)
+const CURSOR := preload("res://assets/textures/ui/cursor.png")
+const IDLE_TEXT := Color(0.78, 0.78, 0.78)
+## Text inset from the button's left edge; the highlighted text slides one art
+## pixel further (the theme's button frames are drawn at 3x).
+const TEXT_INSET := 24.0
+const TEXT_SLIDE := 3.0
 
 @export var play_element: NelvarMenuElement
 @export var settings_element: NelvarMenuElement
@@ -31,6 +36,13 @@ var _accent_tween: Tween
 var _particle_tween: Tween
 var _button_elements: Dictionary = {}
 var _button_tweens: Dictionary = {}
+## Button -> Label drawing its text (separate node so a reality can put a shader
+## on the text alone, without touching the button frame).
+var _button_labels: Dictionary = {}
+## Per reality: highlighted and pressed button styles tinted with its accent.
+var _highlight_styles: Dictionary = {}
+var _pressed_styles: Dictionary = {}
+var _idle_style: StyleBox
 var _particles: Dictionary = {}
 var _particle_textures: Dictionary = {}
 var _texel := 1.0
@@ -40,8 +52,8 @@ var _panel_owner: Button
 
 @onready var background: TextureRect = $Background
 @onready var particle_root: Node2D = $Particles
-@onready var title_label: Label = %Title
-@onready var reality_label: Label = %Reality
+@onready var logo: TextureRect = %Logo
+@onready var logo_glow: TextureRect = %LogoGlow
 @onready var play_button: Button = %Play
 @onready var settings_button: Button = %Settings
 @onready var about_button: Button = %About
@@ -55,6 +67,7 @@ var _panel_owner: Button
 
 func _ready() -> void:
 	_material = background.material as ShaderMaterial
+	logo.custom_minimum_size = logo.texture.get_size() * LOGO_SCALE
 	_button_elements = {
 		play_button: play_element,
 		settings_button: settings_element,
@@ -62,9 +75,23 @@ func _ready() -> void:
 		quit_button: quit_element,
 	}
 	_mutate_launch()
+	Input.set_custom_mouse_cursor(CURSOR)
+	# The theme's dark pixel frames; the highlight is tinted per reality.
+	_idle_style = play_button.get_theme_stylebox("normal")
+	var base_hover := play_button.get_theme_stylebox("hover") as StyleBoxTexture
+	var base_pressed := play_button.get_theme_stylebox("pressed") as StyleBoxTexture
 	for element: NelvarMenuElement in _button_elements.values():
 		_particles[element] = _create_particles()
+		var hover := base_hover.duplicate() as StyleBoxTexture
+		hover.modulate_color = element.accent
+		_highlight_styles[element] = hover
+		var pressed := base_pressed.duplicate() as StyleBoxTexture
+		pressed.modulate_color = element.accent.darkened(0.2)
+		_pressed_styles[element] = pressed
 	for button: Button in _button_elements:
+		_button_labels[button] = _make_button_label(button, _button_elements[button])
+		# The highlight below is drawn for mouse and keyboard alike.
+		button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 		_set_button_highlight(button, false)
 		button.mouse_entered.connect(button.grab_focus)
 		button.focus_entered.connect(_on_button_focus_entered.bind(button))
@@ -80,8 +107,6 @@ func _ready() -> void:
 	fullscreen_check.toggled.connect(FullscreenToggle.set_fullscreen)
 	FullscreenToggle.fullscreen_changed.connect(fullscreen_check.set_pressed_no_signal)
 
-	_style_panel(settings_panel, settings_element)
-	_style_panel(about_panel, about_element)
 	settings_panel.hide()
 	about_panel.hide()
 
@@ -89,6 +114,10 @@ func _ready() -> void:
 	_layout_particles()
 	# Every launch opens in a random reality until the player points at something.
 	_show_instant(_button_elements.values().pick_random())
+
+
+func _exit_tree() -> void:
+	Input.set_custom_mouse_cursor(null)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -123,9 +152,7 @@ func _show_instant(element: NelvarMenuElement) -> void:
 	_set_from(element)
 	_set_to(element)
 	_material.set_shader_parameter("progress", 0.0)
-	reality_label.text = element.title
-	title_label.modulate = element.accent
-	reality_label.modulate = element.accent
+	logo_glow.modulate = element.accent
 	for other: NelvarMenuElement in _particles:
 		_particles[other].modulate.a = 1.0 if other == element else 0.0
 
@@ -187,12 +214,10 @@ func _set_to(element: NelvarMenuElement) -> void:
 
 
 func _show_labels_and_particles(element: NelvarMenuElement) -> void:
-	reality_label.text = element.title
 	if _accent_tween != null:
 		_accent_tween.kill()
-	_accent_tween = create_tween().set_parallel()
-	_accent_tween.tween_property(title_label, "modulate", element.accent, TRANSITION_TIME * 0.6)
-	_accent_tween.tween_property(reality_label, "modulate", element.accent, TRANSITION_TIME * 0.6)
+	_accent_tween = create_tween()
+	_accent_tween.tween_property(logo_glow, "modulate", element.accent, TRANSITION_TIME * 0.6)
 	if _particle_tween != null:
 		_particle_tween.kill()
 	_particle_tween = create_tween().set_parallel()
@@ -222,68 +247,81 @@ func _on_button_focus_entered(button: Button) -> void:
 func _on_button_focus_exited(button: Button) -> void:
 	_kill_button_tween(button)
 	_set_button_highlight(button, false)
-	var tween := create_tween().set_parallel()
-	tween.tween_property(button, "scale", Vector2.ONE, 0.15)
-	tween.tween_property(button, "rotation_degrees", 0.0, 0.15)
+	var tween := create_tween()
 	tween.tween_property(button, "modulate", Color.WHITE, 0.15)
 	_button_tweens[button] = tween
 
 
+## Buttons are the theme's dark pixel frames; the focused one is tinted with its
+## reality's accent and its text slides one art pixel right. Only the focused
+## button is highlighted (hovering grabs focus), so two buttons never light up.
 func _set_button_highlight(button: Button, highlighted: bool) -> void:
 	var element: NelvarMenuElement = _button_elements[button]
-	var style := StyleBoxFlat.new()
-	style.content_margin_left = 22
-	style.content_margin_right = 22
-	style.content_margin_top = 8
-	style.content_margin_bottom = 8
-	style.corner_radius_top_right = 6
-	style.corner_radius_bottom_right = 6
-	style.border_width_left = 6 if highlighted else 3
-	style.bg_color = element.button_color if highlighted else IDLE_BUTTON_BG
-	style.border_color = element.accent if highlighted else element.accent.darkened(0.35)
-	for state in ["normal", "hover", "pressed", "hover_pressed"]:
-		button.add_theme_stylebox_override(state, style)
-	# Highlight is drawn by the styles above for mouse and keyboard alike.
-	button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	var font := Color.WHITE if highlighted else IDLE_FONT
-	for state in ["font_color", "font_hover_color", "font_focus_color",
-			"font_pressed_color", "font_hover_pressed_color"]:
-		button.add_theme_color_override(state, font)
+	var look: StyleBox = _highlight_styles[element] if highlighted else _idle_style
+	button.add_theme_stylebox_override("normal", look)
+	button.add_theme_stylebox_override("hover", look)
+	button.add_theme_stylebox_override("pressed", _pressed_styles[element])
+	button.add_theme_stylebox_override("hover_pressed", _pressed_styles[element])
+	var label: Label = _button_labels[button]
+	label.add_theme_color_override("font_color", Color.WHITE if highlighted else IDLE_TEXT)
+	label.offset_left = TEXT_INSET + (TEXT_SLIDE if highlighted else 0.0)
 
 
-## Each reality moves its button in its own way.
+## Moves the button's text into a Label in the reality's stylized pixel font,
+## with the reality's optional text material (e.g. wind for air).
+func _make_button_label(button: Button, element: NelvarMenuElement) -> Label:
+	var label := Label.new()
+	label.text = button.text
+	label.add_theme_font_override("font", element.font)
+	label.add_theme_font_size_override("font_size", button.get_theme_font_size("font_size"))
+	# The stylized fonts have their own outline; no extra shadow.
+	label.add_theme_color_override("font_shadow_color", Color.TRANSPARENT)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.material = element.text_material
+	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	label.offset_left = TEXT_INSET
+	button.text = ""
+	button.add_child(label)
+	# Keep the button as tall as the text plus the frame's vertical padding
+	# (measured once the label is in the tree and its font is resolved).
+	var padding := button.get_theme_stylebox("normal").get_minimum_size().y
+	button.custom_minimum_size.y = label.get_combined_minimum_size().y + padding
+	return label
+
+
+## Each reality lights its button in its own way. Only colors change: moving or
+## scaling pixel art by fractions of a pixel would smear it.
 func _animate_button(button: Button, id: StringName) -> void:
 	_kill_button_tween(button)
-	button.pivot_offset = button.size / 2.0
 	var tween := create_tween()
 	_button_tweens[button] = tween
-	var raised := Vector2(1.04, 1.04)
 	match id:
 		&"air":
-			tween.set_trans(Tween.TRANS_SINE)
-			tween.tween_property(button, "scale", raised, 0.1)
-			tween.tween_property(button, "rotation_degrees", -2.0, 0.12)
-			tween.tween_property(button, "rotation_degrees", 1.5, 0.2)
-			tween.tween_property(button, "rotation_degrees", 0.0, 0.18)
+			# A gust: two quick cool flickers.
+			tween.tween_property(button, "modulate", Color(1.3, 1.45, 1.5), 0.05)
+			tween.tween_property(button, "modulate", Color.WHITE, 0.12)
+			tween.tween_property(button, "modulate", Color(1.2, 1.3, 1.35), 0.05)
+			tween.tween_property(button, "modulate", Color.WHITE, 0.2)
 		&"ice":
-			tween.tween_property(button, "scale", Vector2(1.09, 1.09), 0.06)
-			tween.parallel().tween_property(button, "modulate", Color(1.5, 1.55, 1.6), 0.06)
-			tween.tween_property(button, "scale", raised, 0.25) \
+			# Frost: a bright flash that slowly settles.
+			tween.tween_property(button, "modulate", Color(1.6, 1.6, 1.65), 0.05)
+			tween.tween_property(button, "modulate", Color.WHITE, 0.45) \
 				.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
-			tween.parallel().tween_property(button, "modulate", Color.WHITE, 0.35)
 		&"earth":
-			tween.tween_property(button, "scale", Vector2(1.08, 0.88), 0.07)
-			tween.tween_property(button, "scale", raised, 0.35) \
-				.set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+			# A heavy thud: darken, then a warm glow.
+			tween.tween_property(button, "modulate", Color(0.65, 0.65, 0.6), 0.06)
+			tween.tween_property(button, "modulate", Color(1.15, 1.12, 1.0), 0.12)
+			tween.tween_property(button, "modulate", Color.WHITE, 0.25)
 		&"fire":
+			# Fire never settles: flicker while highlighted.
 			tween.set_loops()
-			tween.tween_property(button, "scale", raised, 0.08)
 			tween.tween_property(button, "modulate", Color(1.3, 1.1, 0.92), 0.09)
 			tween.tween_property(button, "modulate", Color(1.05, 0.98, 0.95), 0.13)
 			tween.tween_property(button, "modulate", Color(1.35, 1.12, 0.95), 0.07)
 			tween.tween_property(button, "modulate", Color.WHITE, 0.16)
 		_:
-			tween.tween_property(button, "scale", raised, 0.1)
+			tween.tween_property(button, "modulate", Color.WHITE, 0.1)
 
 
 func _kill_button_tween(button: Button) -> void:
@@ -345,20 +383,6 @@ func _particle_texture(texture_size: Vector2i) -> Texture2D:
 
 
 # --- Panels ------------------------------------------------------------------
-
-func _style_panel(panel: PanelContainer, element: NelvarMenuElement) -> void:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PANEL_BG
-	style.border_width_left = 3
-	style.border_color = element.accent
-	style.corner_radius_top_right = 8
-	style.corner_radius_bottom_right = 8
-	style.content_margin_left = 26
-	style.content_margin_right = 26
-	style.content_margin_top = 18
-	style.content_margin_bottom = 18
-	panel.add_theme_stylebox_override("panel", style)
-
 
 func _open(panel: Control, owner_button: Button, first_focus: Control) -> void:
 	if _open_panel != null and _open_panel != panel:
