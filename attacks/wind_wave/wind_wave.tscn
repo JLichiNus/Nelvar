@@ -1,0 +1,20 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://attacks/wind_wave/wind_wave.gd" id="1_script"]
+[ext_resource type="Texture2D" path="res://attacks/wind_wave/wind_wave_sheet.png" id="2_sheet"]
+
+[node name="WindWave" type="Area2D"]
+collision_layer = 4
+collision_mask = 8
+monitoring = true
+monitorable = false
+script = ExtResource("1_script")
+
+[node name="Visual" type="Sprite2D" parent="."]
+texture_filter = 1
+texture = ExtResource("2_sheet")
+hframes = 16
+vframes = 17
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="."]
+polygon = PackedVector2Array(0, -35, 9.06, -33.81, 17.5, -30.31, 24.75, -24.75, 30.31, -17.5, 33.81, -9.06, 35, 0, 33.81, 9.06, 30.31, 17.5, 24.75, 24.75, 17.5, 30.31, 9.06, 33.81, 0, 35)

@@ -9,6 +9,7 @@ var tree_nodes: Array[NelvarTree] = []
 @onready var world_view: NelvarWorldView = $World
 @onready var actors: Node2D = $Actors
 @onready var player: NelvarPlayer = $Actors/Player
+@onready var enemy_spawner: Node2D = $Actors/EnemySpawner
 @onready var seed_label: Label = $HUD/Margin/Panel/Padding/Rows/Seed
 @onready var status_label: Label = $HUD/Margin/Panel/Padding/Rows/Status
 
@@ -29,6 +30,7 @@ func _ready() -> void:
 		seed_label.text = "Не удалось построить карту · сид %d" % world_seed
 		status_label.text = "Ошибка генерации. Подробности в Output."
 		player.set_physics_process(false)
+		player.set_process(false)
 		return
 	world_view.build(world_data)
 	forest_data = NelvarForestGenerator.new().generate(world_data, forest_config)
@@ -40,6 +42,7 @@ func _ready() -> void:
 		tree_nodes.append(node)
 	player.position = world_data.spawn_position
 	player.camera.reset_smoothing()
+	enemy_spawner.call("start", world_data, forest_data)
 	seed_label.text = "ЗЕМЛЯ · СИД %d" % world_data.world_seed
 	var large := 0
 	for island in world_data.islands:

@@ -1,8 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/world/world_view.gd" id="2"]
-[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://player/player.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://enemies/hopper/hopper.tscn" id="5"]
+[ext_resource type="Script" path="res://enemies/enemy_spawner.gd" id="6"]
+[ext_resource type="Script" path="res://ui/health_label.gd" id="7"]
 [ext_resource type="Resource" path="res://resources/earth_map_config.tres" id="4"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
@@ -24,6 +27,13 @@ script = ExtResource("2")
 y_sort_enabled = true
 
 [node name="Player" parent="Actors" instance=ExtResource("3")]
+
+[node name="EnemySpawner" type="Node2D" parent="Actors" node_paths=PackedStringArray("player")]
+y_sort_enabled = true
+script = ExtResource("6")
+enemy_scene = ExtResource("5")
+player = NodePath("../Player")
+auto_start = false
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
@@ -63,9 +73,18 @@ mouse_filter = 2
 theme_override_font_sizes/font_size = 15
 text = "Генерация…"
 
+[node name="Health" type="Label" parent="HUD/Margin/Panel/Padding/Rows" node_paths=PackedStringArray("player")]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.584314, 0.584314, 1)
+theme_override_font_sizes/font_size = 15
+text = "HP: 100 / 100"
+script = ExtResource("7")
+player = NodePath("../../../../../../Actors/Player")
+
 [node name="Controls" type="Label" parent="HUD/Margin/Panel/Padding/Rows"]
 layout_mode = 2
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.72, 0.79, 0.83, 1)
 theme_override_font_sizes/font_size = 14
-text = "WASD / стрелки — ходьба   ·   Колесо — масштаб   ·   F3 — чанки и коллизии"
+text = "WASD / стрелки — ходьба   ·   Ctrl — бег   ·   Shift — полёт\nЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)\nКолесо — масштаб   ·   F3 — чанки и коллизии"
