@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://daddiwlyo175"
-path="res://.godot/imported/wind_idle_v2.png-78d82883b9b0d7d2fa3011d4b9982be7.ctex"
+uid="uid://b5odwn14wykcc"
+path="res://.godot/imported/vortex_fly_back.png-8111612e280e65ef67714455cb6f2530.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/textures/player/wind_idle_v2.png"
-dest_files=["res://.godot/imported/wind_idle_v2.png-78d82883b9b0d7d2fa3011d4b9982be7.ctex"]
+source_file="res://player/sprites/vortex_fly_back.png"
+dest_files=["res://.godot/imported/vortex_fly_back.png-8111612e280e65ef67714455cb6f2530.ctex"]
 
 [params]
 

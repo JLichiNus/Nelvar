@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://branynq42xmnw"
-path="res://.godot/imported/legs_run.png-e6364b1f38e94df27f9f36fd1df4a08b.ctex"
+uid="uid://c2h7ek0oiasd6"
+path="res://.godot/imported/vortex_walk_back.png-ef2e30d4cac0d55078d70ab8ba9672a1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://player/sprites/legs_run.png"
-dest_files=["res://.godot/imported/legs_run.png-e6364b1f38e94df27f9f36fd1df4a08b.ctex"]
+source_file="res://player/sprites/vortex_walk_back.png"
+dest_files=["res://.godot/imported/vortex_walk_back.png-ef2e30d4cac0d55078d70ab8ba9672a1.ctex"]
 
 [params]
 

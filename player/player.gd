@@ -1,7 +1,9 @@
 class_name NelvarPlayer
 extends CharacterBody2D
-## Начало координат — точка у ног: по ней идут Y-сортировка с деревьями
-## и коллизия с миром. Прицел и атаки считаются от центра тела (AimPivot).
+## Элементаль ветра «Вихрь»: торс с парящими кулаками, вместо ног — смерч.
+## Начало координат — точка на земле под смерчем: по ней идут Y-сортировка
+## с деревьями и коллизия с миром. Прицел и атаки считаются от уровня
+## кулаков (AimPivot).
 
 
 signal health_changed(current: float, maximum: float)
@@ -21,13 +23,21 @@ const ATTACK_PRIORITY := {
 
 @export_category("Movement")
 @export var speed: float = 300.0
+# Элементаль скользит: разгоняется и тормозит не мгновенно, но быстро.
+@export var acceleration: float = 2400.0
+@export var deceleration: float = 2000.0
 @export var run_speed_multiplier: float = 1.5
 @export var speed_boost_multiplier: float = 1.5
 @export var speed_boost_duration: float = 2.0
 @export var speed_boost_cooldown: float = 10.0
 @export var flight_height: float = 14.0
 @export var flight_lift_duration: float = 0.12
-@export var flight_shadow_scale: float = 0.7
+# Тень есть всегда — элементаль парит; в полёте она сжимается.
+@export var ground_shadow_scale: float = 0.8
+@export var flight_shadow_scale: float = 0.55
+# Покачивание корпуса над смерчем: на сколько текселей и с каким периодом.
+@export var hover_bob_texels: float = 1.0
+@export var hover_bob_period: float = 1.3
 
 @export_category("Attacks")
 @export var projectile_scene: PackedScene
@@ -73,15 +83,17 @@ var _facing_left := false
 # Текущая анимация атаки корпуса; пусто — корпус повторяет локомоцию ног.
 var _attack_animation := &""
 var _attack_facing_left := 0.0
+var _hover_time := 0.0
 
 @onready var aim_pivot: Node2D = $AimPivot
 @onready var projectile_spawn: Marker2D = $AimPivot/ProjectileSpawn
 @onready var boost_duration_timer: Timer = $BoostDuration
 @onready var boost_cooldown_timer: Timer = $BoostCooldown
 @onready var body_visual: Node2D = $Body
-@onready var legs_sprite: AnimatedSprite2D = $Body/Legs
+@onready var vortex_sprite: AnimatedSprite2D = $Body/Vortex
 @onready var torso_sprite: AnimatedSprite2D = $Body/Torso
 @onready var shadow: Polygon2D = $Shadow
+@onready var wind_trail: CPUParticles2D = $WindTrail
 @onready var hurtbox: Area2D = $Hurtbox
 @onready var camera: Camera2D = $Camera2D
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
@@ -92,6 +104,8 @@ func _ready() -> void:
 	(collision_shape.shape as CircleShape2D).radius = BODY_RADIUS
 	_body_scale = body_visual.scale.abs()
 	_body_rest_position = body_visual.position
+	shadow.scale = Vector2.ONE * ground_shadow_scale
+	shadow.visible = true
 	torso_sprite.animation_finished.connect(_on_torso_animation_finished)
 	boost_duration_timer.timeout.connect(_on_boost_duration_timeout)
 	boost_cooldown_timer.timeout.connect(_on_boost_cooldown_timeout)
@@ -101,6 +115,7 @@ func _process(delta: float) -> void:
 	if _is_dead:
 		return
 	_update_blink()
+	_update_hover(delta)
 	_update_aim()
 	_primary_cooldown_left = maxf(_primary_cooldown_left - delta, 0.0)
 	_wave_cooldown_left = maxf(_wave_cooldown_left - delta, 0.0)
@@ -116,6 +131,14 @@ func _process(delta: float) -> void:
 		_try_speed_boost()
 	if Input.is_action_just_pressed("special_compression"):
 		_try_compression()
+
+
+# Корпус парит над смерчем, покачиваясь на целый тексель — пиксели
+# остаются на сетке. Смерч не качается: его кончик касается земли.
+func _update_hover(delta: float) -> void:
+	_hover_time = fmod(_hover_time + delta, hover_bob_period)
+	var up := sin(_hover_time / hover_bob_period * TAU) > 0.0
+	torso_sprite.position.y = -hover_bob_texels if up else 0.0
 
 
 func _update_aim() -> void:
@@ -154,7 +177,9 @@ func _physics_process(delta: float) -> void:
 		speed_multiplier = speed_boost_multiplier
 	elif _is_running:
 		speed_multiplier = run_speed_multiplier
-	velocity = direction * speed * speed_multiplier
+	var target_velocity := direction * speed * speed_multiplier
+	var rate := acceleration if direction != Vector2.ZERO else deceleration
+	velocity = velocity.move_toward(target_velocity, rate * delta)
 	move_and_slide()
 	_update_animation(direction)
 	# В полёте игрок проходит над врагами и не получает контактного урона.
@@ -162,8 +187,8 @@ func _physics_process(delta: float) -> void:
 		_check_enemy_contact()
 
 
-# Спрайт из двух слоёв: ноги всегда играют локомоцию, корпус — локомоцию
-# синхронно с ногами или анимацию атаки поверх неё.
+# Спрайт из двух слоёв: смерч всегда играет локомоцию, корпус — локомоцию
+# синхронно со смерчем или анимацию атаки поверх неё.
 # Во время атаки персонаж смотрит на курсор, иначе — по ходу движения
 # (а без горизонтального движения — тоже на курсор).
 func _update_animation(direction: Vector2) -> void:
@@ -183,24 +208,38 @@ func _update_animation(direction: Vector2) -> void:
 		locomotion = &"fly"
 	elif direction != Vector2.ZERO:
 		locomotion = &"run" if _is_running else &"walk"
-	# Идя спиной вперёд (атака против хода), ноги шагают назад.
-	var walking_backwards := (
-		(locomotion == &"walk" or locomotion == &"run")
+	# Хвост смерча тянется против хода: спиной вперёд (атака против хода)
+	# смерч играет *_back с хвостом в другую сторону, а корпус не
+	# наклоняется вперёд и играет idle.
+	var moving_backwards := (
+		locomotion != &"idle"
 		and absf(direction.x) >= 0.01
 		and (direction.x < 0.0) != _facing_left
 	)
-	legs_sprite.speed_scale = -1.0 if walking_backwards else 1.0
-	if legs_sprite.animation != locomotion:
-		legs_sprite.play(locomotion)
+	var vortex_animation := locomotion
+	var torso_locomotion := locomotion
+	if moving_backwards:
+		vortex_animation = StringName(String(locomotion) + "_back")
+		torso_locomotion = &"idle"
+	if vortex_sprite.animation != vortex_animation:
+		# Кадров у всех анимаций смерча поровну — продолжаем с того же
+		# кадра, чтобы вращение не дёргалось при смене анимации.
+		var frame := vortex_sprite.frame
+		var progress := vortex_sprite.frame_progress
+		vortex_sprite.play(vortex_animation)
+		vortex_sprite.set_frame_and_progress(frame, progress)
+	wind_trail.emitting = (
+		direction != Vector2.ZERO
+		and (locomotion == &"run" or locomotion == &"fly")
+	)
 
 	if _attack_animation != &"":
 		return
-	if torso_sprite.animation != locomotion:
-		torso_sprite.play(locomotion)
-	torso_sprite.speed_scale = legs_sprite.speed_scale
+	if torso_sprite.animation != torso_locomotion:
+		torso_sprite.play(torso_locomotion)
 	torso_sprite.set_frame_and_progress(
-		legs_sprite.frame,
-		legs_sprite.frame_progress
+		vortex_sprite.frame,
+		vortex_sprite.frame_progress
 	)
 
 
@@ -210,7 +249,6 @@ func _play_attack_animation(animation_name: StringName) -> void:
 			and ATTACK_PRIORITY[_attack_animation] > ATTACK_PRIORITY[animation_name]:
 		return
 	_attack_animation = animation_name
-	torso_sprite.speed_scale = 1.0
 	torso_sprite.play(animation_name)
 	# play() не перезапускает ту же анимацию, если она ещё не доиграла.
 	torso_sprite.set_frame_and_progress(0, 0.0)
@@ -262,10 +300,11 @@ func _die() -> void:
 	velocity = Vector2.ZERO
 	body_visual.modulate = DEAD_COLOR
 	_attack_animation = &""
-	for sprite: AnimatedSprite2D in [legs_sprite, torso_sprite]:
-		sprite.speed_scale = 1.0
+	for sprite: AnimatedSprite2D in [vortex_sprite, torso_sprite]:
 		sprite.play(&"idle")
 		sprite.stop()
+	torso_sprite.position.y = 0.0
+	wind_trail.emitting = false
 	if _flight_tween != null:
 		_flight_tween.kill()
 	body_visual.position = _body_rest_position
@@ -367,8 +406,6 @@ func _instantiate_attack(scene: PackedScene, attack_name: String) -> Node:
 
 
 func _play_lift_off() -> void:
-	shadow.scale = Vector2.ONE
-	shadow.visible = true
 	var tween := _restart_flight_tween().set_parallel(true)
 	tween.tween_property(
 		body_visual,
@@ -392,8 +429,12 @@ func _play_landing() -> void:
 		_body_rest_position.y,
 		flight_lift_duration
 	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tween.tween_property(shadow, "scale", Vector2.ONE, flight_lift_duration)
-	tween.chain().tween_callback(shadow.hide)
+	tween.tween_property(
+		shadow,
+		"scale",
+		Vector2.ONE * ground_shadow_scale,
+		flight_lift_duration
+	)
 
 
 func _restart_flight_tween() -> Tween:
