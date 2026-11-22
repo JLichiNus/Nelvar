@@ -23,6 +23,17 @@ func setup(data: NelvarForestData.TreeSpec, artwork: NelvarTreeArt) -> void:
 	add_child(collider)
 
 
+func _enter_tree() -> void:
+	# Крона закрывает тех, кто стоит позади, — им рисуется контур поверх неё.
+	if art != null:
+		NelvarOcclusionOutline.add_occluder(self, art.texture,
+			Rect2(global_position + art.local_rect.position, art.local_rect.size))
+
+
+func _exit_tree() -> void:
+	NelvarOcclusionOutline.remove_occluder(self)
+
+
 func _draw() -> void:
 	if art == null:
 		return

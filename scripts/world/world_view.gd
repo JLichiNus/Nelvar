@@ -9,7 +9,8 @@ var world: NelvarWorldData
 var terrain_art: Array[NelvarIslandArt] = []
 var bridge_art: Array[NelvarBridgeArt] = []
 var details: Node2D
-var _clouds: Array[Vector3] = []
+var clouds: Array[NelvarCloudPainter.Cloud] = []
+var _sky: Rect2
 
 
 func build(data: NelvarWorldData) -> void:
@@ -20,15 +21,8 @@ func build(data: NelvarWorldData) -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	terrain_art = NelvarTerrainPainter.new().paint(data, terrain_style)
 	bridge_art = NelvarBridgePainter.new().paint(data, terrain_style)
-	_clouds.clear()
-	var rng := RandomNumberGenerator.new()
-	rng.seed = ("%d:sky" % data.world_seed).hash()
-	var sky_bounds := data.bounds.grow(1400.0)
-	for i in 90:
-		_clouds.append(Vector3(
-			rng.randf_range(sky_bounds.position.x, sky_bounds.end.x),
-			rng.randf_range(sky_bounds.position.y, sky_bounds.end.y),
-			rng.randf_range(90.0, 220.0)))
+	_sky = data.bounds.grow(1400.0)
+	clouds = NelvarCloudPainter.new().paint(data, terrain_style, _sky, 70)
 	for leaf in data.leaves:
 		var chunk := NelvarWorldChunk.new()
 		chunk.setup(data, leaf, terrain_art)
@@ -37,6 +31,17 @@ func build(data: NelvarWorldData) -> void:
 	details.world = data
 	details.bridge_art = bridge_art
 	add_child(details)
+	queue_redraw()
+
+
+func _process(delta: float) -> void:
+	if world == null:
+		return
+	# Clouds drift with the wind and wrap around the sky rectangle.
+	for cloud in clouds:
+		cloud.position.x += cloud.speed * delta
+		if cloud.position.x > _sky.end.x:
+			cloud.position.x -= _sky.size.x + cloud.size.x
 	queue_redraw()
 
 
@@ -51,15 +56,11 @@ func toggle_chunks() -> bool:
 func _draw() -> void:
 	if world == null:
 		return
-	for cloud in _clouds:
-		draw_set_transform(Vector2(cloud.x, cloud.y), 0.0, Vector2(1.7, 0.6))
-		var color := Color(0.86, 0.92, 0.96, 0.12)
-		draw_circle(Vector2.ZERO, cloud.z, color)
-		draw_circle(Vector2(cloud.z * 0.7, -cloud.z * 0.15), cloud.z * 0.7, color)
-	draw_set_transform(Vector2.ZERO)
-	for art in terrain_art:
-		draw_texture_rect(art.surface_texture,
-			Rect2(art.world_rect.position + Vector2(16, 100), art.world_rect.size),
-			false, Color(0.16, 0.23, 0.27, 0.2))
+	var step := float(maxi(1, terrain_style.pixel_size))
+	for cloud in clouds:
+		# Snap to the terrain pixel grid so drifting clouds stay crisp.
+		var at := (cloud.position / step).round() * step
+		draw_texture_rect(cloud.texture, Rect2(at, cloud.size), false,
+			Color(1, 1, 1, cloud.opacity))
 	for art in terrain_art:
 		draw_texture_rect(art.underside_texture, art.world_rect, false)

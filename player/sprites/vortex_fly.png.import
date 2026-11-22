@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dh0ru4ajncoqh"
-path="res://.godot/imported/legs_walk.png-84cc32c9f78fe3841d559c26d235dc32.ctex"
+uid="uid://dx3sbxvyi46nh"
+path="res://.godot/imported/vortex_fly.png-4b6b42d143de6b423fba3e6422700cab.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://player/sprites/legs_walk.png"
-dest_files=["res://.godot/imported/legs_walk.png-84cc32c9f78fe3841d559c26d235dc32.ctex"]
+source_file="res://player/sprites/vortex_fly.png"
+dest_files=["res://.godot/imported/vortex_fly.png-4b6b42d143de6b423fba3e6422700cab.ctex"]
 
 [params]
 

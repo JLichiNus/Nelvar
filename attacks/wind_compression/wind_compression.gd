@@ -4,8 +4,16 @@ extends Node2D
 # с двух сторон, бьют, затем держат и сжимают её, нанося периодический урон.
 # Узел каждый кадр ставится в позицию цели, поэтому промаха нет; урон идёт
 # напрямую через take_damage, без коллизий.
+#
+# Серп волны — спрайтшит из tools/gen_attack_sprites.py: строки — направления
+# 0..90°, прочие получаются отражением. Центр кадра — центр дуги, вершина
+# серпа (позиция WaveA/WaveB) — на ARC_RADIUS впереди. Спрайт не вращается
+# и не масштабируется вместе с узлами — пиксели как у игрока.
 
 enum Phase { IDLE, APPROACH, SQUEEZE, FADE }
+
+const SHEET_TEXEL := 3.0
+const ARC_RADIUS := 69.0  # = COMPRESSION_RADIUS (46) * 1.5 из gen_attack_sprites.py
 
 @export_category("Motion")
 @export var approach_distance: float = 220.0
@@ -21,9 +29,7 @@ enum Phase { IDLE, APPROACH, SQUEEZE, FADE }
 @export var tick_interval: float = 0.25
 
 @export_category("Visual")
-@export var wave_scale: float = 2.0
 @export var pulse_distance: float = 6.0
-@export var pulse_scale: float = 0.06
 @export var pulse_frequency: float = 4.0
 @export var approach_start_alpha: float = 0.35
 
@@ -57,8 +63,10 @@ func start_compression(target: Node2D, caster_position: Vector2) -> void:
 	if to_target.length_squared() < 0.0001:
 		to_target = Vector2.RIGHT
 	axis.rotation = to_target.orthogonal().angle()
+	_setup_sprite(wave_a.get_node("Sprite"), axis.rotation)
+	_setup_sprite(wave_b.get_node("Sprite"), axis.rotation + PI)
 
-	_set_waves(approach_distance, wave_scale, approach_start_alpha)
+	_set_waves(approach_distance, approach_start_alpha)
 	visible = true
 	_enter_phase(Phase.APPROACH)
 
@@ -88,7 +96,6 @@ func _update_approach() -> void:
 	var eased := t * t
 	_set_waves(
 		lerpf(approach_distance, hold_distance, eased),
-		wave_scale,
 		lerpf(approach_start_alpha, 1.0, t)
 	)
 	if t >= 1.0:
@@ -110,7 +117,6 @@ func _update_squeeze() -> void:
 	var pulse := sin(_phase_time * TAU * pulse_frequency)
 	_set_waves(
 		hold_distance + pulse_distance * pulse,
-		wave_scale * (1.0 + pulse_scale * pulse),
 		0.85 + 0.15 * pulse
 	)
 
@@ -142,7 +148,6 @@ func _update_fade() -> void:
 	var t := clampf(_phase_time / maxf(fade_duration, 0.01), 0.0, 1.0)
 	_set_waves(
 		_fade_start_distance + fade_spread * t,
-		wave_scale,
 		lerpf(_fade_start_alpha, 0.0, t)
 	)
 	if t >= 1.0:
@@ -155,13 +160,27 @@ func _enter_phase(phase: Phase) -> void:
 	_phase_time = 0.0
 
 
-func _set_waves(distance: float, wave_size: float, alpha: float) -> void:
+func _set_waves(distance: float, alpha: float) -> void:
 	_wave_distance = distance
 	wave_a.position = Vector2(-distance, 0.0)
 	wave_b.position = Vector2(distance, 0.0)
-	wave_a.scale = Vector2.ONE * wave_size
-	wave_b.scale = Vector2.ONE * wave_size
 	modulate.a = alpha
+
+
+# facing — мировой угол, куда смотрит выпуклость серпа (на цель).
+func _setup_sprite(sprite: Sprite2D, facing: float) -> void:
+	var dir := Vector2.from_angle(facing)
+	var row_count := sprite.vframes
+	var base_angle := atan2(absf(dir.y), absf(dir.x))
+	sprite.frame_coords = Vector2i(0, clampi(
+		roundi(base_angle / (PI * 0.5) * (row_count - 1)), 0, row_count - 1
+	))
+	sprite.flip_h = dir.x < 0.0
+	sprite.flip_v = dir.y < 0.0
+	# Центр дуги позади вершины; волна-родитель смотрит выпуклостью по +x.
+	sprite.position = Vector2(-ARC_RADIUS, 0.0)
+	sprite.global_rotation = 0.0
+	sprite.global_scale = Vector2(SHEET_TEXEL, SHEET_TEXEL)
 
 
 func _deal_damage(amount: float) -> void:

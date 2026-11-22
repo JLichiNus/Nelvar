@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dado2dsau1yyx"
-path="res://.godot/imported/legs_fly.png-065e9121d5dc77805e1500439d30ab91.ctex"
+uid="uid://bai7a4v0r7k6i"
+path="res://.godot/imported/vortex_idle.png-b58f8c77c744ef2d55aa46232efdc56c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://player/sprites/legs_fly.png"
-dest_files=["res://.godot/imported/legs_fly.png-065e9121d5dc77805e1500439d30ab91.ctex"]
+source_file="res://player/sprites/vortex_idle.png"
+dest_files=["res://.godot/imported/vortex_idle.png-b58f8c77c744ef2d55aa46232efdc56c.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cqggjmal42kot"
-path="res://.godot/imported/nelvar_wind_wanderer_32x32.png-29cca7402f80ce6d41619257da988673.ctex"
+uid="uid://k62vuw0tvs0y"
+path="res://.godot/imported/vortex_run.png-49d0ce4df650b530435a04ed5407fba1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://nelvar_wind_wanderer_32x32.png"
-dest_files=["res://.godot/imported/nelvar_wind_wanderer_32x32.png-29cca7402f80ce6d41619257da988673.ctex"]
+source_file="res://player/sprites/vortex_run.png"
+dest_files=["res://.godot/imported/vortex_run.png-49d0ce4df650b530435a04ed5407fba1.ctex"]
 
 [params]
 

@@ -1,17 +1,26 @@
-[gd_scene load_steps=9 format=3 uid="uid://dcaj77phiguvn"]
+[gd_scene load_steps=12 format=3 uid="uid://dcaj77phiguvn"]
 
 [ext_resource type="Script" uid="uid://4psdfeenr6lm" path="res://player/player.gd" id="1_oul6g"]
 [ext_resource type="PackedScene" path="res://attacks/wind_projectile/wind_projectile.tscn" id="2_projectile"]
 [ext_resource type="PackedScene" path="res://attacks/wind_wave/wind_wave.tscn" id="3_wave"]
 [ext_resource type="PackedScene" path="res://attacks/wind_compression/wind_compression.tscn" id="4_compression"]
-[ext_resource type="SpriteFrames" path="res://player/sprites/player_legs_frames.tres" id="5_legs"]
+[ext_resource type="SpriteFrames" path="res://player/sprites/player_vortex_frames.tres" id="5_vortex"]
 [ext_resource type="SpriteFrames" path="res://player/sprites/player_torso_frames.tres" id="6_torso"]
+[ext_resource type="Script" path="res://scripts/fx/occlusion_outline.gd" id="7_outline"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_player"]
 radius = 14.0
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_hurtbox"]
 size = Vector2(32, 32)
+
+[sub_resource type="Curve" id="Curve_trail_scale"]
+_data = [Vector2(0, 1), 0.0, 0.0, 0, 0, Vector2(1, 0.4), 0.0, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="Gradient" id="Gradient_trail"]
+offsets = PackedFloat32Array(0, 0.5, 1)
+colors = PackedColorArray(0.98, 0.97, 0.91, 0.9, 0.87, 0.93, 0.9, 0.6, 0.65, 0.81, 0.86, 0)
 
 [node name="Player" type="CharacterBody2D" unique_id=120432351]
 motion_mode = 1
@@ -22,33 +31,48 @@ projectile_scene = ExtResource("2_projectile")
 wave_scene = ExtResource("3_wave")
 compression_scene = ExtResource("4_compression")
 
-[node name="Shadow" type="Polygon2D" parent="."]
-visible = false
-color = Color(0, 0, 0, 0.35)
-polygon = PackedVector2Array(18, 0, 16.63, 2.68, 12.73, 4.95, 6.89, 6.47, 0, 7, -6.89, 6.47, -12.73, 4.95, -16.63, 2.68, -18, 0, -16.63, -2.68, -12.73, -4.95, -6.89, -6.47, -0, -7, 6.89, -6.47, 12.73, -4.95, 16.63, -2.68)
+[node name="WindTrail" type="CPUParticles2D" parent="."]
+position = Vector2(0, -6)
+emitting = false
+amount = 18
+lifetime = 0.45
+local_coords = false
+emission_shape = 3
+emission_rect_extents = Vector2(9, 4)
+direction = Vector2(0, -1)
+spread = 60.0
+gravity = Vector2(0, 0)
+initial_velocity_min = 8.0
+initial_velocity_max = 22.0
+damping_min = 20.0
+damping_max = 40.0
+scale_amount_min = 1.5
+scale_amount_max = 3.0
+scale_amount_curve = SubResource("Curve_trail_scale")
+color_ramp = SubResource("Gradient_trail")
 
 [node name="Body" type="Node2D" parent="."]
 texture_filter = 1
-position = Vector2(0, -16)
-scale = Vector2(1.5, 1.5)
+position = Vector2(0, -12)
+scale = Vector2(3, 3)
 
-[node name="Legs" type="AnimatedSprite2D" parent="Body"]
-sprite_frames = ExtResource("5_legs")
+[node name="Vortex" type="AnimatedSprite2D" parent="Body"]
+sprite_frames = ExtResource("5_vortex")
 animation = &"idle"
 autoplay = "idle"
-offset = Vector2(-2, -4)
+offset = Vector2(0, -3.5)
 
 [node name="Torso" type="AnimatedSprite2D" parent="Body"]
 sprite_frames = ExtResource("6_torso")
 animation = &"idle"
 autoplay = "idle"
-offset = Vector2(-2, -4)
+offset = Vector2(0, -3.5)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=1764298744]
 shape = SubResource("CircleShape2D_player")
 
 [node name="AimPivot" type="Node2D" parent="."]
-position = Vector2(0, -16)
+position = Vector2(0, -26)
 
 [node name="ProjectileSpawn" type="Marker2D" parent="AimPivot"]
 position = Vector2(30, 0)
@@ -72,3 +96,9 @@ monitorable = false
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Hurtbox"]
 shape = SubResource("RectangleShape2D_hurtbox")
+
+[node name="OcclusionOutline" type="CanvasGroup" parent="." node_paths=PackedStringArray("sources")]
+script = ExtResource("7_outline")
+sources = [NodePath("../Body/Vortex"), NodePath("../Body/Torso")]
+outline_color = Color(0.94, 0.98, 1, 0.95)
+fill_color = Color(0.78, 0.92, 1, 0.2)
