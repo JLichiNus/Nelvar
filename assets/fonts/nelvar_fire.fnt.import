@@ -1,0 +1,17 @@
+[remap]
+
+importer="font_data_bmfont"
+type="FontFile"
+uid="uid://cosupnf2d6yf2"
+path="res://.godot/imported/nelvar_fire.fnt-950c366b1ed8fdafc76985b11bd8514f.fontdata"
+
+[deps]
+
+source_file="res://assets/fonts/nelvar_fire.fnt"
+dest_files=["res://.godot/imported/nelvar_fire.fnt-950c366b1ed8fdafc76985b11bd8514f.fontdata"]
+
+[params]
+
+fallbacks=[]
+compress=true
+scaling_mode=2

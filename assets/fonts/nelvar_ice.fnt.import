@@ -1,0 +1,17 @@
+[remap]
+
+importer="font_data_bmfont"
+type="FontFile"
+uid="uid://b8ba1pfowdxeh"
+path="res://.godot/imported/nelvar_ice.fnt-b10685749ffa85ebbe55837a8dc2634a.fontdata"
+
+[deps]
+
+source_file="res://assets/fonts/nelvar_ice.fnt"
+dest_files=["res://.godot/imported/nelvar_ice.fnt-b10685749ffa85ebbe55837a8dc2634a.fontdata"]
+
+[params]
+
+fallbacks=[]
+compress=true
+scaling_mode=2

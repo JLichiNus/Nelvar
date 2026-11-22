@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/world/world_view.gd" id="2"]
@@ -7,13 +7,6 @@
 [ext_resource type="Script" path="res://enemies/enemy_spawner.gd" id="6"]
 [ext_resource type="Script" path="res://ui/health_label.gd" id="7"]
 [ext_resource type="Resource" path="res://resources/earth_map_config.tres" id="4"]
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
-bg_color = Color(0.08, 0.13, 0.17, 0.91)
-border_width_left = 3
-border_color = Color(0.77, 0.84, 0.55, 1)
-corner_radius_top_right = 8
-corner_radius_bottom_right = 8
 
 [node name="Nelvar" type="Node2D"]
 script = ExtResource("1")
@@ -38,6 +31,7 @@ auto_start = false
 [node name="HUD" type="CanvasLayer" parent="."]
 
 [node name="Margin" type="MarginContainer" parent="HUD"]
+texture_filter = 1
 offset_left = 20.0
 offset_top = 20.0
 mouse_filter = 2
@@ -45,15 +39,10 @@ mouse_filter = 2
 [node name="Panel" type="PanelContainer" parent="HUD/Margin"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
 
 [node name="Padding" type="MarginContainer" parent="HUD/Margin/Panel"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/margin_left = 18
-theme_override_constants/margin_top = 12
-theme_override_constants/margin_right = 18
-theme_override_constants/margin_bottom = 12
 
 [node name="Rows" type="VBoxContainer" parent="HUD/Margin/Panel/Padding"]
 layout_mode = 2
@@ -64,20 +53,20 @@ theme_override_constants/separation = 6
 layout_mode = 2
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.96, 0.9, 0.72, 1)
-theme_override_font_sizes/font_size = 19
+theme_override_font_sizes/font_size = 22
 text = "ЗЕМЛЯ"
 
 [node name="Status" type="Label" parent="HUD/Margin/Panel/Padding/Rows"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_font_sizes/font_size = 15
+theme_override_font_sizes/font_size = 22
 text = "Генерация…"
 
 [node name="Health" type="Label" parent="HUD/Margin/Panel/Padding/Rows" node_paths=PackedStringArray("player")]
 layout_mode = 2
 mouse_filter = 2
 theme_override_colors/font_color = Color(1, 0.584314, 0.584314, 1)
-theme_override_font_sizes/font_size = 15
+theme_override_font_sizes/font_size = 22
 text = "HP: 100 / 100"
 script = ExtResource("7")
 player = NodePath("../../../../../../Actors/Player")
@@ -86,5 +75,5 @@ player = NodePath("../../../../../../Actors/Player")
 layout_mode = 2
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.72, 0.79, 0.83, 1)
-theme_override_font_sizes/font_size = 14
+theme_override_font_sizes/font_size = 22
 text = "WASD / стрелки — ходьба   ·   Ctrl — бег   ·   Shift — полёт\nЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)\nКолесо — масштаб   ·   F3 — чанки и коллизии"

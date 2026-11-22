@@ -1,0 +1,17 @@
+[remap]
+
+importer="font_data_bmfont"
+type="FontFile"
+uid="uid://bv86v6751oov4"
+path="res://.godot/imported/nelvar_air.fnt-ff13b3c5c1df37d5868b93b44fe78843.fontdata"
+
+[deps]
+
+source_file="res://assets/fonts/nelvar_air.fnt"
+dest_files=["res://.godot/imported/nelvar_air.fnt-ff13b3c5c1df37d5868b93b44fe78843.fontdata"]
+
+[params]
+
+fallbacks=[]
+compress=true
+scaling_mode=2
