@@ -10,6 +10,7 @@ const DEAD_COLOR := Color(0.45, 0.47, 0.5, 1.0)
 
 @export_category("Movement")
 @export var base_speed: float = 300.0
+@export var run_speed_multiplier: float = 1.5
 @export var speed_boost_multiplier: float = 1.5
 @export var speed_boost_duration: float = 2.0
 @export var speed_boost_cooldown: float = 10.0
@@ -40,6 +41,8 @@ var _primary_cooldown_left := 0.0
 var _wave_cooldown_left := 0.0
 var _compression_cooldown_left := 0.0
 var _speed_boost_state := SpeedBoostState.READY
+# Ctrl переключает бег/ходьбу; любая атака сбрасывает бег.
+var _is_running := false
 var health: float
 var _invulnerability_left := 0.0
 var _is_dead := false
@@ -69,6 +72,8 @@ func _process(delta: float) -> void:
 	_wave_cooldown_left = maxf(_wave_cooldown_left - delta, 0.0)
 	_compression_cooldown_left = maxf(_compression_cooldown_left - delta, 0.0)
 
+	if Input.is_action_just_pressed("toggle_run"):
+		_is_running = not _is_running
 	if Input.is_action_pressed("attack_primary"):
 		_try_primary_attack()
 	if Input.is_action_just_pressed("attack_wave"):
@@ -97,11 +102,12 @@ func _physics_process(delta: float) -> void:
 		"move_down"
 	)
 
-	var speed_multiplier := (
-		speed_boost_multiplier
-		if _speed_boost_state == SpeedBoostState.ACTIVE
-		else 1.0
-	)
+	# Ускорение задаёт фиксированную скорость независимо от бега/ходьбы.
+	var speed_multiplier := 1.0
+	if _speed_boost_state == SpeedBoostState.ACTIVE:
+		speed_multiplier = speed_boost_multiplier
+	elif _is_running:
+		speed_multiplier = run_speed_multiplier
 	velocity = direction * base_speed * speed_multiplier
 	move_and_slide()
 	# В полёте игрок проходит над врагами и не получает контактного урона.
@@ -173,6 +179,7 @@ func _try_primary_attack() -> void:
 	if projectile == null:
 		return
 	_primary_cooldown_left = primary_cooldown
+	_is_running = false
 	projectile.call("launch", projectile_spawn.global_position, aim_direction)
 
 
@@ -183,6 +190,7 @@ func _try_wave_attack() -> void:
 	if wave == null:
 		return
 	_wave_cooldown_left = wave_cooldown
+	_is_running = false
 	var wave_origin := global_position + aim_direction * wave_spawn_distance
 	wave.call("launch", wave_origin, aim_direction)
 
@@ -206,6 +214,7 @@ func _try_compression() -> void:
 	if compression == null:
 		return
 	_compression_cooldown_left = compression_cooldown
+	_is_running = false
 	compression.call("start_compression", target, global_position)
 
 
