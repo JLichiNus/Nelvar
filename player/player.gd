@@ -7,6 +7,12 @@ signal died
 enum SpeedBoostState { READY, ACTIVE, COOLDOWN }
 
 const DEAD_COLOR := Color(0.45, 0.47, 0.5, 1.0)
+# Анимация атаки с большим приоритетом не прерывается меньшей.
+const ATTACK_PRIORITY := {
+	&"attack_primary": 1,
+	&"attack_wave": 2,
+	&"attack_compression": 3,
+}
 
 @export_category("Movement")
 @export var base_speed: float = 300.0
@@ -28,6 +34,9 @@ const DEAD_COLOR := Color(0.45, 0.47, 0.5, 1.0)
 @export var wave_spawn_distance: float = 53.0
 @export var compression_max_range: float = 650.0
 @export var compression_target_radius: float = 140.0
+# Сколько персонаж ещё смотрит на курсор после атаки — без этого при зажатой
+# ЛКМ спиной вперёд он дёргался бы между выстрелами.
+@export var attack_facing_hold: float = 0.25
 
 @export_category("Health")
 @export var max_health: float = 100.0
@@ -47,18 +56,28 @@ var health: float
 var _invulnerability_left := 0.0
 var _is_dead := false
 var _flight_tween: Tween
+# Масштаб спрайта при взгляде вправо; взгляд влево — отрицательный scale.x.
+var _body_scale := Vector2.ONE
+var _facing_left := false
+# Текущая анимация атаки корпуса; пусто — корпус повторяет локомоцию ног.
+var _attack_animation := &""
+var _attack_facing_left := 0.0
 
 @onready var aim_pivot: Node2D = $AimPivot
 @onready var projectile_spawn: Marker2D = $AimPivot/ProjectileSpawn
 @onready var boost_duration_timer: Timer = $BoostDuration
 @onready var boost_cooldown_timer: Timer = $BoostCooldown
-@onready var body_visual: Polygon2D = $Body
+@onready var body_visual: Node2D = $Body
+@onready var legs_sprite: AnimatedSprite2D = $Body/Legs
+@onready var torso_sprite: AnimatedSprite2D = $Body/Torso
 @onready var shadow: Polygon2D = $Shadow
 @onready var hurtbox: Area2D = $Hurtbox
 
 
 func _ready() -> void:
 	health = max_health
+	_body_scale = body_visual.scale.abs()
+	torso_sprite.animation_finished.connect(_on_torso_animation_finished)
 	boost_duration_timer.timeout.connect(_on_boost_duration_timeout)
 	boost_cooldown_timer.timeout.connect(_on_boost_cooldown_timeout)
 
@@ -94,6 +113,7 @@ func _physics_process(delta: float) -> void:
 	if _is_dead:
 		return
 	_invulnerability_left = maxf(_invulnerability_left - delta, 0.0)
+	_attack_facing_left = maxf(_attack_facing_left - delta, 0.0)
 
 	var direction := Input.get_vector(
 		"move_left",
@@ -110,9 +130,69 @@ func _physics_process(delta: float) -> void:
 		speed_multiplier = run_speed_multiplier
 	velocity = direction * base_speed * speed_multiplier
 	move_and_slide()
+	_update_animation(direction)
 	# В полёте игрок проходит над врагами и не получает контактного урона.
 	if not is_airborne():
 		_check_enemy_contact()
+
+
+# Спрайт из двух слоёв: ноги всегда играют локомоцию, корпус — локомоцию
+# синхронно с ногами или анимацию атаки поверх неё.
+# Во время атаки персонаж смотрит на курсор, иначе — по ходу движения
+# (а без горизонтального движения — тоже на курсор).
+func _update_animation(direction: Vector2) -> void:
+	var facing_aim := _attack_animation != &"" or _attack_facing_left > 0.0
+	var facing_x := aim_direction.x if facing_aim else direction.x
+	if absf(facing_x) < 0.01:
+		facing_x = aim_direction.x
+	if absf(facing_x) >= 0.01:
+		_facing_left = facing_x < 0.0
+	body_visual.scale = Vector2(
+		-_body_scale.x if _facing_left else _body_scale.x,
+		_body_scale.y
+	)
+
+	var locomotion := &"idle"
+	if is_airborne():
+		locomotion = &"fly"
+	elif direction != Vector2.ZERO:
+		locomotion = &"run" if _is_running else &"walk"
+	# Идя спиной вперёд (атака против хода), ноги шагают назад.
+	var walking_backwards := (
+		(locomotion == &"walk" or locomotion == &"run")
+		and absf(direction.x) >= 0.01
+		and (direction.x < 0.0) != _facing_left
+	)
+	legs_sprite.speed_scale = -1.0 if walking_backwards else 1.0
+	if legs_sprite.animation != locomotion:
+		legs_sprite.play(locomotion)
+
+	if _attack_animation != &"":
+		return
+	if torso_sprite.animation != locomotion:
+		torso_sprite.play(locomotion)
+	torso_sprite.speed_scale = legs_sprite.speed_scale
+	torso_sprite.set_frame_and_progress(
+		legs_sprite.frame,
+		legs_sprite.frame_progress
+	)
+
+
+func _play_attack_animation(animation_name: StringName) -> void:
+	_attack_facing_left = attack_facing_hold
+	if _attack_animation != &"" \
+			and ATTACK_PRIORITY[_attack_animation] > ATTACK_PRIORITY[animation_name]:
+		return
+	_attack_animation = animation_name
+	torso_sprite.speed_scale = 1.0
+	torso_sprite.play(animation_name)
+	# play() не перезапускает ту же анимацию, если она ещё не доиграла.
+	torso_sprite.set_frame_and_progress(0, 0.0)
+
+
+func _on_torso_animation_finished() -> void:
+	if torso_sprite.animation == _attack_animation:
+		_attack_animation = &""
 
 
 func is_airborne() -> bool:
@@ -154,8 +234,12 @@ func _die() -> void:
 	_is_dead = true
 	_invulnerability_left = 0.0
 	velocity = Vector2.ZERO
-	body_visual.modulate.a = 1.0
-	body_visual.color = DEAD_COLOR
+	body_visual.modulate = DEAD_COLOR
+	_attack_animation = &""
+	for sprite: AnimatedSprite2D in [legs_sprite, torso_sprite]:
+		sprite.speed_scale = 1.0
+		sprite.play(&"idle")
+		sprite.stop()
 	if _flight_tween != null:
 		_flight_tween.kill()
 	body_visual.position = Vector2.ZERO
@@ -180,6 +264,7 @@ func _try_primary_attack() -> void:
 		return
 	_primary_cooldown_left = primary_cooldown
 	_is_running = false
+	_play_attack_animation(&"attack_primary")
 	projectile.call("launch", projectile_spawn.global_position, aim_direction)
 
 
@@ -191,6 +276,7 @@ func _try_wave_attack() -> void:
 		return
 	_wave_cooldown_left = wave_cooldown
 	_is_running = false
+	_play_attack_animation(&"attack_wave")
 	var wave_origin := global_position + aim_direction * wave_spawn_distance
 	wave.call("launch", wave_origin, aim_direction)
 
@@ -215,6 +301,7 @@ func _try_compression() -> void:
 		return
 	_compression_cooldown_left = compression_cooldown
 	_is_running = false
+	_play_attack_animation(&"attack_compression")
 	compression.call("start_compression", target, global_position)
 
 

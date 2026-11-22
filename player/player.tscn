@@ -1,9 +1,11 @@
-[gd_scene load_steps=7 format=3 uid="uid://dcaj77phiguvn"]
+[gd_scene load_steps=9 format=3 uid="uid://dcaj77phiguvn"]
 
 [ext_resource type="Script" uid="uid://4psdfeenr6lm" path="res://player/player.gd" id="1_oul6g"]
 [ext_resource type="PackedScene" path="res://attacks/wind_projectile/wind_projectile.tscn" id="2_projectile"]
 [ext_resource type="PackedScene" path="res://attacks/wind_wave/wind_wave.tscn" id="3_wave"]
 [ext_resource type="PackedScene" path="res://attacks/wind_compression/wind_compression.tscn" id="4_compression"]
+[ext_resource type="SpriteFrames" path="res://player/sprites/player_legs_frames.tres" id="5_legs"]
+[ext_resource type="SpriteFrames" path="res://player/sprites/player_torso_frames.tres" id="6_torso"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_player"]
 size = Vector2(36, 36)
@@ -25,18 +27,26 @@ position = Vector2(0, 16)
 color = Color(0, 0, 0, 0.35)
 polygon = PackedVector2Array(18, 0, 16.63, 2.68, 12.73, 4.95, 6.89, 6.47, 0, 7, -6.89, 6.47, -12.73, 4.95, -16.63, 2.68, -18, 0, -16.63, -2.68, -12.73, -4.95, -6.89, -6.47, -0, -7, 6.89, -6.47, 12.73, -4.95, 16.63, -2.68)
 
-[node name="Body" type="Polygon2D" parent="."]
-polygon = PackedVector2Array(-18, -18, 18, -18, 18, 18, -18, 18)
-color = Color(0.188235, 0.784314, 0.639216, 1)
+[node name="Body" type="Node2D" parent="."]
+texture_filter = 1
+scale = Vector2(1.5, 1.5)
+
+[node name="Legs" type="AnimatedSprite2D" parent="Body"]
+sprite_frames = ExtResource("5_legs")
+animation = &"idle"
+autoplay = "idle"
+offset = Vector2(-2, -4)
+
+[node name="Torso" type="AnimatedSprite2D" parent="Body"]
+sprite_frames = ExtResource("6_torso")
+animation = &"idle"
+autoplay = "idle"
+offset = Vector2(-2, -4)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=1764298744]
 shape = SubResource("RectangleShape2D_player")
 
 [node name="AimPivot" type="Node2D" parent="."]
-
-[node name="DirectionIndicator" type="Polygon2D" parent="AimPivot"]
-polygon = PackedVector2Array(5, -7, 25, 0, 5, 7)
-color = Color(1, 0.862745, 0.313726, 1)
 
 [node name="ProjectileSpawn" type="Marker2D" parent="AimPivot"]
 position = Vector2(30, 0)
