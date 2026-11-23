@@ -29,7 +29,7 @@ var _monolith_polygon: PackedVector2Array
 
 func generate(world_seed: int) -> NelvarVoidData:
 	_monolith_polygon = PackedVector2Array()
-	for point in NelvarVoidData.MONOLITH_OUTLINE:
+	for point in NelvarVoidData.monolith_polygon():
 		_monolith_polygon.append(point + NelvarVoidData.MONOLITH_CENTER)
 	for attempt in LAYOUT_ATTEMPTS:
 		_rng = RandomNumberGenerator.new()
@@ -75,7 +75,8 @@ func _build_route() -> bool:
 		var anchor := current.position + current.travel
 		var to_goal := NelvarVoidData.MONOLITH_CENTER - anchor
 		var index := _data.route.size()
-		var distance := _distance_to_monolith(current, current.travel)
+		var distance := NelvarVoidData.crossing_gap(anchor, current.world_polygon(_far_time(current)),
+			NelvarVoidData.MONOLITH_CENTER, _monolith_polygon)
 		if distance <= FINISH_DISTANCE:
 			return _finish_route(current)
 		# Choose what the next crossing takes and how the next piece behaves.
@@ -103,7 +104,7 @@ func _build_route() -> bool:
 			var piece := _new_piece(kind, direction.angle())
 			piece.motion = motion
 			piece.on_route = true
-			if not _place_at_gap(piece, current, current.travel, direction, _gap_width(gap)):
+			if not _place_at_gap(piece, current, current.travel, direction, _gap_width(gap), gap):
 				continue
 			if motion == NelvarVoidData.Motion.FERRY:
 				var drift := to_goal.normalized().rotated(_rng.randf_range(-0.5, 0.5))
@@ -133,17 +134,17 @@ func _build_route() -> bool:
 	return false
 
 
-## A broken causeway from the last piece to the monolith, a step from each end.
+## A broken causeway from the last piece straight towards the monolith's centre,
+## a step from each end along that line.
 func _finish_route(current: NelvarVoidData.Debris) -> bool:
 	var polygon := current.world_polygon(_far_time(current))
-	var closest := _closest_points(polygon, _monolith_polygon)
-	var from: Vector2 = closest[0]
-	var to: Vector2 = closest[1]
-	# Aim at the monolith centre a little, so the causeway lands on solid stone.
-	var direction := from.direction_to(to.lerp(NelvarVoidData.MONOLITH_CENTER, 0.08))
-	var near_gap := _rng.randf_range(NelvarVoidData.STEP_GAP.x + 4.0, NelvarVoidData.STEP_GAP.y - 4.0)
-	var far_gap := _rng.randf_range(NelvarVoidData.STEP_GAP.x + 4.0, NelvarVoidData.STEP_GAP.y - 4.0)
-	var length := from.distance_to(to) - near_gap - far_gap
+	var from := current.position + current.travel
+	var points := NelvarVoidData.crossing_points(from, polygon, NelvarVoidData.MONOLITH_CENTER,
+		_monolith_polygon)
+	var direction := from.direction_to(NelvarVoidData.MONOLITH_CENTER)
+	var near_gap := _rng.randf_range(NelvarVoidData.STEP_GAP.x + 4.0, NelvarVoidData.STEP_GAP.y - 6.0)
+	var far_gap := _rng.randf_range(NelvarVoidData.STEP_GAP.x + 4.0, NelvarVoidData.STEP_GAP.y - 6.0)
+	var length := points[0].distance_to(points[1]) - near_gap - far_gap
 	if length < 140.0:
 		return false
 	var piece := NelvarVoidData.Debris.new()
@@ -153,36 +154,28 @@ func _finish_route(current: NelvarVoidData.Debris) -> bool:
 	piece.angle = direction.angle()
 	piece.polygon = _causeway_polygon(length, CAUSEWAY_WIDTH, piece.angle)
 	piece.radius = _radius(piece.polygon)
-	piece.position = from + direction * (near_gap + length * 0.5)
-	# Nudge along the line until both gaps are true steps.
-	for i in 40:
-		var world := piece.world_polygon()
-		var back := NelvarVoidData.polygon_distance(world, polygon)
-		var front := NelvarVoidData.polygon_distance(world, _monolith_polygon)
-		if _is_step(back) and _is_step(front):
-			if not _fits(piece, [current], true):
-				return false
-			current.gap = NelvarVoidData.Gap.STEP
-			_add(piece)
-			piece.gap = NelvarVoidData.Gap.STEP
-			return true
-		var shift := 0.0
-		if back < 0.0 or back < NelvarVoidData.STEP_GAP.x:
-			shift += 4.0
-		elif back > NelvarVoidData.STEP_GAP.y:
-			shift -= 4.0
-		if front < 0.0 or front < NelvarVoidData.STEP_GAP.x:
-			shift -= 4.0
-		elif front > NelvarVoidData.STEP_GAP.y:
-			shift += 4.0
-		if shift == 0.0:
-			# Both ends are off in the same way: change the length instead.
-			var grow := 6.0 if back > NelvarVoidData.STEP_GAP.y else -6.0
-			length += grow
-			piece.polygon = _causeway_polygon(length, CAUSEWAY_WIDTH, direction.angle())
-			piece.radius = _radius(piece.polygon)
-		piece.position += direction * shift
-	return false
+	piece.position = points[0] + direction * (near_gap + length * 0.5)
+	var world := piece.world_polygon()
+	# Its ends are square to the line, so both crossings are exactly the chosen steps;
+	# check anyway, and that no corner grazes either neighbour.
+	if not _is_step(NelvarVoidData.crossing_gap(from, polygon, piece.position, world)) \
+			or not _is_step(NelvarVoidData.crossing_gap(piece.position, world,
+				NelvarVoidData.MONOLITH_CENTER, _monolith_polygon)):
+		return false
+	if NelvarVoidData.polygon_distance(world, polygon) < NelvarVoidData.MIN_EDGE_GAP \
+			or NelvarVoidData.polygon_distance(world, _monolith_polygon) < NelvarVoidData.MIN_EDGE_GAP:
+		return false
+	var step_slack := NelvarVoidData.SLACK_LIMITS[NelvarVoidData.Gap.STEP]
+	if NelvarVoidData.slack_gap(from, polygon, piece.position, world) > step_slack \
+			or NelvarVoidData.slack_gap(piece.position, world, NelvarVoidData.MONOLITH_CENTER,
+				_monolith_polygon) > step_slack:
+		return false
+	if not _fits(piece, [current], true):
+		return false
+	current.gap = NelvarVoidData.Gap.STEP
+	piece.gap = NelvarVoidData.Gap.STEP
+	_add(piece)
+	return true
 
 
 func _is_step(gap: float) -> bool:
@@ -216,9 +209,12 @@ func _gap_width(gap: NelvarVoidData.Gap) -> float:
 
 
 ## Moves `piece` along `direction` from `previous` (shifted by `previous_offset`)
-## until the edge-to-edge gap equals `gap`.
+## until the crossing between their middles is exactly `gap` wide (that is the way
+## a player goes). Lines a little to the side must stay within reach of `kind` of
+## crossing too, and no other part of the two may come closer than MIN_EDGE_GAP.
 func _place_at_gap(piece: NelvarVoidData.Debris, previous: NelvarVoidData.Debris,
-		previous_offset: Vector2, direction: Vector2, gap: float) -> bool:
+		previous_offset: Vector2, direction: Vector2, gap: float,
+		kind: NelvarVoidData.Gap = NelvarVoidData.Gap.STEP) -> bool:
 	var other := PackedVector2Array()
 	for point in previous.polygon:
 		other.append(point + previous.position + previous_offset)
@@ -226,12 +222,12 @@ func _place_at_gap(piece: NelvarVoidData.Debris, previous: NelvarVoidData.Debris
 	var distance := previous.radius + piece.radius + gap
 	for i in 24:
 		piece.position = origin + direction * distance
-		var actual := NelvarVoidData.polygon_distance(piece.world_polygon(), other)
-		if actual < 0.0:
-			distance += maxf(gap, 24.0)
-			continue
-		if absf(actual - gap) < 0.75:
-			return true
+		var world := piece.world_polygon()
+		var actual := NelvarVoidData.crossing_gap(origin, other, piece.position, world)
+		if absf(actual - gap) < 0.5:
+			return NelvarVoidData.polygon_distance(world, other) >= NelvarVoidData.MIN_EDGE_GAP \
+				and NelvarVoidData.slack_gap(origin, other, piece.position, world) \
+					<= NelvarVoidData.SLACK_LIMITS[kind]
 		distance += gap - actual
 	return false
 
@@ -253,7 +249,7 @@ func _fits(piece: NelvarVoidData.Debris, neighbours: Array, near_monolith := fal
 				== NelvarVoidData.Motion.FERRY and time > 0.0 else 0.0)
 			var gap := NelvarVoidData.polygon_distance(polygon, other_polygon)
 			if neighbours.has(other):
-				if gap < NelvarVoidData.STEP_GAP.x - 0.5:
+				if gap < NelvarVoidData.MIN_EDGE_GAP - 0.5:
 					return false
 				continue
 			if gap < MIN_SEPARATION:
@@ -285,7 +281,7 @@ func _build_branches() -> void:
 				var direction := heading.rotated(_rng.randf_range(-0.6, 0.6))
 				var piece := _new_piece(_route_kind(NelvarVoidData.Motion.STILL), direction.angle())
 				var gap := NelvarVoidData.Gap.LEAP if _rng.randf() < 0.35 else NelvarVoidData.Gap.STEP
-				if not _place_at_gap(piece, current, Vector2.ZERO, direction, _gap_width(gap)):
+				if not _place_at_gap(piece, current, Vector2.ZERO, direction, _gap_width(gap), gap):
 					continue
 				if _fits(piece, [current]):
 					placed = piece
@@ -444,29 +440,3 @@ func _radius(polygon: PackedVector2Array) -> float:
 	for point in polygon:
 		radius = maxf(radius, point.length())
 	return radius
-
-
-func _distance_to_monolith(piece: NelvarVoidData.Debris, offset: Vector2) -> float:
-	var polygon := PackedVector2Array()
-	for point in piece.polygon:
-		polygon.append(point + piece.position + offset)
-	return maxf(0.0, NelvarVoidData.polygon_distance(polygon, _monolith_polygon))
-
-
-## Closest pair of points between two separate outlines: [on a, on b].
-func _closest_points(a: PackedVector2Array, b: PackedVector2Array) -> Array[Vector2]:
-	var best := INF
-	var result: Array[Vector2] = [a[0], b[0]]
-	for pass_index in 2:
-		var from := a if pass_index == 0 else b
-		var onto := b if pass_index == 0 else a
-		for point in from:
-			for i in onto.size():
-				var closest := Geometry2D.get_closest_point_to_segment(point, onto[i],
-					onto[(i + 1) % onto.size()])
-				var distance := point.distance_to(closest)
-				if distance < best:
-					best = distance
-					result[0] = point if pass_index == 0 else closest
-					result[1] = closest if pass_index == 0 else point
-	return result

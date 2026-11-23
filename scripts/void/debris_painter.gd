@@ -73,6 +73,18 @@ class Art:
 	var underside: ImageTexture
 	## Additive light; null when the piece has none.
 	var glow: ImageTexture
+	## Painted pixels; turned into the textures above by bake().
+	var surface_image: Image
+	var underside_image: Image
+	var glow_image: Image
+
+	## Makes the textures (on the main thread: painting may run on a worker).
+	func bake() -> Art:
+		surface = ImageTexture.create_from_image(surface_image)
+		underside = ImageTexture.create_from_image(underside_image)
+		if glow_image != null:
+			glow = ImageTexture.create_from_image(glow_image)
+		return self
 
 
 class Raster:
@@ -89,9 +101,27 @@ static func clear_cache() -> void:
 	_monolith_art = null
 
 
+## The baked monolith if it has been painted this run, else null.
+static func cached_monolith() -> Art:
+	return _monolith_art
+
+
+## Keeps a monolith painted elsewhere (e.g. on a worker thread) for later Voids.
+static func remember_monolith(art: Art) -> void:
+	_monolith_art = art
+
+
 func paint(piece: NelvarVoidData.Debris) -> Art:
 	if piece.kind == NelvarVoidData.Kind.MONOLITH and _monolith_art != null:
 		return _monolith_art
+	var art := paint_images(piece).bake()
+	if piece.kind == NelvarVoidData.Kind.MONOLITH:
+		_monolith_art = art
+	return art
+
+
+## Paints without touching the renderer, so it is safe on a worker thread.
+func paint_images(piece: NelvarVoidData.Debris) -> Art:
 	var room := MONOLITH_UNDERSIDE_ROOM if piece.kind == NelvarVoidData.Kind.MONOLITH else UNDERSIDE_ROOM
 	var raster := _rasterize(piece.polygon, room)
 	var surface := Image.create(raster.width, raster.height, false, Image.FORMAT_RGBA8)
@@ -110,12 +140,10 @@ func paint(piece: NelvarVoidData.Debris) -> Art:
 		glowing = true
 	var art := Art.new()
 	art.rect = Rect2(raster.origin, Vector2(raster.width, raster.height) * PIXEL)
-	art.surface = ImageTexture.create_from_image(surface)
-	art.underside = ImageTexture.create_from_image(underside)
+	art.surface_image = surface
+	art.underside_image = underside
 	if glowing:
-		art.glow = ImageTexture.create_from_image(glow)
-	if piece.kind == NelvarVoidData.Kind.MONOLITH:
-		_monolith_art = art
+		art.glow_image = glow
 	return art
 
 
@@ -372,8 +400,8 @@ func _monolith(local: Vector2, t: Vector2, cell: Vector2i, glow: Image, x: int, 
 	var r := local.length() / PIXEL
 	var angle := local.angle()
 	# Sigil: two rings, ticks between them, three spokes and an empty centre.
-	var ring_outer := 44.0
-	var ring_inner := 31.0
+	var ring_outer := 44.0 * NelvarVoidData.MONOLITH_SCALE
+	var ring_inner := 31.0 * NelvarVoidData.MONOLITH_SCALE
 	var engraved := false
 	var light := 0.0
 	if absf(r - ring_outer) < 0.6 or absf(r - ring_inner) < 0.6:
@@ -389,7 +417,7 @@ func _monolith(local: Vector2, t: Vector2, cell: Vector2i, glow: Image, x: int, 
 		if absf(spoke - 0.5) * r * TAU / 3.0 < 0.55:
 			engraved = true
 			light = 0.3
-	elif r < 4.5 and r > 3.4:
+	elif r < 6.5 and r > 5.4:
 		engraved = true
 		light = 0.8
 	if engraved:
@@ -405,7 +433,7 @@ func _monolith(local: Vector2, t: Vector2, cell: Vector2i, glow: Image, x: int, 
 	var plate := NelvarPixelArt.hash01(int(v.z), 1, salt)
 	# The arena floor is polished smoother and darker.
 	var level := 0.18 + plate * 0.45
-	if r < 75.0:
+	if r < 75.0 * NelvarVoidData.MONOLITH_SCALE:
 		level = 0.12 + plate * 0.2
 	level += (_noise(t, 2.5, salt + 4) - 0.5) * 0.12
 	return NelvarPixelArt.ramp(MONOLITH, level, cell)

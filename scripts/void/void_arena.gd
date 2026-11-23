@@ -1,11 +1,12 @@
 class_name NelvarVoidArena
 extends Node2D
 ## The arena on the monolith: broken obelisks ring the sigil, and stepping inside
-## starts the fight. There is no boss yet: the fight seals the monolith's edge so
-## there is no way back, the sigil and the sky wake up, and everything waits.
-## A boss hooks in through `fight_started` and `boss_spawn_position()`.
+## starts the fight with the Only One (NelvarTheOne). The monolith's edge is sealed
+## so there is no way back, the sigil and the sky wake up, and the boss forms out
+## of the sigil. Defeating it lifts the seal.
 
 signal fight_started
+signal fight_won
 
 const SEAL_TIME := 1.4
 const OBELISK_WIDTH := 14
@@ -19,6 +20,10 @@ var data: NelvarVoidData
 var player: NelvarPlayer
 var monolith_node: NelvarVoidDebris
 var started := false
+var boss: NelvarTheOne
+var boss_defeated := false
+var _world_layer: Node2D
+var _barrier_tween: Tween
 
 var _seal: StaticBody2D
 var _barrier: Line2D
@@ -30,6 +35,7 @@ func setup(void_data: NelvarVoidData, player_node: NelvarPlayer, monolith: Nelva
 	data = void_data
 	player = player_node
 	monolith_node = monolith
+	_world_layer = world_layer
 	y_sort_enabled = true
 	var obelisks := NelvarVoidData.obelisk_positions()
 	for i in obelisks.size():
@@ -89,13 +95,34 @@ func start_fight() -> void:
 	create_tween().tween_property(monolith_node, "glow_boost", 0.45, SEAL_TIME * 2.0)
 	for glow in _rune_glows:
 		create_tween().tween_property(glow, "modulate:a", 1.0, SEAL_TIME)
+	boss = NelvarTheOne.new()
+	boss.position = data.arena_center
+	add_child(boss)
+	boss.defeated.connect(_on_boss_defeated)
 	fight_started.emit()
+	boss.begin(player, data.arena_center, _world_layer)
 
 
 func _pulse_barrier() -> void:
-	var tween := create_tween().set_loops()
-	tween.tween_property(_barrier, "modulate:a", 0.45, 1.6).set_trans(Tween.TRANS_SINE)
-	tween.tween_property(_barrier, "modulate:a", 1.0, 1.6).set_trans(Tween.TRANS_SINE)
+	if boss_defeated:
+		return
+	_barrier_tween = create_tween().set_loops()
+	_barrier_tween.tween_property(_barrier, "modulate:a", 0.45, 1.6).set_trans(Tween.TRANS_SINE)
+	_barrier_tween.tween_property(_barrier, "modulate:a", 1.0, 1.6).set_trans(Tween.TRANS_SINE)
+
+
+## The seal lifts and the sigil quiets down.
+func _on_boss_defeated() -> void:
+	boss_defeated = true
+	boss = null
+	_seal.collision_layer = 0
+	if _barrier_tween != null:
+		_barrier_tween.kill()
+	create_tween().tween_property(_barrier, "modulate:a", 0.0, SEAL_TIME * 2.0)
+	create_tween().tween_property(monolith_node, "glow_boost", 0.0, SEAL_TIME * 3.0)
+	for glow in _rune_glows:
+		create_tween().tween_property(glow, "modulate:a", 0.35, SEAL_TIME * 3.0)
+	fight_won.emit()
 
 
 # --- Obelisks ----------------------------------------------------------------

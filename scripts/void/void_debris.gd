@@ -20,9 +20,18 @@ var _glow_phase := 0.0
 
 func setup(data: NelvarVoidData.Debris, artwork: NelvarDebrisPainter.Art) -> void:
 	piece = data
-	art = artwork
 	name = "Debris_%d" % data.id if data.id >= 0 else "Monolith"
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_glow_phase = float(data.appearance_seed % 1000) / 1000.0 * TAU
+	if artwork != null:
+		set_art(artwork)
+	sync(0.0)
+
+
+## The artwork may arrive later (the monolith is painted on a worker thread); the
+## piece already stands and can be walked on meanwhile.
+func set_art(artwork: NelvarDebrisPainter.Art) -> void:
+	art = artwork
 	_underside = _sprite(art.underside, -1)
 	_surface = _sprite(art.surface, 0)
 	if art.glow != null:
@@ -30,8 +39,6 @@ func setup(data: NelvarVoidData.Debris, artwork: NelvarDebrisPainter.Art) -> voi
 		var material := CanvasItemMaterial.new()
 		material.blend_mode = GLOW_MATERIAL_BLEND
 		_glow.material = material
-	_glow_phase = float(data.appearance_seed % 1000) / 1000.0 * TAU
-	sync(0.0)
 
 
 func _sprite(texture: Texture2D, z: int) -> Sprite2D:

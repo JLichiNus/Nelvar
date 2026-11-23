@@ -6,12 +6,15 @@ extends Node2D
 ## There are no walls here. Ground is wherever debris is (NelvarVoidData.support_at);
 ## off the ground the player keeps going for a moment (NelvarVoidData.COYOTE_TIME),
 ## longer is a fall: they sink into the Void and come back where they last stood
-## firmly, a little worse for it. Flight carries them over anything.
+## firmly, a little worse for it. Flight carries them over anything. Threads of
+## light (NelvarVoidThreads) mark the route, and a fall at a crossing that needs
+## more than a step says what it takes.
 
 const FALL_TIME := 0.75
-const FALL_DAMAGE := 12.0
-## A spot counts as firm footing this far from the edge of a still piece.
-const SAFE_CLEARANCE := 26.0
+const FALL_DAMAGE := 10.0
+## A spot counts as firm footing this far from the edge of a still piece (the
+## body radius plus a little: narrow logs count too).
+const SAFE_CLEARANCE := 16.0
 const MESSAGE_FADE := 1.6
 const MESSAGE_HOLD := 3.6
 const OPENING_LINES: Array[String] = [
@@ -19,9 +22,22 @@ const OPENING_LINES: Array[String] = [
 	"Только то, что от них осталось.",
 ]
 const ARENA_LINES: Array[String] = [
-	"Здесь кто-то должен был ждать.",
+	"Здесь тебя ждали.",
+]
+const RETRY_LINES: Array[String] = [
+	"Пустота помнит тебя.",
+]
+const VICTORY_LINES: Array[String] = [
+	"Единственный распался.",
+	"Пустота снова молчит.",
 ]
 const DISTANT_DEBRIS := 46
+## Said after a fall at a crossing that needs more than a step.
+const HINT_LEAP := "Слишком далеко для шага. Разбегись: Ctrl на ходу."
+const HINT_FLIGHT := "Шагом здесь не пройти. Взлети: Shift."
+const HINT_FERRY := "Обломок плывёт. Дождись, пока он подойдёт."
+const HINT_RIDE := "Дождись, пока обломок доплывёт до следующего."
+const HINT_FLICKER := "Осколок то есть, то нет. Ступай, пока он виден."
 
 var data: NelvarVoidData
 var debris_nodes: Array[NelvarVoidDebris] = []
@@ -31,8 +47,18 @@ var _time := 0.0
 var _air_time := 0.0
 var _safe_position := Vector2.ZERO
 var _falls := 0
+## The route piece the player last stood on; a fall is explained by its crossing.
+var _last_route_index := 0
 var _message_tween: Tween
 var _sky_material: ShaderMaterial
+## Worker painting the monolith (it is big; the player is far from it at first);
+## its result is picked up in _process once the task is done.
+var _monolith_task := -1
+var _monolith_result: NelvarDebrisPainter.Art
+## A Void whose boss fight was lost comes back with the same seed, the player at
+## the arena's door: the climb is not repeated. -1 = no checkpoint.
+static var _checkpoint_seed := -1
+var _from_checkpoint := false
 
 @onready var sky: NelvarCloudSea = $Sky
 @onready var distant: Parallax2D = $Distant
@@ -47,6 +73,8 @@ var _sky_material: ShaderMaterial
 @onready var status_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Status
 @onready var message: Label = $HUD/Message
 @onready var boss_bar: Control = $HUD/BossBar
+@onready var boss_fill: ColorRect = $HUD/BossBar/Bar/Fill
+@onready var boss_phase: Label = $HUD/BossBar/Hint
 
 
 func _ready() -> void:
@@ -63,6 +91,10 @@ func _ready() -> void:
 	# Tests pick a seed with the crossings they need.
 	if has_meta("seed_override"):
 		world_seed = get_meta("seed_override")
+	elif _checkpoint_seed >= 0:
+		world_seed = _checkpoint_seed
+		_from_checkpoint = true
+	_checkpoint_seed = -1
 	data = NelvarVoidGenerator.new().generate(world_seed)
 	if data == null:
 		seed_label.text = "Пустота не сложилась · сид %d" % world_seed
@@ -72,14 +104,24 @@ func _ready() -> void:
 		player.set_process(false)
 		return
 	_build_world()
+	var threads := NelvarVoidThreads.new()
+	threads.name = "Threads"
+	threads.setup(data)
+	world_layer.add_child(threads)
 	_build_distant(world_seed)
 	_sky_material = sky.backdrop_material()
 	sky.set_world_seed(world_seed)
 	motes.color = Color(0.66, 0.52, 1.0, 0.5)
 	arena.setup(data, player, monolith_node, world_layer)
 	arena.fight_started.connect(_on_fight_started)
+	arena.fight_won.connect(_on_fight_won)
 	player.position = data.spawn_position
-	_safe_position = data.spawn_position
+	if _from_checkpoint:
+		# The causeway in front of the monolith.
+		player.position = data.debris[data.route[data.route.size() - 1]].position
+	_safe_position = player.position
+	_last_route_index = data.route.find(data.support_at(player.position, 0.0).id) \
+		if data.support_at(player.position, 0.0) != null else 0
 	player.camera.reset_smoothing()
 	message.modulate.a = 0.0
 	boss_bar.hide()
@@ -91,19 +133,47 @@ func _ready() -> void:
 		data.world_seed, data.route.size(), data.debris.size(), data.count_gaps(NelvarVoidData.Gap.LEAP),
 		data.count_gaps(NelvarVoidData.Gap.FLIGHT), data.count_motion(NelvarVoidData.Motion.FERRY),
 		data.count_motion(NelvarVoidData.Motion.FLICKER)])
-	_say(OPENING_LINES, 1.2)
+	if _from_checkpoint:
+		_say(RETRY_LINES, 0.6)
+	else:
+		_say(OPENING_LINES, 1.2)
 
 
 func _build_world() -> void:
 	var painter := NelvarDebrisPainter.new()
 	monolith_node = NelvarVoidDebris.new()
-	monolith_node.setup(data.monolith, painter.paint(data.monolith))
+	monolith_node.setup(data.monolith, NelvarDebrisPainter.cached_monolith())
 	world_layer.add_child(monolith_node)
+	if monolith_node.art == null:
+		_monolith_task = WorkerThreadPool.add_task(_paint_monolith, false, "Void monolith")
 	for piece in data.debris:
 		var node := NelvarVoidDebris.new()
 		node.setup(piece, painter.paint(piece))
 		world_layer.add_child(node)
 		debris_nodes.append(node)
+
+
+## Runs on a worker thread: pixels only, textures are made on the main thread.
+func _paint_monolith() -> void:
+	_monolith_result = NelvarDebrisPainter.new().paint_images(data.monolith)
+
+
+func _process(_delta: float) -> void:
+	if _monolith_task >= 0 and WorkerThreadPool.is_task_completed(_monolith_task):
+		WorkerThreadPool.wait_for_task_completion(_monolith_task)
+		_monolith_task = -1
+		var art := _monolith_result.bake()
+		NelvarDebrisPainter.remember_monolith(art)
+		monolith_node.set_art(art)
+
+
+func _exit_tree() -> void:
+	if _monolith_task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_monolith_task)
+		_monolith_task = -1
+	# Lost the fight: the next Void (the scene reloads) starts at the arena.
+	if arena != null and arena.started and not arena.boss_defeated and player.health <= 0.0:
+		_checkpoint_seed = data.world_seed
 
 
 ## Far-off debris drifting deep in the Void: dim silhouettes on a slow parallax layer.
@@ -166,6 +236,8 @@ func _physics_process(delta: float) -> void:
 			_fall()
 		return
 	_air_time = 0.0
+	if support != null and support.on_route:
+		_last_route_index = data.route.find(support.id)
 	if support != null and support.motion == NelvarVoidData.Motion.STILL:
 		var local := player.global_position - support.position
 		if Geometry2D.is_point_in_polygon(local, support.polygon) \
@@ -182,10 +254,37 @@ func _fall() -> void:
 		return
 	player.recover_at(_safe_position)
 	player.take_damage(FALL_DAMAGE)
+	var hint := _fall_hint()
+	if not hint.is_empty():
+		_say([hint], 0.2, 2.6)
+
+
+## What the crossing the player fell at takes, if more than a step.
+func _fall_hint() -> String:
+	if _last_route_index < 0 or _last_route_index >= data.route.size():
+		return ""
+	var here := data.debris[data.route[_last_route_index]]
+	if here.motion == NelvarVoidData.Motion.FERRY:
+		return HINT_RIDE
+	if _last_route_index + 1 < data.route.size():
+		var there := data.debris[data.route[_last_route_index + 1]]
+		if there.motion == NelvarVoidData.Motion.FERRY:
+			return HINT_FERRY
+		if there.motion == NelvarVoidData.Motion.FLICKER:
+			return HINT_FLICKER
+	if here.gap == NelvarVoidData.Gap.LEAP:
+		return HINT_LEAP
+	if here.gap == NelvarVoidData.Gap.FLIGHT:
+		return HINT_FLIGHT
+	return ""
 
 
 func _on_fight_started() -> void:
 	_say(ARENA_LINES, 0.6)
+	var boss := arena.boss
+	boss.health_changed.connect(_on_boss_health)
+	boss.phase_changed.connect(_on_boss_phase)
+	boss_phase.text = boss.phase_title()
 	boss_bar.modulate.a = 0.0
 	boss_bar.show()
 	var tween := create_tween().set_parallel()
@@ -193,6 +292,31 @@ func _on_fight_started() -> void:
 	tween.tween_method(_set_dread, 0.0, 1.0, 6.0).set_trans(Tween.TRANS_SINE)
 	tween.tween_property(shade, "modulate:a", 1.0, 3.0)
 	_shake(0.7, 6.0)
+
+
+func _on_boss_health(current: float, maximum: float) -> void:
+	# Whole pixels of the bar, not a smooth slide.
+	var share := current / maxf(maximum, 1.0)
+	var width := boss_fill.get_parent_control().size.x - 6.0
+	boss_fill.offset_right = -3.0 - roundf(width * (1.0 - share) / 3.0) * 3.0
+
+
+func _on_boss_phase(_phase: int) -> void:
+	boss_phase.text = arena.boss.phase_title()
+	_shake(0.9, 9.0)
+	# The Void flinches with it.
+	var tween := create_tween()
+	tween.tween_method(_set_dread, 1.0, 1.6, 0.4)
+	tween.tween_method(_set_dread, 1.6, 1.0, 1.2)
+
+
+func _on_fight_won() -> void:
+	_say(VICTORY_LINES, 1.0)
+	var tween := create_tween().set_parallel()
+	tween.tween_property(boss_bar, "modulate:a", 0.0, 2.0)
+	tween.tween_method(_set_dread, 1.0, 0.0, 5.0)
+	tween.tween_property(shade, "modulate:a", 0.75, 4.0)
+	_shake(1.0, 7.0)
 
 
 func _set_dread(value: float) -> void:
@@ -211,7 +335,7 @@ func _shake(duration: float, strength: float) -> void:
 
 
 ## Lines appear one after another at the bottom of the screen and fade away.
-func _say(lines: Array[String], delay: float) -> void:
+func _say(lines: Array[String], delay: float, hold: float = MESSAGE_HOLD) -> void:
 	if _message_tween != null:
 		_message_tween.kill()
 	_message_tween = create_tween()
@@ -219,7 +343,7 @@ func _say(lines: Array[String], delay: float) -> void:
 	for line in lines:
 		_message_tween.tween_callback(message.set_text.bind(line))
 		_message_tween.tween_property(message, "modulate:a", 1.0, MESSAGE_FADE)
-		_message_tween.tween_interval(MESSAGE_HOLD)
+		_message_tween.tween_interval(hold)
 		_message_tween.tween_property(message, "modulate:a", 0.0, MESSAGE_FADE)
 		_message_tween.tween_interval(0.4)
 
