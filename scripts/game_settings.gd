@@ -5,6 +5,7 @@ extends Node
 
 signal info_panel_changed(shown: bool)
 signal start_in_void_changed(enabled: bool)
+signal start_on_earth_changed(enabled: bool)
 
 const PATH := "user://settings.cfg"
 
@@ -12,6 +13,9 @@ const PATH := "user://settings.cfg"
 var show_info_panel := false
 ## Developer menu: "Играть" opens the Void (scenes/void.tscn) instead of the usual world.
 var start_in_void := false
+## Developer menu: "Играть" opens the earth valley (scenes/earth.tscn). Only one of the
+## two start options is on at a time.
+var start_on_earth := false
 
 
 func _ready() -> void:
@@ -20,6 +24,7 @@ func _ready() -> void:
 	if config.load(PATH) == OK:
 		show_info_panel = config.get_value("hud", "show_info_panel", show_info_panel)
 		start_in_void = config.get_value("dev", "start_in_void", start_in_void)
+		start_on_earth = config.get_value("dev", "start_on_earth", start_on_earth) and not start_in_void
 
 
 func _input(event: InputEvent) -> void:
@@ -40,8 +45,22 @@ func set_start_in_void(enabled: bool) -> void:
 	if enabled == start_in_void:
 		return
 	start_in_void = enabled
+	if enabled and start_on_earth:
+		start_on_earth = false
+		start_on_earth_changed.emit(false)
 	_save()
 	start_in_void_changed.emit(enabled)
+
+
+func set_start_on_earth(enabled: bool) -> void:
+	if enabled == start_on_earth:
+		return
+	start_on_earth = enabled
+	if enabled and start_in_void:
+		start_in_void = false
+		start_in_void_changed.emit(false)
+	_save()
+	start_on_earth_changed.emit(enabled)
 
 
 func _save() -> void:
@@ -49,6 +68,7 @@ func _save() -> void:
 	config.load(PATH)  # keep any other sections already saved
 	config.set_value("hud", "show_info_panel", show_info_panel)
 	config.set_value("dev", "start_in_void", start_in_void)
+	config.set_value("dev", "start_on_earth", start_on_earth)
 	var error := config.save(PATH)
 	if error != OK:
 		push_warning("Не удалось сохранить настройки: %s" % error_string(error))

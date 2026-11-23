@@ -94,6 +94,42 @@ phase changes and at its death); a title card announces it and each phase. Losin
 door. Defeating the Only One lifts the seal. The monolith is painted on a worker
 thread, so the Void loads as fast as before.
 
+### The earth valley (developer menu)
+
+Settings → «Меню разработчика» → «Запускать игру на Земле» makes «Играть» open
+`scenes/earth.tscn`: a plain of grass and groves ringed by snowy mountains, in the
+style of the «Земля» menu background. Only one of the two start options is on at a
+time; the hint under them says what «Играть» opens.
+
+`NelvarEarthGenerator` lays the valley out from the seed (parameters in
+`resources/earth_valley_config.tres`): a bent oval about the size of the air map,
+3–5 ponds, clearings joined by trails (a spanning tree plus a few loops, two of
+them running off into the mountains), petrified creatures — the menu's boulder
+with a closed eye, which opens and follows the player while they are near —
+groves of oaks, birches, firs, blossoming cherries, apple trees and a rare golden
+maple, willows over the ponds, stands of firs along the mountain foot, rocks and
+scree, stumps and fallen logs, bushes with berries or blossom, tall grass, ferns,
+flowers, mushrooms, reeds and lilies. Solid things always leave a passage wider
+than the player; trails, clearings and the spawn stay free of them.
+
+The mountain foot stops everyone. Ponds are on physics layer 5 («Water»): they
+stop the player and enemies but not projectiles. Rows of peaks stand round the
+valley and sort with the player like trees (lower on the south side, where they
+stand between the camera and the plain); their feet dissolve into scree and
+snowfields drawn by the floor shader.
+
+Everything in the valley is painted on all cores while the scene loads
+(`NelvarEarthPainter`, `NelvarEarthCanvas`); the peaks (`NelvarMountainPainter`)
+are out of view at first and are painted in the background. The floor is a
+shader (`scripts/earth/earth_ground.gdshader`, run through `NelvarCloudSea` with
+parallax 1) fed by a ground map (`NelvarEarthField`): grass patches, tufts that
+bend as gusts run across the meadow, flowers, trails with pebbles, ponds with a
+shaded north bank and drifting glints, leaf litter under the crowns. Plants lean
+with the same gusts in whole art pixels. Cloud shadows drift over everything
+(`cloud_shadows.gdshader`, multiplied over the world), pollen floats in the air
+and butterflies flutter between flowers and scatter from the player
+(`NelvarButterflies`). F3 shows the colliders, the mountain foot and the shores.
+
 The earth map contains 2–3 large floating islands and 6–7 small ones, connected
 by narrow wooden bridges. Shorelines and bridge sides block movement; falling
 and height differences are not implemented yet.
@@ -166,6 +202,7 @@ godot --headless --path . --script tests/test_terrain.gd
 godot --headless --path . --script tests/test_forest.gd -- --seed=20261120
 godot --headless --path . --script tests/test_props.gd
 godot --headless --path . --script tests/test_void.gd -- --seeds=50 --walks=6
+godot --headless --path . --script tests/test_earth.gd -- --seeds=30
 ```
 
 Here `godot` means the path to your Godot 4.7.2 executable. The checks cover
@@ -178,3 +215,9 @@ Forest checks cover repeatable groves and tree art, trunk spacing, clear bridge
 routes, circular colliders and actual movement into and around a tree.
 Prop checks cover rock and bush placement rules, repeatable prop art, rock
 colliders that stop the player and bushes the player walks through.
+Earth checks cover the valley layout (ponds, dry trails, passages between solid
+things, tree species, a closed ring of peaks), that nearly all open ground is
+reachable from the spawn, repeatable art on the world grid, the ground map, the
+start setting, and in the real scene: the mountain foot and ponds stop the player,
+projectiles fly over water, trunks block and tall grass does not, statues open
+their eye, plants sway, every peak is painted and enemies appear on open ground.

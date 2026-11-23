@@ -1,7 +1,9 @@
 extends Node2D
 ## Без мира враги появляются в spawn_area (тестовая сцена). Со сгенерированным
 ## миром (start(world, forest, props)) — на суше в кольце вокруг игрока,
-## не в небе, не в стволах деревьев и не в камнях.
+## не в небе, не в стволах деревьев и не в камнях. Другие карты (земляная
+## долина) передают start_on(ground): у него есть spawn_position и
+## has_clearance(point, radius).
 
 
 @export var enemy_scene: PackedScene
@@ -28,6 +30,8 @@ var _spawn_time_left := 0.0
 var _world: NelvarWorldData
 var _forest: NelvarForestData
 var _props: NelvarPropData
+## Любая карта со spawn_position и has_clearance(point, radius).
+var _ground: Object
 
 
 func _ready() -> void:
@@ -48,6 +52,11 @@ func start(world: NelvarWorldData = null, forest: NelvarForestData = null,
 		_try_spawn()
 	_spawn_time_left = spawn_interval
 	set_process(true)
+
+
+func start_on(ground: Object) -> void:
+	_ground = ground
+	start()
 
 
 func _process(delta: float) -> void:
@@ -80,7 +89,7 @@ func _alive_count() -> int:
 
 
 func _pick_spawn_point() -> Variant:
-	if _world != null:
+	if _world != null or _ground != null:
 		return _pick_world_spawn_point()
 	for _attempt in maxi(spawn_attempts, 1):
 		var point := Vector2(
@@ -96,14 +105,16 @@ func _pick_spawn_point() -> Variant:
 
 
 func _pick_world_spawn_point() -> Variant:
-	var center := _world.spawn_position
+	var center: Vector2 = _world.spawn_position if _world != null else _ground.get("spawn_position")
 	if is_instance_valid(player):
 		center = player.global_position
 	var max_distance := maxf(max_distance_from_player, min_distance_from_player)
 	for _attempt in maxi(world_spawn_attempts, 1):
 		var point := center + Vector2.from_angle(randf() * TAU) \
 			* randf_range(min_distance_from_player, max_distance)
-		if not _world.has_clearance(point, spawn_clearance):
+		if _world != null and not _world.has_clearance(point, spawn_clearance):
+			continue
+		if _ground != null and not _ground.call("has_clearance", point, spawn_clearance):
 			continue
 		if _forest != null and not _forest.has_clearance(point, spawn_clearance):
 			continue

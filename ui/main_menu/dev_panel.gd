@@ -10,6 +10,8 @@ const GAP := 18.0
 const SCREEN_MARGIN := 12.0
 
 @onready var start_in_void_check: CheckButton = %StartInVoid
+@onready var start_on_earth_check: CheckButton = %StartOnEarth
+@onready var start_hint: Label = %StartHint
 
 
 func _ready() -> void:
@@ -18,6 +20,22 @@ func _ready() -> void:
 	start_in_void_check.set_pressed_no_signal(GameSettings.start_in_void)
 	start_in_void_check.toggled.connect(GameSettings.set_start_in_void)
 	GameSettings.start_in_void_changed.connect(start_in_void_check.set_pressed_no_signal)
+	start_on_earth_check.set_pressed_no_signal(GameSettings.start_on_earth)
+	start_on_earth_check.toggled.connect(GameSettings.set_start_on_earth)
+	GameSettings.start_on_earth_changed.connect(start_on_earth_check.set_pressed_no_signal)
+	# The two start options exclude each other; the hint names what "Играть" opens.
+	GameSettings.start_in_void_changed.connect(_update_hint.unbind(1))
+	GameSettings.start_on_earth_changed.connect(_update_hint.unbind(1))
+	_update_hint()
+
+
+func _update_hint() -> void:
+	if GameSettings.start_in_void:
+		start_hint.text = "«Играть» откроет Пустоту"
+	elif GameSettings.start_on_earth:
+		start_hint.text = "«Играть» откроет земляную долину"
+	else:
+		start_hint.text = "«Играть» откроет небесные острова"
 
 
 ## Puts the panel to the left of `anchor` (a rect in canvas coordinates),

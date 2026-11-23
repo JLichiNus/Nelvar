@@ -6,6 +6,8 @@ extends Control
 const GAME_SCENE := "res://scenes/main.tscn"
 ## Developer setting "Запускать игру в Пустоте" starts here instead.
 const VOID_SCENE := "res://scenes/void.tscn"
+## Developer setting "Запускать игру на Земле": the earth valley.
+const EARTH_SCENE := "res://scenes/earth.tscn"
 const TRANSITION_TIME := 0.8
 ## Speed-up for a wave that is interrupted by another hover.
 const HURRY_SPEED := 2.5
@@ -425,4 +427,9 @@ func _on_dev_panel_toggled(open: bool) -> void:
 func _on_play_pressed() -> void:
 	for button: Button in _button_elements:
 		button.disabled = true
-	get_tree().change_scene_to_file(VOID_SCENE if GameSettings.start_in_void else GAME_SCENE)
+	var scene := GAME_SCENE
+	if GameSettings.start_in_void:
+		scene = VOID_SCENE
+	elif GameSettings.start_on_earth:
+		scene = EARTH_SCENE
+	get_tree().change_scene_to_file(scene)

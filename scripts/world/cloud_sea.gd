@@ -69,6 +69,13 @@ func backdrop_material() -> ShaderMaterial:
 	return _material
 
 
+## Draws over the world instead of behind it (the earth valley's cloud shadows):
+## on canvas layer `on_layer`, blended by `blend` (e.g. a multiply CanvasItemMaterial).
+func use_as_overlay(on_layer: int, blend: Material) -> void:
+	layer = on_layer
+	_sprite.material = blend
+
+
 func _process(delta: float) -> void:
 	_drift += wind * delta
 	_time += delta
