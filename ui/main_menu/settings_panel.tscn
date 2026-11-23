@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://ui/main_menu/settings_panel.gd" id="1"]
+[ext_resource type="PackedScene" path="res://ui/main_menu/dev_panel.tscn" id="2"]
 
 [node name="SettingsPanel" type="PanelContainer" node_paths=PackedStringArray("back_button")]
 visible = false
@@ -54,9 +55,21 @@ theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
 theme_override_font_sizes/font_size = 22
 text = "F12 — показать или скрыть в игре"
 
+[node name="DevMenu" type="Button" parent="Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+toggle_mode = true
+text = "Меню разработчика"
+alignment = 0
+
 [node name="SettingsBack" type="Button" parent="Rows"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 0
 theme_override_font_sizes/font_size = 22
 text = "Назад"
+
+[node name="DevPanel" parent="." instance=ExtResource("2")]
+unique_name_in_owner = true
+layout_mode = 2

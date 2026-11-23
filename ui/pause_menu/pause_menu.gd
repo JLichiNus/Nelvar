@@ -6,6 +6,7 @@ extends CanvasLayer
 @onready var resume_button: Button = %Resume
 @onready var settings_button: Button = %Settings
 @onready var settings_panel: NelvarSettingsPanel = %SettingsPanel
+@onready var center: CenterContainer = $Shade/Center
 
 
 func _ready() -> void:
@@ -15,6 +16,7 @@ func _ready() -> void:
 	%MainMenu.pressed.connect(_return_to_menu)
 	%Quit.pressed.connect(get_tree().quit)
 	settings_panel.back_button.pressed.connect(_close_settings)
+	settings_panel.dev_panel_toggled.connect(_on_dev_panel_toggled)
 
 
 func _input(event: InputEvent) -> void:
@@ -46,6 +48,13 @@ func _close_settings() -> void:
 	settings_panel.close_now()
 	dialog.show()
 	settings_button.grab_focus()
+
+
+## The developer panel opens left of the settings: center the pair, not the
+## settings alone.
+func _on_dev_panel_toggled(open: bool) -> void:
+	var dev := settings_panel.dev_panel
+	center.offset_left = dev.get_combined_minimum_size().x + dev.GAP if open else 0.0
 
 
 func _return_to_menu() -> void:

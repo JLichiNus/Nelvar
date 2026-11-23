@@ -46,6 +46,54 @@ restarts with a new seed.
 
 `test_world.tscn` is a flat arena for tuning combat without the generator (F6).
 
+### The Void (developer menu)
+
+Settings → «Меню разработчика» → «Запускать игру в Пустоте» makes «Играть» open
+`scenes/void.tscn` instead of the earth map. The player wakes on debris of all four
+realities — torn earth, rocks, fallen trunks, ice, cooling basalt, cloud-stone,
+paved ruins and violet shards — hanging over the dark Void, and makes their way to
+the monolith: a black-grey angular island that is the same in every run.
+
+Debris has no walls. Off its edge the player keeps going for a moment
+(`NelvarVoidData.COYOTE_TIME`), so narrow gaps are walked over, wider ones need a
+run-up (Ctrl) and the widest need the flight (Shift); otherwise they fall, lose a
+little HP, come back where they last stood firmly and are told what that crossing
+takes. Some pieces drift between their neighbours and carry the player, some fade
+out of existence for a while. Faint threads of light across the gaps mark the
+route; their look tells a step, a run-up and a flight apart.
+
+Gaps are measured the way a player crosses them: straight from the middle of one
+piece towards the middle of the next, and lines a little to either side must stay
+within reach too (`NelvarVoidData.crossing_gap`, `slack_gap`). The test plays whole
+Voids with the real player, from the spawn to the arena, without a single fall.
+The layout comes from `NelvarVoidGenerator` (seeded like the earth map), the art
+from `NelvarDebrisPainter`, the sky from `scripts/void/void_sky.gdshader`.
+
+Stepping into the arena on the monolith starts the boss fight (`NelvarVoidArena`):
+the edge is sealed, the Void opens its eyes and the Only One (Единственный,
+`scripts/void/boss/`) forms out of the sigil. It is one body that the fight bends
+out of shape, its contours always lagging a moment behind it:
+
+- **I · Единственный** — a hunched figure with an empty face and a huge left arm.
+  Dash (leaves a short trail of the Void), pull around itself that bursts after
+  2 s, a rift dragged along the floor towards the player.
+- **II · Искажение** (70% HP) — the limbs come loose from the body. Double dash
+  aimed anew, a pull next to the player, three rifts in a fan.
+- **III · Отторжение** (42%) — it stretches, squashes and blinks part by part.
+  Three dashes (the last trail lingers), two pulls tearing both ways, rifts crossing
+  the arena one after another, and the collapse: rotating sectors from the centre.
+- **IV · Поглощённый** (14%) — only a crawling silhouette hovering in the centre.
+  Rings of shards that fly out and come back, and a closing ring of the Void with a
+  single gap.
+
+Every hazard shows itself before it hurts (a dash even draws its path); flight
+(Shift) passes through all of them. The fight is lit by the boss and its attacks
+(violet 2D lights on the dark arena), throws pixel sparks, and shakes the picture
+itself (`NelvarVoidScreen`: shockwaves, tearing, colour fringes, slow motion at
+phase changes and at its death); a title card announces it and each phase. Losing the fight brings the same Void back with the player at the arena's
+door. Defeating the Only One lifts the seal. The monolith is painted on a worker
+thread, so the Void loads as fast as before.
+
 The earth map contains 2–3 large floating islands and 6–7 small ones, connected
 by narrow wooden bridges. Shorelines and bridge sides block movement; falling
 and height differences are not implemented yet.
@@ -117,6 +165,7 @@ godot --headless --path . --script tests/test_world.gd -- --seeds=100
 godot --headless --path . --script tests/test_terrain.gd
 godot --headless --path . --script tests/test_forest.gd -- --seed=20261120
 godot --headless --path . --script tests/test_props.gd
+godot --headless --path . --script tests/test_void.gd -- --seeds=50 --walks=6
 ```
 
 Here `godot` means the path to your Godot 4.7.2 executable. The checks cover

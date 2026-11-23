@@ -4,11 +4,14 @@ extends Node
 ## from anywhere; the menu's settings panel edits the same value.
 
 signal info_panel_changed(shown: bool)
+signal start_in_void_changed(enabled: bool)
 
 const PATH := "user://settings.cfg"
 
 ## In-game panel with the seed, world stats and controls. Hidden by default.
 var show_info_panel := false
+## Developer menu: "Играть" opens the Void (scenes/void.tscn) instead of the usual world.
+var start_in_void := false
 
 
 func _ready() -> void:
@@ -16,6 +19,7 @@ func _ready() -> void:
 	var config := ConfigFile.new()
 	if config.load(PATH) == OK:
 		show_info_panel = config.get_value("hud", "show_info_panel", show_info_panel)
+		start_in_void = config.get_value("dev", "start_in_void", start_in_void)
 
 
 func _input(event: InputEvent) -> void:
@@ -32,10 +36,19 @@ func set_show_info_panel(shown: bool) -> void:
 	info_panel_changed.emit(shown)
 
 
+func set_start_in_void(enabled: bool) -> void:
+	if enabled == start_in_void:
+		return
+	start_in_void = enabled
+	_save()
+	start_in_void_changed.emit(enabled)
+
+
 func _save() -> void:
 	var config := ConfigFile.new()
 	config.load(PATH)  # keep any other sections already saved
 	config.set_value("hud", "show_info_panel", show_info_panel)
+	config.set_value("dev", "start_in_void", start_in_void)
 	var error := config.save(PATH)
 	if error != OK:
 		push_warning("Не удалось сохранить настройки: %s" % error_string(error))
