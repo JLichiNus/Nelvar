@@ -5,7 +5,7 @@ render_mode unshaded;
 // green, tufts of grass bending as gusts run across the meadow, small flowers, worn
 // trails with pebbles, ponds with a shaded north bank and drifting glints, darker
 // forest floor strewn with leaves under the groves, and beyond the mountain foot
-// scree, rock and snowfields.
+// scree, then the high plateau: turf and bare stone on uneven terraces.
 //
 // Runs through NelvarCloudSea with parallax 1 and no drift: one fragment per art
 // pixel of the world grid. NelvarEarthField supplies what lies where (ponds, trails,
@@ -44,7 +44,9 @@ const int PATH_EDGE = 34;
 const int STONE = 35;   // 2
 const int GLINT = 37;
 const int FOOT_LINE = 38;
-const vec3 PAL[39] = vec3[39](
+const int TURF = 39;    // 4 (NelvarMountainPainter.TURF)
+const int BARE = 43;    // 3
+const vec3 PAL[46] = vec3[46](
 	vec3(52.0, 108.0, 60.0) / 255.0, vec3(68.0, 130.0, 66.0) / 255.0, vec3(88.0, 152.0, 72.0) / 255.0,
 	vec3(112.0, 172.0, 80.0) / 255.0, vec3(146.0, 194.0, 96.0) / 255.0,
 	vec3(48.0, 104.0, 56.0) / 255.0, vec3(78.0, 146.0, 66.0) / 255.0, vec3(130.0, 186.0, 90.0) / 255.0,
@@ -62,7 +64,10 @@ const vec3 PAL[39] = vec3[39](
 	vec3(96.0, 128.0, 64.0) / 255.0,
 	vec3(110.0, 104.0, 96.0) / 255.0, vec3(168.0, 160.0, 146.0) / 255.0,
 	vec3(200.0, 232.0, 240.0) / 255.0,
-	vec3(26.0, 50.0, 40.0) / 255.0
+	vec3(26.0, 50.0, 40.0) / 255.0,
+	vec3(70.0, 96.0, 72.0) / 255.0, vec3(88.0, 116.0, 80.0) / 255.0, vec3(110.0, 138.0, 88.0) / 255.0,
+	vec3(138.0, 160.0, 100.0) / 255.0,
+	vec3(100.0, 102.0, 100.0) / 255.0, vec3(124.0, 124.0, 116.0) / 255.0, vec3(150.0, 148.0, 136.0) / 255.0
 );
 // NelvarPixelArt.BAYER: the sprites dither with the same matrix.
 const float BAYER[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0,
@@ -144,18 +149,76 @@ float gust(vec2 world) {
 		+ 0.35 * sin(world.x * 0.011 - world.y * 0.006 - wind_time * 2.4);
 }
 
-// Beyond the mountain foot: scree, then rock in strata, snowfields further out.
+// Height step of the plateau: broad uneven terraces with wandering edges.
+float terrace(vec2 np) {
+	float n = value_noise(np * 0.0045) * 0.7 + value_noise(np * 0.011 + 31.0) * 0.3
+		+ (value_noise(np * 0.07 + 5.0) - 0.5) * 0.035;
+	return floor(n * 8.0);
+}
+
+// Beyond the mountain foot: scree, then the high plateau. Terraces of turf, higher
+// ones a little lighter; the south edge of a higher terrace drops in a rocky step (a
+// lit lip, the face darkening downwards, a shadow at its foot). Small bare patches,
+// pebbles and dry tufts.
 vec3 massif(vec2 pixel, vec2 np, float beyond) {
-	float n = fbm(np * 0.03);
-	float strata = value_noise(vec2(np.x * 0.02, np.y * 0.22));
-	float level = 0.45 + (n - 0.5) * 0.7 + (strata - 0.5) * 0.3 + (hash12(np) - 0.5) * 0.1;
-	vec3 color = ramp(ROCK, 5, level, pixel);
-	float snow = fbm(np * 0.016 + 5.3) + beyond / 140.0;
-	if (snow > 0.92) {
-		color = ramp(SNOW, 3, level + 0.25, pixel);
+	float t = terrace(np);
+	float h = hash12(np);
+	// The nearest higher terrace up to 13 pixels north: this pixel is on the face of
+	// its step (5 pixels per terrace of drop, plus one), or in the shadow at its foot.
+	float face = 0.0;
+	float height = 0.0;
+	bool shaded = false;
+	for (int d = 1; d <= 13; d++) {
+		float above = terrace(np - vec2(0.0, float(d)));
+		if (above > t) {
+			height = min(above - t, 2.0) * 5.0 + 1.0;
+			if (float(d) <= height) {
+				face = float(d);
+			} else if (float(d) <= height + 2.0) {
+				shaded = true;
+			}
+			break;
+		}
+		if (above < t) {
+			break;
+		}
+	}
+	vec3 color;
+	if (face > 0.0) {
+		// Rock in vertical streaks, darker towards the foot.
+		float streak = value_noise(vec2(np.x * 0.45, t * 7.0));
+		float level = 0.72 - face / height * 0.5 + (streak - 0.5) * 0.3 + (h - 0.5) * 0.06;
+		color = ramp(ROCK, 5, level, pixel);
+		if (face == 1.0) {
+			color = PAL[TURF + 3];
+		}
+	} else {
+		float level = 0.4 + (fbm(np * 0.012) - 0.5) * 0.25 + (t - 3.5) * 0.11
+			+ (value_noise(np * 0.09) - 0.5) * 0.1;
+		color = ramp(TURF, 4, level, pixel);
+		// Small bare patches, rounded.
+		float bare = value_noise(np * 0.05 + 11.0) * 0.65 + value_noise(np * 0.14 + 3.0) * 0.35;
+		if (bare > 0.79) {
+			color = ramp(BARE, 3, 0.35 + (bare - 0.79) * 3.0, pixel);
+		} else if (bare > 0.77 && bayer(pixel) < 8.0) {
+			color = PAL[BARE];
+		}
+		if (h < 0.01) {
+			color = PAL[STONE + int(hash12(np * 0.7) * 1.99)];
+		} else if (hash12(np + vec2(0.0, 1.0)) < 0.018) {
+			color = PAL[TURF + 3];
+		} else if (h < 0.028) {
+			color = PAL[TURF];
+		}
+		// The back edge of this terrace, and the shadow at the foot of the step above.
+		if (terrace(np - vec2(0.0, 1.0)) < t) {
+			color = PAL[TURF];
+		}
+		if (shaded) {
+			color *= 0.78;
+		}
 	}
 	if (beyond < 7.0) {
-		float h = hash12(np * 1.7);
 		color = h < 0.55 ? ramp(SCREE, 3, hash12(np * 3.1), pixel) : ramp(GRASS, 5, 0.12, pixel);
 	}
 	if (beyond < 1.0) {

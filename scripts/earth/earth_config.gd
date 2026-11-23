@@ -67,6 +67,10 @@ extends Resource
 @export_group("Mountains")
 ## Rows of peaks around the valley, from the foot outwards.
 @export_range(1, 4) var peak_rows: int = 3
+## Rocky outcrops on the high plateau beyond the range.
+@export var plateau_crags: Vector2i = Vector2i(28, 38)
+## Boulders on the plateau, besides those beside the crags.
+@export var plateau_boulders: Vector2i = Vector2i(70, 95)
 
 
 func validation_error() -> String:

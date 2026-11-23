@@ -10,6 +10,7 @@ extends RefCounted
 
 const Kind = NelvarEarthData.Kind
 const Species = NelvarEarthData.Species
+const Peak = NelvarEarthData.Peak
 
 ## How far placed things look for neighbours (largest crown plus margins).
 const GRID := 160.0
@@ -17,6 +18,11 @@ const GRID := 160.0
 const ROW_OFFSET: Array[float] = [12.0, 230.0, 480.0, 760.0]
 const ROW_WIDTH: Array[Vector2] = [Vector2(260.0, 400.0), Vector2(380.0, 560.0),
 	Vector2(500.0, 720.0), Vector2(620.0, 860.0)]
+## Each look of a peak (Peak order, ring looks only): base width and height factors.
+const PEAK_LOOK: Array[Vector2] = [Vector2(1.0, 1.0), Vector2(1.45, 0.6), Vector2(0.8, 1.3),
+	Vector2(1.3, 0.55), Vector2(1.65, 1.0)]
+## How far past the range the plateau's crags and boulders reach.
+const PLATEAU_DEPTH := 3600.0
 
 ## Trunk radius, crown radius and height of each species (Species order).
 const TRUNK: Array[Vector2] = [Vector2(17, 23), Vector2(11, 14), Vector2(13, 17),
@@ -707,29 +713,117 @@ func _water_plants(rng: RandomNumberGenerator) -> void:
 
 # --- Mountains ------------------------------------------------------------------
 
-## Rows of peaks along the mountain foot. Peaks on the south side are lower: they
-## stand between the camera and the valley.
+## Rows of peaks along the mountain foot, then crags and boulders on the high plateau
+## beyond them. Peaks on the south side are lower: they stand between the camera and
+## the valley.
 func _peaks(rng: RandomNumberGenerator) -> void:
 	var valley := _data.valley
-	for row in _config.peak_rows:
+	var rows := _config.peak_rows
+	for row in rows:
 		var angle := rng.randf() * TAU
 		var travelled := 0.0
 		var widths := ROW_WIDTH[row]
+		var last := Peak.SUMMIT
 		while travelled < TAU:
-			var width := rng.randf_range(widths.x, widths.y)
+			var shape := _peak_shape(rng, row, last)
+			last = shape
+			var look: Vector2 = PEAK_LOOK[shape]
+			var width := rng.randf_range(widths.x, widths.y) * look.x
 			var outward := Vector2.from_angle(angle)
 			var south := maxf(0.0, outward.y)
 			var offset := ROW_OFFSET[row] + width * 0.36 * absf(outward.x) * (1.0 if row == 0 else 0.5)
 			var peak := NelvarEarthData.Thing.new()
 			peak.kind = Kind.PEAK
+			peak.variant = shape
 			peak.row = row
 			peak.position = valley.point_at(angle, -offset)
 			peak.radius = width * 0.5
-			var height := width * rng.randf_range(0.92, 1.25) * lerpf(1.0, 0.58, south)
+			var height := width * rng.randf_range(0.92, 1.25) * look.y * lerpf(1.0, 0.58, south)
 			peak.size = Vector2(width, height)
 			peak.appearance_seed = rng.randi()
 			_add(peak)
 			var spacing := width * (rng.randf_range(0.36, 0.5) if row == 0 else rng.randf_range(0.42, 0.58))
+			# The outermost row breaks up: the plateau shows between its peaks.
+			if row == rows - 1 and row > 0 and rng.randf() < 0.3:
+				spacing += width * rng.randf_range(0.4, 0.9)
 			var step := spacing / maxf(valley.radius_at(angle) + offset, 1.0)
 			angle = wrapf(angle + step, -PI, PI)
 			travelled += step
+	_plateau(rng, rows)
+
+
+## Look of the next peak in a row: mostly summits, the others never twice in a row;
+## giants only behind the nearest row.
+func _peak_shape(rng: RandomNumberGenerator, row: int, last: int) -> int:
+	for attempt in 4:
+		var roll := rng.randf()
+		var shape := Peak.SUMMIT
+		if roll < 0.18:
+			shape = Peak.MASSIF
+		elif roll < 0.34:
+			shape = Peak.NEEDLES
+		elif roll < 0.46:
+			shape = Peak.MESA
+		elif roll < 0.6 and row > 0:
+			shape = Peak.GIANT
+		if shape == Peak.SUMMIT or shape != last:
+			return shape
+	return Peak.SUMMIT
+
+
+## The plateau beyond the range: rocky crags with boulders round them, and boulders
+## strewn on their own.
+func _plateau(rng: RandomNumberGenerator, rows: int) -> void:
+	var valley := _data.valley
+	var near := ROW_OFFSET[rows - 1] + ROW_WIDTH[rows - 1].y * 0.6
+	var placed: Array[NelvarEarthData.Thing] = []
+	var crags := rng.randi_range(_config.plateau_crags.x, _config.plateau_crags.y)
+	var boulders := rng.randi_range(_config.plateau_boulders.x, _config.plateau_boulders.y)
+	for attempt in crags * 20:
+		if crags <= 0:
+			break
+		var width := rng.randf_range(240.0, 560.0)
+		var point := valley.point_at(rng.randf() * TAU, -rng.randf_range(near, near + PLATEAU_DEPTH))
+		if not _plateau_free(placed, point, width * 0.5 + 120.0):
+			continue
+		var crag := _plateau_thing(rng, Peak.CRAG, point, width * 0.5, rows)
+		crag.size = Vector2(width, width * rng.randf_range(0.45, 0.8))
+		placed.append(crag)
+		crags -= 1
+		# A few boulders broken off the crag.
+		for k in rng.randi_range(0, 3):
+			var side := -1.0 if rng.randf() < 0.5 else 1.0
+			var radius := rng.randf_range(20.0, 40.0)
+			var spot := point + Vector2(side * rng.randf_range(0.5, 0.8) * width, rng.randf_range(10.0, 70.0))
+			if _plateau_free(placed, spot, radius + 20.0):
+				placed.append(_plateau_thing(rng, Peak.BOULDER, spot, radius, rows))
+				boulders -= 1
+	for attempt in maxi(0, boulders) * 20:
+		if boulders <= 0:
+			break
+		var radius := rng.randf_range(44.0, 70.0) if rng.randf() < 0.25 else rng.randf_range(18.0, 40.0)
+		var point := valley.point_at(rng.randf() * TAU, -rng.randf_range(near - 150.0, near + PLATEAU_DEPTH))
+		if _plateau_free(placed, point, radius + 60.0):
+			placed.append(_plateau_thing(rng, Peak.BOULDER, point, radius, rows))
+			boulders -= 1
+
+
+func _plateau_free(placed: Array[NelvarEarthData.Thing], point: Vector2, reach: float) -> bool:
+	for other in placed:
+		if point.distance_to(other.position) < reach + other.radius:
+			return false
+	return true
+
+
+func _plateau_thing(rng: RandomNumberGenerator, shape: int, point: Vector2, radius: float,
+		row: int) -> NelvarEarthData.Thing:
+	var thing := NelvarEarthData.Thing.new()
+	thing.kind = Kind.PEAK
+	thing.variant = shape
+	thing.row = row
+	thing.position = point
+	thing.radius = radius
+	thing.accent = rng.randf() < 0.4
+	thing.appearance_seed = rng.randi()
+	_add(thing)
+	return thing

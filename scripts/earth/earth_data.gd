@@ -14,6 +14,9 @@ const HARMONICS := 6
 enum Kind { TREE, ROCK, STATUE, STUMP, LOG, BUSH, TALL_GRASS, FERN, FLOWERS, MUSHROOMS,
 	REEDS, LILY, PEAK }
 enum Species { OAK, BIRCH, PINE, BLOSSOM, APPLE, WILLOW, MAPLE }
+## Look of a peak (Thing.variant of Kind.PEAK). The ring round the valley mixes the
+## first five; crags and boulders lie on the plateau beyond it.
+enum Peak { SUMMIT, MASSIF, NEEDLES, MESA, GIANT, CRAG, BOULDER }
 
 const SPECIES_NAMES: Array[String] = ["дуб", "берёза", "ель", "цветущая вишня", "яблоня",
 	"ива", "золотой клён"]
@@ -89,7 +92,8 @@ class Thing:
 	var appearance_seed := 0
 	## Moss on rocks and stumps, snow on pines, a statue facing left, a flower on a lily.
 	var accent := false
-	## Peaks: 0 at the mountain foot, higher rows further out.
+	## Peaks: 0 at the mountain foot, higher rows further out; the plateau's crags and
+	## boulders have the row past the last.
 	var row := 0
 
 	## Collision ellipse half-axes of solid things (trees and stumps use a circle).

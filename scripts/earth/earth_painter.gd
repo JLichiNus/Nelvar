@@ -2,7 +2,8 @@ class_name NelvarEarthPainter
 extends RefCounted
 ## Bakes everything that stands in the earth valley in the style of the "Земля" menu
 ## background: deep greens lit from the upper right, dark green-brown outlines on
-## shaded edges, soft shadows on the grass. Peaks are NelvarMountainPainter's.
+## shaded edges, soft shadows on the grass. Peaks and the plateau's crags are
+## NelvarMountainPainter's; the plateau's boulders are rocks.
 ##
 ## Stateless: one painter can paint from many worker threads at once.
 
@@ -119,7 +120,10 @@ func paint(thing: NelvarEarthData.Thing) -> NelvarEarthArt:
 		Kind.LILY:
 			art = _lily(thing, rng)
 		Kind.PEAK:
-			art = NelvarMountainPainter.new().paint(thing)
+			if thing.variant == NelvarEarthData.Peak.BOULDER:
+				art = _rock(thing, rng)
+			else:
+				art = NelvarMountainPainter.new().paint(thing)
 	return art
 
 

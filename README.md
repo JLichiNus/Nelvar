@@ -115,8 +115,15 @@ than the player; trails, clearings and the spawn stay free of them.
 The mountain foot stops everyone. Ponds are on physics layer 5 («Water»): they
 stop the player and enemies but not projectiles. Rows of peaks stand round the
 valley and sort with the player like trees (lower on the south side, where they
-stand between the camera and the plain); their feet dissolve into scree and
-snowfields drawn by the floor shader.
+stand between the camera and the plain). Peaks differ in look
+(`NelvarEarthData.Peak`): summits with shoulders, broad massifs of several tops,
+clusters of rocky needles, flat-topped peaks with a cap of layered rock, and
+behind the nearest row rare giants with glaciers down their gullies; the rock
+takes one of three tints (grey-blue, warm grey-brown, slate). The outer row breaks
+up, and beyond it lies the high plateau drawn by the floor shader: uneven terraces
+of turf whose edges drop in short rocky steps, small bare patches, rocky crags
+and boulders. Rare clouds (`high_clouds.gdshader`) drift over the plateau and the
+far peaks with their shadows under them; over the valley they vanish.
 
 Everything in the valley is painted on all cores while the scene loads
 (`NelvarEarthPainter`, `NelvarEarthCanvas`); the peaks (`NelvarMountainPainter`)
