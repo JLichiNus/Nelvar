@@ -81,6 +81,8 @@ var _facing_left := false
 var _attack_animation := &""
 var _attack_facing_left := 0.0
 var _hover_time := 0.0
+# Пустота: тело проваливается в пропасть, управление отключено.
+var _is_falling := false
 
 @onready var aim_pivot: Node2D = $AimPivot
 @onready var projectile_spawn: Marker2D = $AimPivot/ProjectileSpawn
@@ -106,7 +108,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	if _is_dead:
+	if _is_dead or _is_falling:
 		return
 	_update_blink()
 	_update_hover(delta)
@@ -158,7 +160,7 @@ func adjust_zoom(multiplier: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if _is_dead:
+	if _is_dead or _is_falling:
 		return
 	_invulnerability_left = maxf(_invulnerability_left - delta, 0.0)
 	_attack_facing_left = maxf(_attack_facing_left - delta, 0.0)
@@ -263,6 +265,43 @@ func _on_torso_animation_finished() -> void:
 
 func is_airborne() -> bool:
 	return _speed_boost_state == SpeedBoostState.ACTIVE
+
+
+func is_falling() -> bool:
+	return _is_falling
+
+
+# Пустота: под ногами ничего нет. Тело уходит вниз, сжимается и тает в
+# фиолетовой тьме; управление вернёт recover_at().
+func fall_into_abyss(duration: float) -> void:
+	if _is_dead or _is_falling:
+		return
+	_is_falling = true
+	_is_running = false
+	velocity = Vector2.ZERO
+	wind_trail.emitting = false
+	aim_pivot.visible = false
+	var tween := _restart_flight_tween().set_parallel()
+	tween.tween_property(body_visual, "position:y", _body_rest_position.y + 90.0, duration) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.tween_property(body_visual, "scale", body_visual.scale * 0.25, duration) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.tween_property(body_visual, "modulate", Color(0.45, 0.25, 0.85, 0.0), duration)
+
+
+func recover_at(point: Vector2) -> void:
+	if not _is_falling:
+		return
+	_is_falling = false
+	if _flight_tween != null:
+		_flight_tween.kill()
+	global_position = point
+	velocity = Vector2.ZERO
+	body_visual.position = _body_rest_position
+	body_visual.scale = Vector2(-_body_scale.x if _facing_left else _body_scale.x, _body_scale.y)
+	body_visual.modulate = Color.WHITE
+	aim_pivot.visible = true
+	camera.reset_smoothing()
 
 
 func take_damage(amount: float) -> void:

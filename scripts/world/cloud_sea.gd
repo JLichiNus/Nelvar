@@ -18,6 +18,8 @@ const SEA_SHADER := preload("res://scripts/world/cloud_sea.gdshader")
 @export var texel_size: float = 4.0
 ## Share of the sea torn open to the sky below: 0 = solid cover.
 @export_range(0.0, 0.6, 0.01) var hole_amount: float = 0.14
+## What fills the backdrop; the Void draws its own sky with the same uniforms.
+@export var shader: Shader = SEA_SHADER
 
 var _viewport: SubViewport
 var _sea: ColorRect
@@ -41,7 +43,7 @@ func _ready() -> void:
 	_viewport.size = Vector2i(2, 2)
 	add_child(_viewport)
 	_material = ShaderMaterial.new()
-	_material.shader = SEA_SHADER
+	_material.shader = shader
 	_sea = ColorRect.new()
 	_sea.material = _material
 	_viewport.add_child(_sea)
@@ -60,6 +62,11 @@ func set_world_seed(world_seed: int) -> void:
 	rng.seed = ("%d:clouds" % world_seed).hash()
 	_material.set_shader_parameter("seed_offset",
 		Vector2(rng.randi_range(-8192, 8192), rng.randi_range(-8192, 8192)))
+
+
+## The backdrop's ShaderMaterial, for shader-specific parameters.
+func backdrop_material() -> ShaderMaterial:
+	return _material
 
 
 func _process(delta: float) -> void:

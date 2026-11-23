@@ -46,6 +46,26 @@ restarts with a new seed.
 
 `test_world.tscn` is a flat arena for tuning combat without the generator (F6).
 
+### The Void (developer menu)
+
+Settings → «Меню разработчика» → «Запускать игру в Пустоте» makes «Играть» open
+`scenes/void.tscn` instead of the earth map. The player wakes on debris of all four
+realities — torn earth, rocks, fallen trunks, ice, cooling basalt, cloud-stone,
+paved ruins and violet shards — hanging over the dark Void, and makes their way to
+the monolith: a black-grey angular island that is the same in every run.
+
+Debris has no walls. Off its edge the player keeps going for a moment
+(`NelvarVoidData.COYOTE_TIME`), so narrow gaps are walked over, wider ones need a
+run-up (Ctrl) and the widest need the flight (Shift); otherwise they fall, lose a
+little HP and come back where they last stood firmly. Some pieces drift between
+their neighbours and carry the player, some fade out of existence for a while.
+The layout comes from `NelvarVoidGenerator` (seeded like the earth map), the art
+from `NelvarDebrisPainter`, the sky from `scripts/void/void_sky.gdshader`.
+
+Stepping into the arena on the monolith starts the boss fight (`NelvarVoidArena`):
+the edge is sealed and the Void wakes up. There is no boss yet; it will hook in
+through the arena's `fight_started` signal.
+
 The earth map contains 2–3 large floating islands and 6–7 small ones, connected
 by narrow wooden bridges. Shorelines and bridge sides block movement; falling
 and height differences are not implemented yet.
@@ -117,6 +137,7 @@ godot --headless --path . --script tests/test_world.gd -- --seeds=100
 godot --headless --path . --script tests/test_terrain.gd
 godot --headless --path . --script tests/test_forest.gd -- --seed=20261120
 godot --headless --path . --script tests/test_props.gd
+godot --headless --path . --script tests/test_void.gd -- --seeds=50
 ```
 
 Here `godot` means the path to your Godot 4.7.2 executable. The checks cover

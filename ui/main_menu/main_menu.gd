@@ -4,6 +4,8 @@ extends Control
 ## that button's reality.
 
 const GAME_SCENE := "res://scenes/main.tscn"
+## Developer setting "Запускать игру в Пустоте" starts here instead.
+const VOID_SCENE := "res://scenes/void.tscn"
 const TRANSITION_TIME := 0.8
 ## Speed-up for a wave that is interrupted by another hover.
 const HURRY_SPEED := 2.5
@@ -50,9 +52,11 @@ var _texel := 1.0
 var _wind := 0.0
 var _open_panel: NelvarMenuPanel
 var _panel_owner: Button
+var _menu_tween: Tween
 
 @onready var background: TextureRect = $Background
 @onready var particle_root: Node2D = $Particles
+@onready var menu_column: VBoxContainer = $Margin/Layout/Menu
 @onready var logo: TextureRect = %Logo
 @onready var logo_glow: TextureRect = %LogoGlow
 @onready var play_button: Button = %Play
@@ -99,6 +103,7 @@ func _ready() -> void:
 	about_button.pressed.connect(_open.bind(about_panel, about_button, about_back))
 	quit_button.pressed.connect(get_tree().quit)
 	settings_panel.back_button.pressed.connect(_close_panel)
+	settings_panel.dev_panel_toggled.connect(_on_dev_panel_toggled)
 	about_back.pressed.connect(_close_panel)
 
 	settings_panel.hide()
@@ -405,7 +410,19 @@ func _close_panel() -> void:
 		_panel_owner.grab_focus()
 
 
+## The developer panel opens left of the settings, over the menu column: the
+## column fades out and stops taking input while the panel is open.
+func _on_dev_panel_toggled(open: bool) -> void:
+	if _menu_tween != null:
+		_menu_tween.kill()
+	_menu_tween = create_tween()
+	_menu_tween.tween_property(menu_column, "modulate:a", 0.0 if open else 1.0, 0.15)
+	for button: Button in _button_elements:
+		button.mouse_filter = Control.MOUSE_FILTER_IGNORE if open else Control.MOUSE_FILTER_STOP
+		button.focus_mode = Control.FOCUS_NONE if open else Control.FOCUS_ALL
+
+
 func _on_play_pressed() -> void:
 	for button: Button in _button_elements:
 		button.disabled = true
-	get_tree().change_scene_to_file(GAME_SCENE)
+	get_tree().change_scene_to_file(VOID_SCENE if GameSettings.start_in_void else GAME_SCENE)
