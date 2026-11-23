@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scripts/earth/earth_main.gd" id="1"]
 [ext_resource type="Resource" path="res://resources/earth_valley_config.tres" id="2"]
@@ -12,7 +12,6 @@
 [ext_resource type="Shader" path="res://scripts/earth/cloud_shadows.gdshader" id="10"]
 [ext_resource type="Script" path="res://ui/health_label.gd" id="11"]
 [ext_resource type="PackedScene" path="res://ui/pause_menu/pause_menu.tscn" id="12"]
-[ext_resource type="Shader" path="res://scripts/earth/high_clouds.gdshader" id="13"]
 
 [node name="Earth" type="Node2D"]
 script = ExtResource("1")
@@ -60,14 +59,6 @@ parallax = 1.0
 wind = Vector2(16, 4)
 hole_amount = 0.0
 shader = ExtResource("10")
-
-[node name="HighClouds" type="CanvasLayer" parent="."]
-layer = 2
-script = ExtResource("3")
-parallax = 1.0
-wind = Vector2(26, 6)
-hole_amount = 0.0
-shader = ExtResource("13")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 layer = 3

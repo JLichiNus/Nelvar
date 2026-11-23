@@ -740,6 +740,8 @@ func _peaks(rng: RandomNumberGenerator) -> void:
 			peak.radius = width * 0.5
 			var height := width * rng.randf_range(0.92, 1.25) * look.y * lerpf(1.0, 0.58, south)
 			peak.size = Vector2(width, height)
+			# Waterfalls only on the nearest row: further back the peaks in front hide them.
+			peak.accent = row == 0 and rng.randf() < 0.13
 			peak.appearance_seed = rng.randi()
 			_add(peak)
 			var spacing := width * (rng.randf_range(0.36, 0.5) if row == 0 else rng.randf_range(0.42, 0.58))

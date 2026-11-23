@@ -10,6 +10,8 @@ var texture: ImageTexture
 var sway := 0
 ## Statues: the top-left corner of the eye's middle pixel, art pixels from the origin.
 var eye := Vector2.INF
+## Peaks: carries a waterfall, animated by waterfall.gdshader.
+var waterfall := false
 
 
 static func from_canvas(canvas: NelvarEarthCanvas) -> NelvarEarthArt:

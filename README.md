@@ -119,11 +119,14 @@ stand between the camera and the plain). Peaks differ in look
 (`NelvarEarthData.Peak`): summits with shoulders, broad massifs of several tops,
 clusters of rocky needles, flat-topped peaks with a cap of layered rock, and
 behind the nearest row rare giants with glaciers down their gullies; the rock
-takes one of three tints (grey-blue, warm grey-brown, slate). The outer row breaks
-up, and beyond it lies the high plateau drawn by the floor shader: uneven terraces
-of turf whose edges drop in short rocky steps, small bare patches, rocky crags
-and boulders. Rare clouds (`high_clouds.gdshader`) drift over the plateau and the
-far peaks with their shadows under them; over the valley they vanish.
+takes one of three tints (grey-blue, warm grey-brown, slate). Peaks rise out of
+the ground: lighter towards the top, darker at the base, grass and firs climbing
+their gullies from the foot. Some peaks of the nearest row carry a waterfall,
+animated by `waterfall.gdshader` (the painter keys its water, foam and mist by
+alpha). The outer row breaks up, and beyond it lie the uplands drawn by the floor
+shader: the valley again, duller and with less detail — meadows on uneven grassy
+terraces, groves and lone trees, now and then a lake — with rocky crags and
+boulders standing on them.
 
 Everything in the valley is painted on all cores while the scene loads
 (`NelvarEarthPainter`, `NelvarEarthCanvas`); the peaks (`NelvarMountainPainter`)

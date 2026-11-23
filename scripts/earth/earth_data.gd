@@ -90,7 +90,8 @@ class Thing:
 	var size := Vector2.ZERO
 	var solid := false
 	var appearance_seed := 0
-	## Moss on rocks and stumps, snow on pines, a statue facing left, a flower on a lily.
+	## Moss on rocks and stumps, snow on pines, a statue facing left, a flower on a lily,
+	## a waterfall on a peak.
 	var accent := false
 	## Peaks: 0 at the mountain foot, higher rows further out; the plateau's crags and
 	## boulders have the row past the last.

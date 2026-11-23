@@ -6,10 +6,10 @@ extends Node2D
 ##
 ## Loading paints everything in the valley on all cores; the peaks round it are far
 ## out of view at first, so they are painted in the background and rise as they are
-## ready. The floor (ground shader), the cloud shadows and the high clouds are drawn
-## on the GPU.
+## ready. The floor (ground shader) and the cloud shadows are drawn on the GPU.
 
 const STEP := NelvarEarthData.PIXEL
+const WATERFALL_SHADER := preload("res://scripts/earth/waterfall.gdshader")
 
 @export var config: NelvarEarthConfig = preload("res://resources/earth_valley_config.tres")
 
@@ -28,13 +28,13 @@ var _peak_arts: Array = []
 var _peak_task := -1
 var _peak_mutex := Mutex.new()
 var _peaks_ready := PackedInt32Array()
+var _waterfall_material: ShaderMaterial
 var _show_debug := false
 ## F3: the mountain foot and the pond shores as the physics sees them.
 var _outlines: Node2D
 
 @onready var ground: NelvarCloudSea = $Ground
 @onready var cloud_shadows: NelvarCloudSea = $CloudShadows
-@onready var high_clouds: NelvarCloudSea = $HighClouds
 @onready var pollen: NelvarWindParticles = $Pollen
 @onready var world_layer: Node2D = $World
 @onready var actors: Node2D = $Actors
@@ -192,23 +192,13 @@ func _setup_ground() -> void:
 	_field = null
 
 
-## Cloud shadows over everything, rare clouds passing over the plateau, pollen
-## drifting in the warm air.
+## Cloud shadows over everything, pollen drifting in the warm air.
 func _setup_sky() -> void:
 	cloud_shadows.texel_size = STEP
 	cloud_shadows.set_world_seed(data.world_seed)
 	var multiply := CanvasItemMaterial.new()
 	multiply.blend_mode = CanvasItemMaterial.BLEND_MODE_MUL
 	cloud_shadows.use_as_overlay(1, multiply)
-	high_clouds.texel_size = STEP
-	high_clouds.set_world_seed(data.world_seed + 1)
-	high_clouds.use_as_overlay(2, null)
-	var clouds := high_clouds.backdrop_material()
-	clouds.set_shader_parameter("texel_size", float(STEP))
-	clouds.set_shader_parameter("valley_center", data.valley.center)
-	clouds.set_shader_parameter("valley_axes", data.valley.axes)
-	clouds.set_shader_parameter("valley_amp", data.valley.amplitudes)
-	clouds.set_shader_parameter("valley_phase", data.valley.phases)
 	pollen.texel_size = STEP
 	pollen.color = Color(0.98, 0.93, 0.64, 0.7)
 	pollen.lifetime = 4.0
@@ -245,6 +235,11 @@ func _raise_ready_peaks() -> void:
 		var node := NelvarEarthThing.new()
 		node.setup(_peaks[index], art)
 		node.show_collision = _show_debug
+		if art.waterfall:
+			if _waterfall_material == null:
+				_waterfall_material = ShaderMaterial.new()
+				_waterfall_material.shader = WATERFALL_SHADER
+			node.material = _waterfall_material
 		actors.add_child(node)
 		peak_nodes.append(node)
 	if _peak_task >= 0 and WorkerThreadPool.is_group_task_completed(_peak_task):
@@ -275,7 +270,6 @@ func _process(delta: float) -> void:
 	if _peak_task >= 0 or not _peaks_ready.is_empty():
 		_raise_ready_peaks()
 	ground.backdrop_material().set_shader_parameter("wind_time", _time)
-	high_clouds.backdrop_material().set_shader_parameter("drift_pixels", high_clouds.drift() / STEP)
 	# Only plants near the view sway; the rest keep their last pose.
 	var viewport := get_viewport()
 	var to_world := viewport.get_canvas_transform().affine_inverse()

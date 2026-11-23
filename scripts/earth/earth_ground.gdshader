@@ -5,7 +5,8 @@ render_mode unshaded;
 // green, tufts of grass bending as gusts run across the meadow, small flowers, worn
 // trails with pebbles, ponds with a shaded north bank and drifting glints, darker
 // forest floor strewn with leaves under the groves, and beyond the mountain foot
-// scree, then the high plateau: turf and bare stone on uneven terraces.
+// scree, then the uplands: the valley again, paler and with less detail — meadows on
+// uneven grassy terraces, groves and lone trees, now and then a lake.
 //
 // Runs through NelvarCloudSea with parallax 1 and no drift: one fragment per art
 // pixel of the world grid. NelvarEarthField supplies what lies where (ponds, trails,
@@ -44,9 +45,9 @@ const int PATH_EDGE = 34;
 const int STONE = 35;   // 2
 const int GLINT = 37;
 const int FOOT_LINE = 38;
-const int TURF = 39;    // 4 (NelvarMountainPainter.TURF)
-const int BARE = 43;    // 3
-const vec3 PAL[46] = vec3[46](
+const int LEAVES = 39;  // 5 (NelvarEarthPainter.LEAVES)
+const int PINE = 44;    // 3
+const vec3 PAL[47] = vec3[47](
 	vec3(52.0, 108.0, 60.0) / 255.0, vec3(68.0, 130.0, 66.0) / 255.0, vec3(88.0, 152.0, 72.0) / 255.0,
 	vec3(112.0, 172.0, 80.0) / 255.0, vec3(146.0, 194.0, 96.0) / 255.0,
 	vec3(48.0, 104.0, 56.0) / 255.0, vec3(78.0, 146.0, 66.0) / 255.0, vec3(130.0, 186.0, 90.0) / 255.0,
@@ -65,10 +66,15 @@ const vec3 PAL[46] = vec3[46](
 	vec3(110.0, 104.0, 96.0) / 255.0, vec3(168.0, 160.0, 146.0) / 255.0,
 	vec3(200.0, 232.0, 240.0) / 255.0,
 	vec3(26.0, 50.0, 40.0) / 255.0,
-	vec3(70.0, 96.0, 72.0) / 255.0, vec3(88.0, 116.0, 80.0) / 255.0, vec3(110.0, 138.0, 88.0) / 255.0,
-	vec3(138.0, 160.0, 100.0) / 255.0,
-	vec3(100.0, 102.0, 100.0) / 255.0, vec3(124.0, 124.0, 116.0) / 255.0, vec3(150.0, 148.0, 136.0) / 255.0
+	vec3(34.0, 84.0, 56.0) / 255.0, vec3(46.0, 108.0, 62.0) / 255.0, vec3(64.0, 134.0, 68.0) / 255.0,
+	vec3(92.0, 160.0, 76.0) / 255.0, vec3(136.0, 188.0, 92.0) / 255.0,
+	vec3(30.0, 70.0, 56.0) / 255.0, vec3(40.0, 88.0, 62.0) / 255.0, vec3(56.0, 108.0, 70.0) / 255.0
 );
+// The uplands fade towards this muted grey-green: duller than the valley, not lighter
+// (NelvarMountainPainter.MEADOW is the valley grass faded by UPLAND_FADE).
+const vec3 UPLAND_HAZE = vec3(128.0, 142.0, 124.0) / 255.0;
+const float UPLAND_FADE = 0.45;
+const float TREE_CELL = 6.0;
 // NelvarPixelArt.BAYER: the sprites dither with the same matrix.
 const float BAYER[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0,
 	15.0, 7.0, 13.0, 5.0);
@@ -149,73 +155,154 @@ float gust(vec2 world) {
 		+ 0.35 * sin(world.x * 0.011 - world.y * 0.006 - wind_time * 2.4);
 }
 
-// Height step of the plateau: broad uneven terraces with wandering edges.
+// Height step of the uplands: broad uneven terraces with wandering edges.
 float terrace(vec2 np) {
-	float n = value_noise(np * 0.0045) * 0.7 + value_noise(np * 0.011 + 31.0) * 0.3
-		+ (value_noise(np * 0.07 + 5.0) - 0.5) * 0.035;
-	return floor(n * 8.0);
+	float n = value_noise(np * 0.0032) * 0.7 + value_noise(np * 0.009 + 31.0) * 0.3
+		+ (value_noise(np * 0.07 + 5.0) - 0.5) * 0.03;
+	return floor(n * 6.0);
 }
 
-// Beyond the mountain foot: scree, then the high plateau. Terraces of turf, higher
-// ones a little lighter; the south edge of a higher terrace drops in a rocky step (a
-// lit lip, the face darkening downwards, a shadow at its foot). Small bare patches,
-// pebbles and dry tufts.
-vec3 massif(vec2 pixel, vec2 np, float beyond) {
-	float t = terrace(np);
+// Lakes of the uplands: above zero in the water.
+float lake(vec2 np) {
+	return value_noise(np / 100.0 + 41.0) * 0.8 + value_noise(np / 34.0 + 9.0) * 0.2 - 0.82;
+}
+
+// A tree of the uplands seen from afar: a round crown (or a fir's cone) with its lit
+// upper right, a dark lower-left rim and a shadow down and to the left. Returns the
+// colour, alpha 1 on a crown, alpha 0.5 in a shadow, 0 elsewhere.
+vec4 upland_tree(vec2 pixel, vec2 np, float grove) {
+	vec2 cell = floor(np / TREE_CELL);
+	vec4 found = vec4(0.0);
+	float front = -1e9;
+	for (int j = -1; j <= 1; j++) {
+		for (int i = -1; i <= 1; i++) {
+			vec2 c = cell + vec2(float(i), float(j));
+			vec3 h = hash32(c * 1.3 + 17.0);
+			if (h.x > grove * 0.8 + 0.012) {
+				continue;
+			}
+			vec2 center = c * TREE_CELL + 1.0 + h.yz * (TREE_CELL - 2.0);
+			if (lake(center) > -0.04) {
+				continue;
+			}
+			float r = 2.2 + hash12(c + 5.0) * 1.8;
+			bool fir = hash12(c + 9.0) < 0.3;
+			vec2 d = np - center;
+			vec4 color = vec4(0.0);
+			if (fir) {
+				float apex = -r * 1.9;
+				float base = r * 0.6;
+				if (d.y >= apex && d.y <= base) {
+					float half_width = r * 0.85 * (d.y - apex) / (base - apex);
+					if (abs(d.x) <= half_width + 0.2) {
+						float t = d.x > 0.0 ? 0.75 : 0.25;
+						if (d.x < -half_width + 0.9) {
+							t = 0.0;
+						}
+						color = vec4(ramp(PINE, 3, t, pixel), 1.0);
+					}
+				}
+			} else {
+				vec2 q = d / vec2(r * 1.05, r);
+				float l = length(q);
+				if (l <= 1.0) {
+					float lit = dot(q, vec2(0.7, -0.7));
+					float t = 0.5 + lit * 0.4 + (hash12(np) - 0.5) * 0.12;
+					if (l > 0.78 && lit < -0.1) {
+						t = 0.0;
+					}
+					color = vec4(ramp(LEAVES, 5, t, pixel), 1.0);
+				}
+			}
+			if (color.a > 0.0) {
+				if (center.y > front) {
+					front = center.y;
+					found = color;
+				}
+				continue;
+			}
+			// The shadow, only where no crown is.
+			vec2 s = (d - vec2(-r * 0.7, r * 0.9)) / vec2(r * 1.2, r * 0.6);
+			if (found.a < 1.0 && dot(s, s) <= 1.0) {
+				found = vec4(0.0, 0.0, 0.0, 0.5);
+			}
+		}
+	}
+	return found;
+}
+
+// Beyond the mountain foot: scree, then the uplands — the valley again, faded and
+// simpler. Grass in broad patches with a few flowers and stones; the south edge of a
+// higher terrace drops in a short grassy bank (a lit lip, the bank darkening
+// downwards, a shadow at its foot); groves and lone trees; now and then a lake with a
+// shaded north shore.
+vec3 uplands(vec2 pixel, vec2 np, float beyond) {
 	float h = hash12(np);
-	// The nearest higher terrace up to 13 pixels north: this pixel is on the face of
-	// its step (5 pixels per terrace of drop, plus one), or in the shadow at its foot.
+	float water = lake(np);
+	float t = terrace(np);
+	// The nearest higher terrace up to 8 pixels north: this pixel is on its bank (3
+	// pixels per terrace of drop, plus one), or in the shadow at the bank's foot.
 	float face = 0.0;
 	float height = 0.0;
 	bool shaded = false;
-	for (int d = 1; d <= 13; d++) {
-		float above = terrace(np - vec2(0.0, float(d)));
-		if (above > t) {
-			height = min(above - t, 2.0) * 5.0 + 1.0;
-			if (float(d) <= height) {
-				face = float(d);
-			} else if (float(d) <= height + 2.0) {
-				shaded = true;
+	if (water < -0.06) {
+		for (int d = 1; d <= 8; d++) {
+			float above = terrace(np - vec2(0.0, float(d)));
+			if (above > t) {
+				height = min(above - t, 2.0) * 3.0 + 1.0;
+				if (float(d) <= height) {
+					face = float(d);
+				} else if (float(d) <= height + 1.0) {
+					shaded = true;
+				}
+				break;
 			}
-			break;
-		}
-		if (above < t) {
-			break;
+			if (above < t) {
+				break;
+			}
 		}
 	}
-	vec3 color;
+	float meadow = smoothstep(0.56, 0.74, value_noise(np / 80.0 + 13.7));
+	float grove = smoothstep(0.52, 0.7, value_noise(np / 60.0 + 101.0));
+	float level = 0.56 + (fbm(np * vec2(0.018, 0.028)) - 0.5) * 0.55 + meadow * 0.08
+		+ (t - 2.5) * 0.05 - grove * 0.18;
+	vec3 color = ramp(GRASS, 5, level, pixel);
 	if (face > 0.0) {
-		// Rock in vertical streaks, darker towards the foot.
-		float streak = value_noise(vec2(np.x * 0.45, t * 7.0));
-		float level = 0.72 - face / height * 0.5 + (streak - 0.5) * 0.3 + (h - 0.5) * 0.06;
-		color = ramp(ROCK, 5, level, pixel);
-		if (face == 1.0) {
-			color = PAL[TURF + 3];
+		// A grassy bank with a stone here and there.
+		color = face == 1.0 ? PAL[GRASS + 4] : ramp(GRASS, 5, 0.3 - face / height * 0.3, pixel);
+		if (face > 1.0 && h < 0.08) {
+			color = PAL[SCREE + 1];
+		}
+	} else if (water > 0.0) {
+		float above = lake(np - vec2(0.0, 1.0));
+		float above2 = lake(np - vec2(0.0, 2.0));
+		float depth = clamp(water / 0.08, 0.0, 1.0);
+		color = ramp(WATER, 4, 0.66 - depth * 0.4 + (value_noise(vec2(np.x * 0.3, np.y)) - 0.5) * 0.3, pixel);
+		if (above <= 0.0) {
+			color = PAL[WATER];
+		} else if (above2 <= 0.0) {
+			color = ramp(WATER, 4, 0.2, pixel);
+		} else if (depth > 0.3 && mod(pixel.y, 5.0) < 1.0
+				&& fract((pixel.x + hash12(vec2(pixel.y, 3.1)) * 61.0) / 31.0) < 0.12) {
+			color = PAL[GLINT];
 		}
 	} else {
-		float level = 0.4 + (fbm(np * 0.012) - 0.5) * 0.25 + (t - 3.5) * 0.11
-			+ (value_noise(np * 0.09) - 0.5) * 0.1;
-		color = ramp(TURF, 4, level, pixel);
-		// Small bare patches, rounded.
-		float bare = value_noise(np * 0.05 + 11.0) * 0.65 + value_noise(np * 0.14 + 3.0) * 0.35;
-		if (bare > 0.79) {
-			color = ramp(BARE, 3, 0.35 + (bare - 0.79) * 3.0, pixel);
-		} else if (bare > 0.77 && bayer(pixel) < 8.0) {
-			color = PAL[BARE];
-		}
-		if (h < 0.01) {
+		if (water > -0.012) {
+			// The damp shore.
+			color *= 0.78;
+		} else if (h < 0.0015 + meadow * 0.004) {
+			color = PAL[FLOWER + int(hash12(np * 0.53 + 3.0) * 3.99)];
+		} else if (h > 0.996) {
 			color = PAL[STONE + int(hash12(np * 0.7) * 1.99)];
-		} else if (hash12(np + vec2(0.0, 1.0)) < 0.018) {
-			color = PAL[TURF + 3];
-		} else if (h < 0.028) {
-			color = PAL[TURF];
 		}
-		// The back edge of this terrace, and the shadow at the foot of the step above.
-		if (terrace(np - vec2(0.0, 1.0)) < t) {
-			color = PAL[TURF];
+		vec4 tree = upland_tree(pixel, np, grove);
+		if (tree.a >= 1.0) {
+			color = tree.rgb;
+		} else if (tree.a > 0.0) {
+			color *= 0.74;
 		}
 		if (shaded) {
-			color *= 0.78;
+			color *= 0.8;
 		}
 	}
 	if (beyond < 7.0) {
@@ -224,7 +311,9 @@ vec3 massif(vec2 pixel, vec2 np, float beyond) {
 	if (beyond < 1.0) {
 		color = PAL[FOOT_LINE];
 	}
-	return color;
+	// Paler past the foot, and paler still with distance from the valley.
+	return mix(color, UPLAND_HAZE, UPLAND_FADE * smoothstep(0.0, 40.0, beyond)
+		+ smoothstep(40.0, 900.0, beyond) * 0.1);
 }
 
 // One tuft of three blades per cell (where there is one): the top pixel of the taller
@@ -264,7 +353,7 @@ void fragment() {
 	float inside = valley_depth(world) / texel_size;
 	vec3 color;
 	if (inside < 0.0) {
-		color = massif(pixel, np, -inside);
+		color = uplands(pixel, np, -inside);
 	} else {
 		vec4 field = field_at(pixel);
 		float pond = pond_depth(field);

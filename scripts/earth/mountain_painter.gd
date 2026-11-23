@@ -7,8 +7,13 @@ extends RefCounted
 ##
 ## Every peak has a look (NelvarEarthData.Peak): a summit with shoulders, a broad
 ## massif of several tops, a cluster of rocky needles, a flat-topped mesa in layered
-## rock, a giant with glaciers running down its gullies, or a low crag on the plateau.
+## rock, a giant with glaciers running down its gullies, or a low crag on the uplands.
 ## The rock of each peak takes one of a few tints, so the range is not one colour.
+##
+## A peak rises out of the ground rather than standing on it: lighter towards the top,
+## darker at the base, grass climbing its gullies from the foot, and the foot
+## dissolving into the floor. Some carry a waterfall (Thing.accent): its water and foam
+## are keyed by alpha and animated by waterfall.gdshader.
 
 const STEP := NelvarEarthData.PIXEL
 const Peak = NelvarEarthData.Peak
@@ -31,10 +36,20 @@ const HAZE := Color8(178, 210, 222)
 ## The menu's green foothills and treeline.
 const FOOT: Array[Color] = [Color8(40, 86, 68), Color8(56, 104, 82), Color8(70, 124, 88),
 	Color8(88, 144, 94)]
-## Turf of the high plateau (earth_ground.gdshader, TURF): the crags' feet.
-const TURF: Array[Color] = [Color8(70, 96, 72), Color8(88, 116, 80), Color8(110, 138, 88),
-	Color8(138, 160, 100)]
-const SHADOW := Color(0.1, 0.14, 0.2, 0.32)
+## The uplands' grass: the valley's, faded towards the haze (earth_ground.gdshader,
+## UPLAND_HAZE and UPLAND_FADE). The feet of everything beyond the nearest row.
+const MEADOW: Array[Color] = [Color8(86, 123, 89), Color8(95, 135, 92), Color8(106, 148, 95),
+	Color8(119, 158, 100)]
+## Firs on the uplands, faded like the meadow.
+const MEADOW_FIRS: Array[Color] = [Color8(74, 102, 87), Color8(80, 112, 90)]
+## Waterfall pixels: the alpha keys waterfall.gdshader animates, and the colours they
+## show without it.
+const WATER_KEY := 250
+const FOAM_KEY := 251
+const MIST_KEY := 252
+const WATER := Color8(104, 168, 196, WATER_KEY)
+const FOAM := Color8(236, 246, 248, FOAM_KEY)
+const MIST := Color8(220, 236, 242, MIST_KEY)
 
 
 class Summit:
@@ -63,11 +78,10 @@ func paint(thing: NelvarEarthData.Thing) -> NelvarEarthArt:
 	var height := thing.size.y / STEP
 	var half := width * 0.5
 	var plateau := shape == Peak.CRAG
-	# Everything but the nearest row stands on the plateau: a turf foot and a shadow.
+	# Everything but the nearest row stands on the uplands: its foot is their meadow.
 	var on_plateau := plateau or thing.row > 0
-	var below := 4.0 + height * 0.1 if on_plateau else 2.0
 	var canvas := NelvarEarthCanvas.new(thing.position, Rect2(-half - 2.0, -height - 4.0,
-		width + 4.0, height + 4.0 + below))
+		width + 4.0, height + 6.0))
 	# Seen from above the far rows stand on the same plateau: only a little haze.
 	var haze := clampf(thing.row * 0.1, 0.0, 0.3) if not plateau else 0.06
 	var tint: Array = ROCK_TINTS[rng.randi_range(0, ROCK_TINTS.size() - 1)]
@@ -80,14 +94,15 @@ func paint(thing: NelvarEarthData.Thing) -> NelvarEarthArt:
 	for color in SNOW:
 		snow.append(color.lerp(HAZE, haze * 0.3))
 	var outline := OUTLINE.lerp(rock[1], haze)
+	# The silhouette's left edge: dark rock, not a drawn line.
+	var edge := rock[0].lerp(OUTLINE, 0.35)
 	var style := _style(shape, rng)
 	var summits := _summits(shape, rng, width, height)
 	var main := summits[0]
 	var salt := rng.randi() & 0xffff
 	var snow_depth := height * rng.randf_range(style.snow.x, style.snow.y) + (4.0 if style.snow.y > 0.0 else 0.0)
-	var foot_height := height * 0.1 + 3.0 if thing.row == 0 and not plateau else 0.0
-	if on_plateau:
-		foot_height = height * 0.05 + 2.0
+	var foot_height := height * (0.14 if on_plateau else 0.12) + 3.0
+	var foot: Array[Color] = MEADOW if on_plateau else FOOT
 	var glacier := height * style.glacier
 	var band := maxf(4.0, height * rng.randf_range(0.09, 0.12))
 	var w := canvas.size.x
@@ -129,11 +144,12 @@ func paint(thing: NelvarEarthData.Thing) -> NelvarEarthArt:
 			continue
 		# A ragged ridge: broad shoulders and small teeth, the summit itself kept.
 		var near_summit := clampf((maxf(0.0, absf(column - owner.x) - owner.flat)) / 6.0, 0.0, 1.0)
-		var broad := (NelvarPixelArt.value_noise(column * 0.06, 0.5, salt + 6) - 0.5) * minf(12.0, height * 0.09)
+		var broad := (NelvarPixelArt.value_noise(column * 0.05, 0.5, salt + 6) - 0.5) * minf(18.0, height * 0.12) \
+			+ (NelvarPixelArt.value_noise(column * 0.14, 1.5, salt + 9) - 0.5) * minf(5.0, height * 0.04)
 		var teeth := (NelvarPixelArt.value_noise(column * 0.35, 0.5, salt) - 0.5) * 3.0 * style.teeth
 		if on_flat:
-			broad *= 0.12
-			teeth *= 0.4
+			broad *= 0.3
+			teeth *= 0.6
 			near_summit = 1.0
 		top += (broad + teeth) * near_summit
 		if top >= -0.5:
@@ -183,39 +199,50 @@ func paint(thing: NelvarEarthData.Thing) -> NelvarEarthArt:
 			var gully := NelvarPixelArt.value_noise((column - owner.x) / (below_top + 6.0) * 7.0,
 				owner.x * 0.1, salt + 5)
 			var cell := canvas.grid + Vector2i(x, y)
-			var level := (0.66 if lit else 0.26) + (gully - 0.5) * 0.35 \
-				+ (NelvarPixelArt.hash01(cell.x, cell.y, salt) - 0.5) * 0.12 - (at - skyline[x]) * 0.002
-			var seam := false
+			# Lighter towards the top, darker at the base.
+			var up := clampf(at / main.top, 0.0, 1.0)
+			var level := (0.62 if lit else 0.26) + (gully - 0.5) * 0.35 + (up - 0.45) * 0.3 \
+				+ (NelvarPixelArt.hash01(cell.x, cell.y, salt) - 0.5) * 0.12
 			if style.strata and below_top < band * 3.2:
-				# A cap of layered rock under the top: a few bands, a seam between them.
+				# A cap of layered rock under the top: a few lighter and darker bands.
 				var layer := (below_top + wobble) / band
-				level += 0.06 if int(floor(layer)) % 2 == 0 else -0.04
-				seam = layer - floor(layer) < 1.0 / band and at > skyline[x] + 2.0 and layer > 0.6
+				level += 0.07 if int(floor(layer)) % 2 == 0 else -0.05
 			var color: Color
 			# Glaciers: the snow runs further down the deepest gullies.
 			var tongue := maxf(0.0, gully - 0.56) / 0.44 * glacier
 			if at < snow_lines[x] + (gully - 0.5) * 6.0 + tongue:
 				color = NelvarPixelArt.ramp(snow, level + 0.12 + (0.0 if at < snow_lines[x] else -0.1), cell)
-			elif at > foot_lines[x] and foot_height > 0.0:
-				# Grass (and by the valley firs) climbing the foot, ragged against the rock.
-				color = NelvarPixelArt.ramp(TURF if on_plateau else FOOT,
-					(0.55 if lit else 0.25) + (gully - 0.5) * 0.3, cell)
+			elif at > foot_lines[x] - maxf(0.0, gully - 0.5) * foot_height * 1.8:
+				# Grass climbing the foot and up the gullies, a stone here and there.
+				color = NelvarPixelArt.ramp(foot, (0.6 if lit else 0.25) + (gully - 0.5) * 0.3, cell)
+				if NelvarPixelArt.hash01(cell.x, cell.y, salt + 11) < 0.06:
+					color = rock[1] if lit else rock[0]
 			else:
 				color = NelvarPixelArt.ramp(rock, level, cell)
-				if seam:
-					color = rock[0] if lit else outline
-			# Outline on the shaded skyline and down the left edge of the silhouette.
-			if (y == tops[x] and not lit) or (y < left_top and at < -1.0):
-				color = outline
+			# A dark line on the shaded skyline, a lit rim on the sunny one; the left edge
+			# of the silhouette in dark rock.
+			if y == tops[x]:
+				if not lit:
+					color = outline
+				elif at < snow_lines[x]:
+					color = snow[2]
+				else:
+					color = rock[4]
+			elif y < left_top and at < -foot_height:
+				color = edge
 			data.encode_u32((y * w + x) * 4, color.to_abgr32())
 			canvas.body[y * w + x] = 1
 			canvas.levels[y * w + x] = level
 	canvas.image = Image.create_from_data(w, h, false, Image.FORMAT_RGBA8, data)
-	if thing.row == 0 and not plateau:
-		_firs(canvas, rng, half, foot_height)
-	if on_plateau:
-		_shadow(canvas, half, height)
-	return NelvarEarthArt.from_canvas(canvas)
+	if plateau:
+		_firs(canvas, rng, half, foot_height * 0.6, MEADOW_FIRS, 0.25)
+	else:
+		_firs(canvas, rng, half, foot_height, MEADOW_FIRS if on_plateau else FOOT.slice(0, 2),
+			0.5 if on_plateau else 1.0)
+	var art := NelvarEarthArt.from_canvas(canvas)
+	if thing.accent and shape in [Peak.SUMMIT, Peak.MASSIF, Peak.MESA, Peak.GIANT]:
+		art.waterfall = _waterfall(canvas, rng, main, tops, snow_lines, height)
+	return art
 
 
 func _style(shape: int, rng: RandomNumberGenerator) -> Style:
@@ -328,35 +355,70 @@ func _add_shoulder(summits: Array[Summit], main: Summit, rng: RandomNumberGenera
 	summits.append(shoulder)
 
 
-## A shadow on the plateau, falling down-left like those in the valley.
-func _shadow(canvas: NelvarEarthCanvas, half: float, height: float) -> void:
-	var center := Vector2(-half * 0.1, 0.5)
-	var reach := Vector2(half * 0.95, 2.0 + height * 0.08)
-	var from := canvas.pixel(center - reach)
-	var to := canvas.pixel(center + reach)
-	for y in range(maxi(0, from.y), mini(canvas.size.y, to.y + 1)):
-		for x in range(maxi(0, from.x), mini(canvas.size.x, to.x + 1)):
-			if canvas.is_body(x, y):
-				continue
-			var color := NelvarPixelArt.shadow_at(canvas.center_of(x, y), center, reach,
-				canvas.grid + Vector2i(x, y))
-			if color.a > 0.0:
-				canvas.image.set_pixel(x, y, SHADOW)
-
-
-## Little dark firs along the green foot of the nearest row (the menu's treeline).
-func _firs(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, half: float, foot: float) -> void:
+## Little dark firs along the green foot (the menu's treeline); `share` of the spots
+## get one.
+func _firs(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, half: float, foot: float,
+		colors: Array[Color], share: float) -> void:
 	var x := -half + rng.randf_range(0.0, 4.0)
 	while x < half:
 		var tall := rng.randf_range(4.0, 7.0) + foot * 0.3
 		var base := -rng.randf_range(0.0, foot * 0.5)
 		var probe := canvas.pixel(Vector2(x, base - 1.0))
-		if canvas.is_body(probe.x, probe.y):
+		if rng.randf() < share and canvas.is_body(probe.x, probe.y):
 			for k in int(tall):
 				var reach := int(k * 0.38)
 				for dx in range(-reach, reach + 1):
-					var color := FOOT[0] if dx <= 0 else FOOT[1]
+					var color := colors[0] if dx <= 0 else colors[1]
 					if dx == -reach:
 						color = NelvarEarthPainter.PINE_OUTLINE
 					canvas.put_at(Vector2(x + dx, base - tall + k), color, 0.3)
 		x += rng.randf_range(2.5, 6.0)
+
+
+## A waterfall down the face near the summit: from under the snow (or two fifths of
+## the way down) to the foot. A thin thread at the top, it spreads as it falls, with
+## ragged edges and a little white water; at small ledges it steps sideways in a burst
+## of spray; where it lands, foam and drifting mist. False when the face has no room.
+func _waterfall(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, main: Summit,
+		tops: PackedInt32Array, snow_lines: PackedFloat32Array, height: float) -> bool:
+	var widest := clampf(height * 0.024, 1.5, 3.5)
+	var side := -1.0 if rng.randf() < 0.5 else 1.0
+	var x := float(canvas.pixel(Vector2(main.x + side * rng.randf_range(0.03, 0.1) * height, 0.0)).x)
+	var column := int(x)
+	if column < 6 or column >= canvas.size.x - 6 or tops[column] >= canvas.size.y:
+		return false
+	var start := maxf(canvas.center_of(0, tops[column]).y + 3.0,
+		maxf(snow_lines[column] + 2.0, -height * 0.62))
+	var bottom := canvas.pixel(Vector2(0.0, -1.0)).y
+	var top := canvas.pixel(Vector2(0.0, start)).y
+	if bottom - top < 10:
+		return false
+	var ledge := top + rng.randi_range(8, 14)
+	var spray := 0
+	for y in range(top, bottom + 1):
+		var fall := float(y - top) / float(bottom - top)
+		var half := lerpf(0.4, widest, sqrt(fall))
+		if y == ledge:
+			x += (1.0 if rng.randf() < 0.5 else -1.0) * rng.randi_range(1, 2)
+			ledge = y + rng.randi_range(8, 14)
+			spray = 2
+		var left := roundi(x - half) - (1 if rng.randf() < 0.25 else 0)
+		var right := roundi(x + half) + (1 if rng.randf() < 0.25 else 0)
+		for px in range(left, right + 1):
+			canvas.put(px, y, FOAM if rng.randf() < 0.08 else WATER)
+		if spray > 0:
+			# Spray thrown out on both sides of the ledge.
+			for px in range(left - 2, right + 3):
+				if (px < left or px > right) and rng.randf() < 0.45:
+					canvas.put(px, y, FOAM)
+			spray -= 1
+	# Where it lands: foam, and mist above it.
+	var reach := roundi(widest) + 3
+	for dy in range(-4, 2):
+		for dx in range(-reach - 1, reach + 2):
+			var spot := Vector2(dx / float(reach + 1), (dy + 0.5) / 2.0)
+			if dy >= -1 and spot.length() <= 1.05:
+				canvas.put(roundi(x) + dx, bottom + dy, FOAM)
+			elif dy < -1 and absi(dx) <= reach and rng.randf() < 0.35:
+				canvas.put(roundi(x) + dx, bottom + dy, MIST)
+	return true
