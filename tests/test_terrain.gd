@@ -29,6 +29,12 @@ func _run() -> void:
 	grassless.grass_density = 0.0
 	var without_grass := painter.paint(data, grassless)
 	var grassless_bridges := bridge_painter.paint(data, grassless)
+	var flowerless := style.duplicate() as NelvarTerrainStyle
+	flowerless.flower_density = 0.0
+	var without_flowers := painter.paint(data, flowerless)
+	var only_flowers := style.duplicate() as NelvarTerrainStyle
+	only_flowers.flower_density = 1.0
+	var all_flowers := painter.paint(data, only_flowers)
 	_check(artwork.size() == data.islands.size(), "An island has no pixel artwork")
 	for i in artwork.size():
 		var art := artwork[i]
@@ -41,6 +47,16 @@ func _run() -> void:
 			"Grass density has no visible effect")
 		_check(art.underside_image.get_data() == without_grass[i].underside_image.get_data(),
 			"Changing grass density changed roots or cliffs")
+		_check(art.underside_image.get_data() == without_flowers[i].underside_image.get_data(),
+			"Changing flower density changed roots or cliffs")
+		var tufts := _count_colors(without_flowers[i].surface_image,
+			[NelvarTerrainPainter.TUFT_TIP, NelvarTerrainPainter.TUFT_TIP_BRIGHT])
+		var flowers := _count_colors(art.surface_image, NelvarTerrainPainter.FLOWER_PETALS)
+		var crowded := _count_colors(all_flowers[i].surface_image, NelvarTerrainPainter.FLOWER_PETALS)
+		_check(flowers == 0 or flowers < tufts, "Flowers are not rarer than grass tufts")
+		_check(crowded > flowers or tufts == 0, "Flower density has no visible effect")
+		_check(_count_colors(without_flowers[i].surface_image, NelvarTerrainPainter.FLOWER_PETALS) == 0,
+			"Flowers appear with zero flower density")
 		var origin := art.world_rect.position / art.pixel_size
 		_check(origin.is_equal_approx(origin.round()), "Artwork is not aligned to the world pixel grid")
 		_check(art.world_rect.size == Vector2(art.surface_image.get_size()) * art.pixel_size,
@@ -95,6 +111,15 @@ func _check_bridges(data: NelvarWorldData, artwork: Array[NelvarBridgeArt],
 				point += side * offset * (bridge.width * 0.5 - art.pixel_size * 2.0)
 				var cell := Vector2i(((point - art.world_rect.position) / art.pixel_size).floor())
 				_check(art.image.get_pixelv(cell).a > 0.5, "Hole in the visible bridge deck")
+
+
+func _count_colors(image: Image, colors: Array[Color]) -> int:
+	var total := 0
+	for y in image.get_height():
+		for x in image.get_width():
+			if colors.has(image.get_pixel(x, y)):
+				total += 1
+	return total
 
 
 func _geometry_fingerprint(data: NelvarWorldData) -> int:

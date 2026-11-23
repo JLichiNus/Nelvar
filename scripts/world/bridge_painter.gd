@@ -5,18 +5,19 @@ extends RefCounted
 
 const PLANK_LENGTH := 16.0
 const POST_SPACING := 64.0
+## Sun-bleached planks of the air reality.
 const WOOD_PALETTE: Array[Color] = [
-	Color("aa8053"), Color("b28a58"), Color("b99360"),
-	Color("a77b4e"), Color("bd9765"), Color("af8554"),
+	Color("b49c84"), Color("bca48a"), Color("c4ac90"),
+	Color("b09880"), Color("c8b094"), Color("b8a086"),
 ]
-const BOARD_GAP := Color("6e5037")
-const BOARD_GRAIN := Color("9c754b")
-const BOARD_LIGHT := Color("c6a474")
-const RAIL_LIGHT := Color("e0bc7e")
-const RAIL_BODY := Color("c4a169")
-const RAIL_SHADE := Color("9e7b4e")
-const POST_OUTLINE := Color("624932")
-const POST_LIGHT := Color("d1ae73")
+const BOARD_GAP := Color("6a5a5a")
+const BOARD_GRAIN := Color("a48c76")
+const BOARD_LIGHT := Color("d4c2a6")
+const RAIL_LIGHT := Color("e6d6b8")
+const RAIL_BODY := Color("ccb898")
+const RAIL_SHADE := Color("a08a74")
+const POST_OUTLINE := Color("5a4c56")
+const POST_LIGHT := Color("d8c6a8")
 
 
 func paint(data: NelvarWorldData, style: NelvarTerrainStyle) -> Array[NelvarBridgeArt]:

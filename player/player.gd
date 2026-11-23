@@ -66,7 +66,7 @@ var _primary_cooldown_left := 0.0
 var _wave_cooldown_left := 0.0
 var _compression_cooldown_left := 0.0
 var _speed_boost_state := SpeedBoostState.READY
-# Ctrl переключает бег/ходьбу; любая атака сбрасывает бег.
+# Ctrl переключает бег/ходьбу; любая атака или остановка сбрасывает бег.
 var _is_running := false
 var health: float
 var _invulnerability_left := 0.0
@@ -115,7 +115,8 @@ func _process(delta: float) -> void:
 	_wave_cooldown_left = maxf(_wave_cooldown_left - delta, 0.0)
 	_compression_cooldown_left = maxf(_compression_cooldown_left - delta, 0.0)
 
-	if Input.is_action_just_pressed("toggle_run"):
+	# Стоя на месте Ctrl ничего не делает.
+	if Input.is_action_just_pressed("toggle_run") and _is_move_input_held():
 		_is_running = not _is_running
 	if Input.is_action_pressed("attack_primary"):
 		_try_primary_attack()
@@ -125,6 +126,10 @@ func _process(delta: float) -> void:
 		_try_speed_boost()
 	if Input.is_action_just_pressed("special_compression"):
 		_try_compression()
+
+
+func _is_move_input_held() -> bool:
+	return Input.get_vector("move_left", "move_right", "move_up", "move_down") != Vector2.ZERO
 
 
 # Корпус парит над смерчем, покачиваясь на целый тексель — пиксели
@@ -164,6 +169,9 @@ func _physics_process(delta: float) -> void:
 		"move_up",
 		"move_down"
 	)
+	# Бег возможен только в движении: остановка его сбрасывает.
+	if direction == Vector2.ZERO:
+		_is_running = false
 
 	# Ускорение задаёт фиксированную скорость независимо от бега/ходьбы.
 	var speed_multiplier := 1.0
@@ -305,7 +313,7 @@ func _die() -> void:
 	aim_pivot.visible = false
 	hurtbox.set_deferred("monitoring", false)
 	died.emit()
-	get_tree().create_timer(death_restart_delay).timeout.connect(
+	get_tree().create_timer(death_restart_delay, false).timeout.connect(
 		_restart_scene
 	)
 

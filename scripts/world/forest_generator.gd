@@ -51,9 +51,9 @@ func _cluster(island: NelvarWorldData.Island, existing: NelvarForestData,
 			* rng.randf_range(0.3, 0.70) * island.radius
 		if center.distance_to(island.center) < config.hub_radius + 24.0:
 			continue
-		if _in_path(center, 20.0, island, world, config):
+		if in_path(center, 20.0, island, world, config):
 			continue
-		if not _inside_shore(center, island, 56.0):
+		if not inside_shore(center, island, 56.0):
 			continue
 		var overlaps := false
 		for other in existing.clusters:
@@ -86,7 +86,7 @@ func _members(cluster: NelvarForestData.Cluster, island: NelvarWorldData.Island,
 		tree.trunk_radius = rng.randf_range(config.trunk_radius.x, config.trunk_radius.y)
 		tree.canopy_radius = rng.randf_range(config.canopy_radius.x, config.canopy_radius.y)
 		tree.trunk_height = rng.randf_range(config.trunk_height.x, config.trunk_height.y)
-		tree.lean = rng.randf_range(-12.0, 12.0)
+		tree.lean = rng.randf_range(3.0, 15.0)  # ветер дует вправо
 		tree.palette = cluster.palette if rng.randf() < 0.8 else rng.randi_range(0, 2)
 		tree.form = cluster.form if rng.randf() < 0.8 else rng.randi_range(0, 2)
 		tree.appearance_seed = int(rng.randi())
@@ -109,7 +109,7 @@ func _fits(tree: NelvarForestData.TreeSpec, island: NelvarWorldData.Island,
 	var axes := tree.canopy_axes() * 1.25 + Vector2.ONE * 48.0
 	if ((world.spawn_position - crown) / axes).length_squared() < 1.0:
 		return false
-	if _in_path(point, tree.trunk_radius, island, world, config):
+	if in_path(point, tree.trunk_radius, island, world, config):
 		return false
 	for other in existing.trees:
 		if not _separated(tree, other, config):
@@ -117,7 +117,7 @@ func _fits(tree: NelvarForestData.TreeSpec, island: NelvarWorldData.Island,
 	for other in local_trees:
 		if not _separated(tree, other, config):
 			return false
-	return _inside_shore(point, island, tree.trunk_radius + config.shore_margin)
+	return inside_shore(point, island, tree.trunk_radius + config.shore_margin)
 
 
 func _separated(a: NelvarForestData.TreeSpec, b: NelvarForestData.TreeSpec,
@@ -126,7 +126,8 @@ func _separated(a: NelvarForestData.TreeSpec, b: NelvarForestData.TreeSpec,
 	return a.position.distance_squared_to(b.position) >= spacing * spacing
 
 
-func _in_path(point: Vector2, radius: float, island: NelvarWorldData.Island,
+## True when a circle crosses the reserved route from the island hub to one of its bridges.
+static func in_path(point: Vector2, radius: float, island: NelvarWorldData.Island,
 		world: NelvarWorldData, config: NelvarForestConfig) -> bool:
 	for bridge in world.bridges:
 		var landing: Vector2
@@ -142,7 +143,8 @@ func _in_path(point: Vector2, radius: float, island: NelvarWorldData.Island,
 	return false
 
 
-func _inside_shore(point: Vector2, island: NelvarWorldData.Island, clearance: float) -> bool:
+## True when the point is on the island and at least `clearance` away from its shore.
+static func inside_shore(point: Vector2, island: NelvarWorldData.Island, clearance: float) -> bool:
 	if not Geometry2D.is_point_in_polygon(point, island.polygon):
 		return false
 	for i in island.polygon.size():

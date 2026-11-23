@@ -6,6 +6,9 @@ const LAYOUT_ATTEMPTS := 16
 const PLACEMENT_SAMPLES := 180
 const SHORE_ENVELOPE := 1.17
 const GEOMETRY_EPSILON := 0.01
+## Exposed edge pieces shorter than this are numerical slivers where a bridge meets a
+## shore; far narrower than any body, so dropping them leaves no gap to slip through.
+const MIN_BORDER_LENGTH := 0.5
 
 
 func generate(config: NelvarWorldConfig, world_seed: int) -> NelvarWorldData:
@@ -322,7 +325,7 @@ func _build_borders(data: NelvarWorldData, config: NelvarWorldConfig) -> void:
 						cuts.append(clampf((hit - start).dot(delta) / delta.length_squared(), 0.0, 1.0))
 			cuts.sort()
 			for i in range(1, cuts.size()):
-				if (cuts[i] - cuts[i - 1]) * delta.length() < GEOMETRY_EPSILON:
+				if (cuts[i] - cuts[i - 1]) * delta.length() < MIN_BORDER_LENGTH:
 					continue
 				var middle := start + delta * (cuts[i] + cuts[i - 1]) * 0.5
 				var hidden := false
@@ -354,7 +357,7 @@ func _add_border(data: NelvarWorldData, config: NelvarWorldConfig,
 	for i in range(1, cuts.size()):
 		var a := start + delta * cuts[i - 1]
 		var b := start + delta * cuts[i]
-		if a.distance_to(b) < GEOMETRY_EPSILON:
+		if a.distance_to(b) < MIN_BORDER_LENGTH:
 			continue
 		var border := NelvarWorldData.Border.new()
 		border.start = a

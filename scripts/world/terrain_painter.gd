@@ -1,19 +1,40 @@
 class_name NelvarTerrainPainter
 extends RefCounted
-## Rasterizes existing island geometry once, then paints a deterministic pixel skin.
+## Rasterizes existing island geometry once, then paints a deterministic pixel skin
+## in the palette of the air reality: pale grass, mauve earth, cool dark outlines.
 
 const MARGIN := 14
 const GRASS_CELL := 9
 const GRASS_PALETTE: Array[Color] = [
-	Color("718745"), Color("7d934c"), Color("899e54"), Color("96a95e"),
+	Color("7cb680"), Color("88c088"), Color("96ca92"), Color("a4d49c"),
 ]
-const DIRT_PALETTE: Array[Color] = [Color("9c8d5d"), Color("ab9866"), Color("b4a16e")]
-const OUTLINE := Color("3f5134")
-const RIM_LIGHT := Color("c2c577")
-const RIM_DARK := Color("728247")
-const ROOT_OUTLINE := Color("3e322a")
-const ROOT_BODY := Color("79583d")
-const ROOT_LIGHT := Color("b38a56")
+const DIRT_PALETTE: Array[Color] = [Color("b0a096"), Color("bcaca0"), Color("c6b8aa")]
+const OUTLINE := Color("3c5c58")
+const RIM_LIGHT := Color("ceecc0")
+const RIM_SOFT := Color("b4dea4")
+const RIM_DARK := Color("68a074")
+const CLIFF_LIP := Color("544e64")
+const CLIFF_STRATA: Array[Color] = [Color("a8968c"), Color("9c8a82")]
+const CLIFF_BODY := Color("847474")
+const CLIFF_BLOCK_LIGHT := Color("92807c")
+const CLIFF_BLOCK_DARK := Color("726468")
+const CLIFF_BOTTOM := Color("48445a")
+const CLIFF_STREAK := Color("605662")
+const CLIFF_SPECK := Color("baa89c")
+const ROOT_OUTLINE := Color("464054")
+const ROOT_BODY := Color("706268")
+const ROOT_LIGHT := Color("9c8a82")
+const TUFT_SHADOW := Color("6aa676")
+const TUFT_STEM := Color("5e9c6c")
+const TUFT_TIP := Color("c4e8b0")
+const TUFT_TIP_BRIGHT := Color("def2c8")
+const TUFT_SIDE_TIP := Color("a8d89a")
+## Pastel petals; the centre is yellow, or white on yellow petals.
+const FLOWER_PETALS: Array[Color] = [
+	Color("f6f6fc"), Color("f8e896"), Color("f4bace"), Color("ccbef4"), Color("accef8"),
+]
+const FLOWER_CENTER := Color("fadc78")
+const FLOWER_CENTER_PALE := Color("fffdf0")
 
 class Raster:
 	var width: int
@@ -125,7 +146,7 @@ func _paint_ground(art: NelvarIslandArt, raster: Raster, noise: FastNoiseLite,
 				var north := raster.mask[index - raster.width * 2] == 0
 				color = RIM_LIGHT if north else RIM_DARK
 			elif edge_distance == 3 and raster.mask[index - raster.width * 3] == 0:
-				color = Color("a7b561")
+				color = RIM_SOFT
 			art.surface_image.set_pixel(x, y, color)
 
 
@@ -141,22 +162,22 @@ func _paint_cliff(art: NelvarIslandArt, raster: Raster, style: NelvarTerrainStyl
 		for drop in range(1, depth + 1):
 			var y := bottom + drop
 			var block := _hash(floori(float(gx) / 7.0), drop / 3, paint_seed ^ 0x73A1)
-			var color := Color("806043")
+			var color := CLIFF_BODY
 			if drop <= 2:
-				color = Color("55432e")
+				color = CLIFF_LIP
 			elif drop <= 4:
-				color = Color("a18051") if block % 3 == 0 else Color("947148")
+				color = CLIFF_STRATA[0] if block % 3 == 0 else CLIFF_STRATA[1]
 			elif drop >= depth - 1:
-				color = Color("44382d")
+				color = CLIFF_BOTTOM
 			elif block % 5 == 0:
-				color = Color("936c47")
+				color = CLIFF_BLOCK_LIGHT
 			elif block % 5 == 1:
-				color = Color("6d513b")
+				color = CLIFF_BLOCK_DARK
 			if drop > 3 and drop < depth - 1:
 				if _hash(gx, 0, paint_seed ^ 0xA713) % 23 == 0:
-					color = Color("503e2e")
+					color = CLIFF_STREAK
 				elif _hash(gx, drop, paint_seed) % 79 == 0:
-					color = Color("ba9763")
+					color = CLIFF_SPECK
 			art.underside_image.set_pixel(x, y, color)
 
 
@@ -218,20 +239,57 @@ func _paint_grass(art: NelvarIslandArt, raster: Raster, data: NelvarWorldData,
 			if _near_bridge(world_point, data, float(art.pixel_size) * 5.0):
 				continue
 			_tuft(art.surface_image, Vector2i(x, y), 3 + key % 3, key)
+			# Some tufts get a flower beside them: flowers grow in the grass, never alone.
+			var flower_key := _hash(grid_origin.x + x, grid_origin.y + y, paint_seed ^ 0x5F10)
+			if float(flower_key % 1000) / 1000.0 >= style.flower_density:
+				continue
+			var side := -1 if (flower_key >> 10) % 2 == 0 else 1
+			var spot := Vector2i(x + side * (3 + (flower_key >> 11) % 2), y + (flower_key >> 12) % 3)
+			if raster.distance[spot.y * raster.width + spot.x] < 6:
+				continue
+			if _is_dirt(noise.get_noise_2d(grid_origin.x + spot.x, grid_origin.y + spot.y),
+					_hash(grid_origin.x + spot.x, grid_origin.y + spot.y, paint_seed)):
+				continue
+			var flower_point := art.world_rect.position + (Vector2(spot) + Vector2(0.5, 0.5)) * art.pixel_size
+			if _near_bridge(flower_point, data, float(art.pixel_size) * 4.0):
+				continue
+			_flower(art.surface_image, spot, flower_key >> 13)
 
 
 func _tuft(image: Image, base: Vector2i, height: int, key: int) -> void:
-	var shadow := Color("536d37")
-	var stem := Color("637f3c")
-	var tip := Color("b5c76f") if key % 4 != 0 else Color("d0d58a")
-	_pixel_line(image, base + Vector2i(-1, 0), base + Vector2i(2, 0), 1, shadow)
-	_pixel_line(image, base, base + Vector2i(0, -height), 1, stem)
-	_pixel_line(image, base + Vector2i(-1, -1), base + Vector2i(-2, -height + 1), 1, shadow)
-	_pixel_line(image, base + Vector2i(1, -1), base + Vector2i(3, -height + 1), 1, stem)
+	var tip := TUFT_TIP if key % 4 != 0 else TUFT_TIP_BRIGHT
+	_pixel_line(image, base + Vector2i(-1, 0), base + Vector2i(2, 0), 1, TUFT_SHADOW)
+	_pixel_line(image, base, base + Vector2i(0, -height), 1, TUFT_STEM)
+	_pixel_line(image, base + Vector2i(-1, -1), base + Vector2i(-2, -height + 1), 1, TUFT_SHADOW)
+	_pixel_line(image, base + Vector2i(1, -1), base + Vector2i(3, -height + 1), 1, TUFT_STEM)
 	image.set_pixelv(base + Vector2i(0, -height), tip)
 	image.set_pixelv(base + Vector2i(3, -height + 1), tip)
 	if key % 3 == 0:
-		image.set_pixelv(base + Vector2i(-2, -height + 1), Color("9fb45c"))
+		image.set_pixelv(base + Vector2i(-2, -height + 1), TUFT_SIDE_TIP)
+
+
+## A small pastel flower on a short stem: a cross-shaped head, a single bud, or a pair of buds.
+func _flower(image: Image, base: Vector2i, key: int) -> void:
+	var petal := FLOWER_PETALS[key % FLOWER_PETALS.size()]
+	var center := FLOWER_CENTER_PALE if petal == FLOWER_PETALS[1] else FLOWER_CENTER
+	var bud := petal.lightened(0.35)
+	image.set_pixelv(base, TUFT_STEM)
+	image.set_pixelv(base + Vector2i(0, -1), TUFT_STEM)
+	match (key >> 3) % 3:
+		0:
+			var head := base + Vector2i(0, -3)
+			for offset: Vector2i in [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1)]:
+				image.set_pixelv(head + offset, petal)
+			image.set_pixelv(head, center)
+			image.set_pixelv(base + Vector2i(1, -1), TUFT_SHADOW)
+		1:
+			image.set_pixelv(base + Vector2i(0, -2), petal)
+			image.set_pixelv(base + Vector2i(0, -3), bud)
+		_:
+			image.set_pixelv(base + Vector2i(0, -2), petal)
+			image.set_pixelv(base + Vector2i(2, 1), TUFT_STEM)
+			image.set_pixelv(base + Vector2i(2, 0), petal)
+			image.set_pixelv(base + Vector2i(2, -1), bud)
 
 
 func _near_bridge(point: Vector2, data: NelvarWorldData, margin: float) -> bool:

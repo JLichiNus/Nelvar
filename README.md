@@ -35,7 +35,7 @@ in the upper-left corner and printed to Output.
 - **Shift:** short flight (speed boost); airborne the player ignores contact damage.
 - **LMB:** wind projectile. **RMB:** wind wave. **R:** compression on the enemy nearest to the cursor.
 - **Mouse wheel:** zoom the camera attached to the player.
-- **F3:** show occupied chunks, collision boundaries, trunk circles and island IDs.
+- **F3:** show occupied chunks, collision boundaries, trunk circles, rock footprints and island IDs.
 
 The player (`player/player.tscn`) is drawn from two animated layers: legs play
 the locomotion, the torso follows it or plays an attack on top. The node origin
@@ -50,22 +50,32 @@ The earth map contains 2–3 large floating islands and 6–7 small ones, connec
 by narrow wooden bridges. Shorelines and bridge sides block movement; falling
 and height differences are not implemented yet.
 
+The world wears the style of the air reality from the main menu. The islands
+float above a sea of clouds (`scripts/world/cloud_sea.gd` and its shader): puffy
+pixel clouds in overlapping rows, lit from the upper right and dithered like the
+menu art, with small gaps where the sky shows through. The sea lies deeper than
+the islands, so it follows the camera with parallax, and drifts smoothly with the
+wind. It is computed once per cloud pixel in a small viewport and stretched over
+the screen with a sub-pixel offset. Thin wind streaks, as in the menu, fly over
+the world (`scripts/fx/wind_particles.gd`).
+
 Bridge decks, board seams, rails, end caps and posts are generated procedurally
 and baked onto the same world pixel grid as the islands. Angled bridges are
 rasterized before display, so the finished pixels remain aligned with the
 terrain. The experimental bridge tile remains in `assets/textures/bridge/`
 for later use and is not loaded by the renderer.
 
-Island artwork is painted procedurally after map generation: grass and dirt
-patches, stepped shorelines, layered cliffs, branching roots and individual
-grass tufts. Artwork follows a shared world pixel grid and is baked once per
+Island artwork is painted procedurally after map generation: pale grass and
+earth patches, stepped shorelines, layered cliffs, branching roots, individual
+grass tufts and small flowers beside some of them. Artwork follows a shared world pixel grid and is baked once per
 island; chunks display regions of those same textures to avoid seams. Painting
 does not modify the generated surface, bridges or physics. Grass avoids bridge
 landings. The same seed and style reproduce the same artwork.
 
 Visual settings are exposed in `resources/earth_terrain_style.tres`:
 `pixel_size` is measured in world units (4 by default), `cliff_depth` and
-`root_length` in terrain pixels, and `grass_density` controls tuft placement.
+`root_length` in terrain pixels, `grass_density` controls tuft placement and
+`flower_density` the share of tufts with a flower.
 
 Trees are generated in groves, leaving open ground between groups. Their
 placement uses a separate seeded generator with minimum trunk spacing, clear
@@ -78,6 +88,14 @@ Every trunk has a circular `StaticBody2D` collider. Trees and the player share
 the `Actors` Y-sort layer, sorted at their ground origins: the player is drawn
 behind trees when above their bases and in front when below. Canopies stay
 opaque. Collision only affects trunks, so the player can walk under foliage.
+
+Rocks and bushes are scattered after the forest (`NelvarPropGenerator`). Rocks
+keep the same hubs, bridge routes, spawn area and passages open as trunks, have
+an elliptic footprint collider and stop the player, enemies and projectiles.
+Bushes gather at the foot of trees and in the open and can be walked through.
+Neither is placed where a tree crown would hide it. Both Y-sort with the player
+and outline it when it stands behind them. Counts and sizes are exposed in
+`resources/earth_prop_config.tres`; clearances come from the forest config.
 
 Generation parameters are exposed in `resources/earth_map_config.tres`.
 The generator plans the islands and connected bridge graph, shapes the shores,
@@ -98,13 +116,16 @@ Run the generation and physics checks without opening a window:
 godot --headless --path . --script tests/test_world.gd -- --seeds=100
 godot --headless --path . --script tests/test_terrain.gd
 godot --headless --path . --script tests/test_forest.gd -- --seed=20261120
+godot --headless --path . --script tests/test_props.gd
 ```
 
 Here `godot` means the path to your Godot 4.7.2 executable. The checks cover
 island counts, connectivity, determinism, chunk geometry, spawn clearance,
 bridge landings, actual character movement and collision boundaries.
 Terrain checks cover repeatable island and bridge artwork across different
-chunk subdivisions, surface coverage, grass settings, hanging roots and
-unchanged map geometry.
+chunk subdivisions, surface coverage, grass and flower settings, hanging roots
+and unchanged map geometry.
 Forest checks cover repeatable groves and tree art, trunk spacing, clear bridge
 routes, circular colliders and actual movement into and around a tree.
+Prop checks cover rock and bush placement rules, repeatable prop art, rock
+colliders that stop the player and bushes the player walks through.

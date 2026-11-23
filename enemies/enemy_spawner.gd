@@ -1,7 +1,7 @@
 extends Node2D
 ## Без мира враги появляются в spawn_area (тестовая сцена). Со сгенерированным
-## миром (start(world, forest)) — на суше в кольце вокруг игрока,
-## не в воде и не в стволах деревьев.
+## миром (start(world, forest, props)) — на суше в кольце вокруг игрока,
+## не в небе, не в стволах деревьев и не в камнях.
 
 
 @export var enemy_scene: PackedScene
@@ -27,6 +27,7 @@ extends Node2D
 var _spawn_time_left := 0.0
 var _world: NelvarWorldData
 var _forest: NelvarForestData
+var _props: NelvarPropData
 
 
 func _ready() -> void:
@@ -35,12 +36,14 @@ func _ready() -> void:
 		start()
 
 
-func start(world: NelvarWorldData = null, forest: NelvarForestData = null) -> void:
+func start(world: NelvarWorldData = null, forest: NelvarForestData = null,
+		props: NelvarPropData = null) -> void:
 	if enemy_scene == null:
 		push_warning("Не назначена сцена врага для спавнера.")
 		return
 	_world = world
 	_forest = forest
+	_props = props
 	for _i in initial_count:
 		_try_spawn()
 	_spawn_time_left = spawn_interval
@@ -103,6 +106,8 @@ func _pick_world_spawn_point() -> Variant:
 		if not _world.has_clearance(point, spawn_clearance):
 			continue
 		if _forest != null and not _forest.has_clearance(point, spawn_clearance):
+			continue
+		if _props != null and not _props.has_clearance(point, spawn_clearance):
 			continue
 		return point
 	return null
