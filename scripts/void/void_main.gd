@@ -32,6 +32,9 @@ const VICTORY_LINES: Array[String] = [
 	"Пустота снова молчит.",
 ]
 const DISTANT_DEBRIS := 46
+## The boss bar darkens and burns paler as the Only One comes apart.
+const PHASE_COLORS: Array[Color] = [Color(0.56, 0.36, 0.92), Color(0.5, 0.28, 0.9),
+	Color(0.66, 0.3, 0.86), Color(0.86, 0.8, 1.0)]
 ## Said after a fall at a crossing that needs more than a step.
 const HINT_LEAP := "Слишком далеко для шага. Разбегись: Ctrl на ходу."
 const HINT_FLIGHT := "Шагом здесь не пройти. Взлети: Shift."
@@ -55,6 +58,8 @@ var _sky_material: ShaderMaterial
 ## its result is picked up in _process once the task is done.
 var _monolith_task := -1
 var _monolith_result: NelvarDebrisPainter.Art
+var _chip_tween: Tween
+var _title_tween: Tween
 ## A Void whose boss fight was lost comes back with the same seed, the player at
 ## the arena's door: the climb is not repeated. -1 = no checkpoint.
 static var _checkpoint_seed := -1
@@ -74,6 +79,10 @@ var _from_checkpoint := false
 @onready var message: Label = $HUD/Message
 @onready var boss_bar: Control = $HUD/BossBar
 @onready var boss_fill: ColorRect = $HUD/BossBar/Bar/Fill
+@onready var boss_chip: ColorRect = $HUD/BossBar/Bar/Chip
+@onready var boss_title: Control = $HUD/BossTitle
+@onready var boss_title_label: Label = $HUD/BossTitle/Title
+@onready var boss_subtitle: Label = $HUD/BossTitle/Subtitle
 @onready var boss_phase: Label = $HUD/BossBar/Hint
 
 
@@ -103,6 +112,9 @@ func _ready() -> void:
 		player.set_physics_process(false)
 		player.set_process(false)
 		return
+	var screen := NelvarVoidScreen.new()
+	screen.name = "Screen"
+	add_child(screen)
 	_build_world()
 	var threads := NelvarVoidThreads.new()
 	threads.name = "Threads"
@@ -285,6 +297,8 @@ func _on_fight_started() -> void:
 	boss.health_changed.connect(_on_boss_health)
 	boss.phase_changed.connect(_on_boss_phase)
 	boss_phase.text = boss.phase_title()
+	_add_phase_notches()
+	_show_title(NelvarTheOne.DISPLAY_NAME.to_upper(), "Пустота обрела форму", 1.4)
 	boss_bar.modulate.a = 0.0
 	boss_bar.show()
 	var tween := create_tween().set_parallel()
@@ -295,14 +309,55 @@ func _on_fight_started() -> void:
 
 
 func _on_boss_health(current: float, maximum: float) -> void:
-	# Whole pixels of the bar, not a smooth slide.
+	# Whole pixels of the bar, not a smooth slide; the pale chip catches up later.
 	var share := current / maxf(maximum, 1.0)
 	var width := boss_fill.get_parent_control().size.x - 6.0
-	boss_fill.offset_right = -3.0 - roundf(width * (1.0 - share) / 3.0) * 3.0
+	var right := -3.0 - roundf(width * (1.0 - share) / 3.0) * 3.0
+	boss_fill.offset_right = right
+	if _chip_tween != null:
+		_chip_tween.kill()
+	_chip_tween = create_tween()
+	_chip_tween.tween_interval(0.35)
+	_chip_tween.tween_property(boss_chip, "offset_right", right, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
-func _on_boss_phase(_phase: int) -> void:
+## Marks on the bar where the next phases begin.
+func _add_phase_notches() -> void:
+	var bar := boss_fill.get_parent_control()
+	for share in NelvarTheOne.PHASE_AT:
+		var notch := ColorRect.new()
+		notch.color = Color(0.9, 0.84, 1.0, 0.9)
+		notch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		notch.anchor_left = share
+		notch.anchor_right = share
+		notch.anchor_bottom = 1.0
+		notch.offset_left = -1.5
+		notch.offset_right = 1.5
+		bar.add_child(notch)
+
+
+## A big title in the middle of the screen: letters appear, hold, fade.
+func _show_title(title: String, subtitle: String, hold: float) -> void:
+	if _title_tween != null:
+		_title_tween.kill()
+	boss_title_label.text = title
+	boss_subtitle.text = subtitle
+	boss_title_label.visible_ratio = 0.0
+	boss_title.modulate.a = 1.0
+	boss_subtitle.modulate.a = 0.0
+	boss_title.show()
+	_title_tween = create_tween()
+	_title_tween.tween_property(boss_title_label, "visible_ratio", 1.0, 0.6)
+	_title_tween.tween_property(boss_subtitle, "modulate:a", 1.0, 0.4)
+	_title_tween.tween_interval(hold)
+	_title_tween.tween_property(boss_title, "modulate:a", 0.0, 0.8)
+	_title_tween.tween_callback(boss_title.hide)
+
+
+func _on_boss_phase(phase: int) -> void:
 	boss_phase.text = arena.boss.phase_title()
+	_show_title(NelvarTheOne.PHASE_TITLES[phase].to_upper(), NelvarTheOne.PHASE_NUMERALS[phase], 0.9)
+	boss_fill.color = PHASE_COLORS[phase]
 	_shake(0.9, 9.0)
 	# The Void flinches with it.
 	var tween := create_tween()
@@ -311,7 +366,8 @@ func _on_boss_phase(_phase: int) -> void:
 
 
 func _on_fight_won() -> void:
-	_say(VICTORY_LINES, 1.0)
+	_say(VICTORY_LINES, 2.6)
+	_show_title("ЕДИНСТВЕННЫЙ РАСПАЛСЯ", "", 1.4)
 	var tween := create_tween().set_parallel()
 	tween.tween_property(boss_bar, "modulate:a", 0.0, 2.0)
 	tween.tween_method(_set_dread, 1.0, 0.0, 5.0)

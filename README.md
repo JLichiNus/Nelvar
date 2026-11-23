@@ -86,8 +86,11 @@ out of shape, its contours always lagging a moment behind it:
   Rings of shards that fly out and come back, and a closing ring of the Void with a
   single gap.
 
-Every hazard shows itself before it hurts; flight (Shift) passes through all of
-them. Losing the fight brings the same Void back with the player at the arena's
+Every hazard shows itself before it hurts (a dash even draws its path); flight
+(Shift) passes through all of them. The fight is lit by the boss and its attacks
+(violet 2D lights on the dark arena), throws pixel sparks, and shakes the picture
+itself (`NelvarVoidScreen`: shockwaves, tearing, colour fringes, slow motion at
+phase changes and at its death); a title card announces it and each phase. Losing the fight brings the same Void back with the player at the arena's
 door. Defeating the Only One lifts the seal. The monolith is painted on a worker
 thread, so the Void loads as fast as before.
 

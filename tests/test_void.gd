@@ -288,12 +288,22 @@ func _check_boss() -> void:
 		var during := boss.health
 		boss.take_damage(50.0)
 		_check(boss.health == during, "The boss took damage while changing phase")
-		await _wait_frames(60 * 3)
+		# The change runs partly in slow motion: wait until it fights again.
+		for frame in 60 * 10:
+			await physics_frame
+			if boss.active:
+				break
+		_check(boss.active, "The boss did not come back after phase %d" % (i + 2))
 	_check(phases == [1, 2, 3], "Phases went %s instead of I -> IV" % [phases])
 	_check(boss.body.phase == 3, "The body did not follow the phases")
 	await _wait_frames(60 * 4)
 	boss.take_damage(1.0e6)
-	await _wait_frames(roundi(NelvarTheOne.DEATH_TIME * 60.0) + 30)
+	# Its death runs in slow motion; wait it out, then for the last sparks to go.
+	for frame in 60 * 12:
+		if game.arena.boss_defeated:
+			break
+		await physics_frame
+	await _wait_frames(150)
 	_check(game.arena.boss_defeated, "The boss did not die")
 	_check(get_nodes_in_group("void_hazards").is_empty(), "Hazards outlived the boss")
 	_check(game.arena.get_node("Seal").collision_layer == 0, "The seal stayed after the fight")

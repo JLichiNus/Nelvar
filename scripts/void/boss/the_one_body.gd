@@ -18,6 +18,13 @@ extends Node2D
 ## between its feet.
 
 const FORM_SHADER := preload("res://scripts/void/boss/the_one_form.gdshader")
+const WINDOW_SHADER := preload("res://scripts/void/boss/the_one_window.gdshader")
+## Light it casts on the arena, per phase; sparks rising from its cracks, per phase.
+const LIGHT_ENERGY: Array[float] = [0.85, 1.0, 1.15, 1.3]
+## The glowing rim along its silhouette, per phase.
+const RIM: Array[float] = [0.4, 0.5, 0.6, 0.0]
+const SPARKS: Array[int] = [10, 18, 28, 40]
+const LIGHT_HEIGHT := 80.0
 const TEXEL := NelvarTheOnePainter.TEXEL
 const PART_ORDER: Array[String] = ["leg_r", "leg_l", "arm_r", "torso", "head", "arm_l"]
 ## How far behind its part a contour lags, seconds, per phase.
@@ -39,7 +46,13 @@ var presence := 1.0
 
 var _form: CanvasGroup
 var _rig: Node2D
-var _shadow: Sprite2D
+var _pool: Node2D
+var _light: PointLight2D
+var _flare := 0.0
+var _ash: CPUParticles2D
+var _sparks: CPUParticles2D
+var _window_material: ShaderMaterial
+var _shown_phase := -1
 var _ghosts: Node2D
 var _material: ShaderMaterial
 var _sprites := {}
@@ -69,11 +82,34 @@ var _glitch := 0.0
 
 func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_shadow = Sprite2D.new()
-	_shadow.texture = _shadow_texture()
-	_shadow.scale = Vector2.ONE * TEXEL
-	_shadow.position = Vector2(0.0, 2.0)
-	add_child(_shadow)
+	# A pool of the Void under its feet instead of a shadow.
+	_pool = Node2D.new()
+	_pool.name = "Pool"
+	_pool.z_index = -1
+	_pool.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_pool.draw.connect(_draw_pool)
+	add_child(_pool)
+	_light = NelvarVoidFx.make_light(NelvarVoidFx.VIOLET, LIGHT_ENERGY[0], 400.0)
+	_light.position = Vector2(0.0, -LIGHT_HEIGHT * 0.5)
+	add_child(_light)
+	# Dark ash drifting off the body, violet sparks rising from the cracks.
+	_ash = NelvarVoidFx.spark_emitter(Color(0.04, 0.02, 0.08, 0.9), false)
+	_sparks = NelvarVoidFx.spark_emitter(NelvarVoidFx.VIOLET)
+	for emitter: CPUParticles2D in [_ash, _sparks]:
+		emitter.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+		emitter.emission_rect_extents = Vector2(20.0, 52.0)
+		emitter.position = Vector2(0.0, -72.0)
+		emitter.direction = Vector2(0.0, -1.0)
+		emitter.spread = 25.0
+		emitter.gravity = Vector2(0.0, -30.0)
+		emitter.initial_velocity_min = 10.0
+		emitter.initial_velocity_max = 45.0
+		emitter.lifetime = 1.6
+		emitter.emitting = true
+		add_child(emitter)
+	_ash.amount = 26
+	_sparks.amount = SPARKS[0]
+	_sparks.lifetime = 1.1
 	_form = CanvasGroup.new()
 	_form.name = "Form"
 	_form.fit_margin = 16.0
@@ -102,6 +138,17 @@ func _ready() -> void:
 		add.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 		glow.material = add
 		sprite.add_child(glow)
+		if part.hole != null:
+			# The hole in the chest looks into the Void, not at the floor behind it.
+			var window := Sprite2D.new()
+			window.name = "Window"
+			window.texture = part.hole
+			window.centered = false
+			window.offset = -part.pivot
+			_window_material = ShaderMaterial.new()
+			_window_material.shader = WINDOW_SHADER
+			window.material = _window_material
+			sprite.add_child(window)
 		_rig.add_child(sprite)
 		_sprites[name] = sprite
 		_glows[name] = glow
@@ -125,6 +172,43 @@ func flash() -> void:
 	_flash_tween = create_tween()
 	_flash_tween.tween_method(func(v: float) -> void: _material.set_shader_parameter("flash", v),
 		0.75, 0.0, 0.14)
+
+
+## Its light flares up for a moment (an attack, a hit, a phase change).
+func flare(amount: float) -> void:
+	_flare = maxf(_flare, amount)
+
+
+## A full violet copy of the body where it stands now, fading out (dashes).
+func afterimage() -> void:
+	var image := Afterimage.new()
+	image.top_level = true
+	image.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	for name: String in PART_ORDER:
+		var sprite: Sprite2D = _sprites[name]
+		image.parts.append([sprite.texture, sprite.global_transform, sprite.offset])
+	image.z_index = -1
+	add_child(image)
+
+
+class Afterimage:
+	extends Node2D
+	var parts: Array = []
+	var age := 0.0
+	const LIFE := 0.4
+
+	func _process(delta: float) -> void:
+		age += delta
+		if age >= LIFE:
+			queue_free()
+		queue_redraw()
+
+	func _draw() -> void:
+		var fade := 1.0 - age / LIFE
+		for part: Array in parts:
+			draw_set_transform_matrix(part[1])
+			draw_texture(part[0], part[2], Color(0.55, 0.3, 1.0, 0.55 * fade))
+		draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
 ## The body convulses for `duration`: everything jerks, contours lag far behind.
@@ -214,10 +298,22 @@ func _apply() -> void:
 		var strength: float = GLOW_STRENGTH[phase]
 		glow.modulate.a = alpha * strength * (0.75 + 0.25 * sin(_time * 3.0 + name.length()))
 	_form.modulate.a = presence
-	_shadow.modulate.a = presence * (0.5 if phase >= 3 else 1.0)
-	_shadow.scale = Vector2.ONE * TEXEL * (0.7 if phase >= 3 else 1.0)
+	_pool.queue_redraw()
+	_flare = maxf(0.0, _flare - get_process_delta_time() * 2.5)
+	_light.energy = (LIGHT_ENERGY[phase] * (0.85 + 0.15 * sin(_time * 2.3)) + _flare) * presence
+	_light.position.y = _rig.position.y - LIGHT_HEIGHT
+	if _shown_phase != phase:
+		_shown_phase = phase
+		_sparks.amount = SPARKS[phase]
+		_sparks.color = NelvarVoidFx.PALE if phase >= 3 else NelvarVoidFx.VIOLET
+	_ash.emitting = presence > 0.3
+	_sparks.emitting = presence > 0.3
+	if _window_material != null:
+		_window_material.set_shader_parameter("time", _time)
+		_window_material.set_shader_parameter("intensity", 0.6 + GLOW_STRENGTH[phase] * 0.6)
 	_material.set_shader_parameter("time", _time)
 	_material.set_shader_parameter("void_amount", 1.0 if phase >= 3 else 0.0)
+	_material.set_shader_parameter("rim_amount", clampf(RIM[phase] * (0.8 + 0.2 * sin(_time * 3.0)) + _flare * 0.3, 0.0, 1.0))
 	var crawl := 0.0
 	if phase >= 3:
 		crawl = 3.0
@@ -364,11 +460,35 @@ func _transform_at(name: String, delay: float) -> Transform2D:
 	return _history[_history.size() - 1][1][name]
 
 
-func _shadow_texture() -> ImageTexture:
-	var image := Image.create(22, 6, false, Image.FORMAT_RGBA8)
-	for y in 6:
-		for x in 22:
-			var d := Vector2((x + 0.5 - 11.0) / 11.0, (y + 0.5 - 3.0) / 3.0)
-			if d.length_squared() <= 1.0:
-				image.set_pixel(x, y, Color(0.0, 0.0, 0.02, 0.45))
-	return ImageTexture.create_from_image(image)
+## The pool of the Void under it: a dithered dark ellipse on the art grid with a
+## cold rim and tendrils that crawl out and back. Smaller when it hovers (IV).
+func _draw_pool() -> void:
+	var size := Vector2(52.0, 18.0) * (0.75 if phase >= 3 else 1.0) * (0.6 + 0.4 * presence)
+	if presence <= 0.01:
+		return
+	for y in range(-int(size.y), int(size.y) + 1, 3):
+		for x in range(-int(size.x), int(size.x) + 1, 3):
+			var d := Vector2(x / size.x, y / size.y).length_squared()
+			if d > 1.0:
+				continue
+			var cell := Vector2i(x / 3, y / 3)
+			if d > 0.6 and (1.0 - d) / 0.4 * 16.0 < NelvarPixelArt.bayer(cell) + 0.5:
+				continue
+			var color := NelvarVoidFx.DARK
+			color.a = 0.8 * presence
+			if d > 0.78:
+				color = NelvarVoidFx.DEEP
+				color.a = 0.55 * presence
+			_pool.draw_rect(Rect2(x, y, 3.0, 3.0), color)
+	# Tendrils: a few dotted strands that reach out and pull back.
+	var tendril := NelvarVoidFx.DEEP
+	for i in 6:
+		var angle := TAU * i / 6.0 + 0.4 * sin(_time * 0.7 + i)
+		var length := (0.4 + 0.6 * (0.5 + 0.5 * sin(_time * 1.3 + i * 1.7))) * size.x * 0.9
+		for step in range(0, int(length), 4):
+			var along := float(step)
+			var wave := sin(along * 0.12 + _time * 3.0 + i) * 4.0
+			var point := Vector2.from_angle(angle) * Vector2(1.0, 0.36) * (size.x * 0.8 + along)
+			point += Vector2.from_angle(angle).orthogonal() * wave * 0.4
+			tendril.a = (1.0 - along / maxf(length, 1.0)) * 0.7 * presence
+			_pool.draw_rect(Rect2((point / 3.0).floor() * 3.0, Vector2(3.0, 3.0)), tendril)

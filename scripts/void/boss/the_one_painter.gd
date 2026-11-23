@@ -29,6 +29,8 @@ class Part:
 	var texture: ImageTexture
 	var glow: ImageTexture
 	var contour: ImageTexture
+	## Torso only: white where the hole through the chest is (a window into the Void).
+	var hole: ImageTexture
 	## Where the part hangs from (shoulder, hip, neck...), texels from the image's corner.
 	var pivot: Vector2
 	var size: Vector2
@@ -132,6 +134,9 @@ func _make(size: Vector2i, pivot: Vector2, rng: RandomNumberGenerator, cracks: i
 				continue
 			if void_fill:
 				image.set_pixel(x, y, HEAD_RIM if edge > 0 else Color.BLACK)
+				# The empty face has a cold glowing rim.
+				if edge > 0:
+					glow.set_pixel(x, y, Color(CRACK_GLOW, 0.55))
 				continue
 			# Lit from the upper right: open space there brightens, below-left darkens.
 			var level := 0.35
@@ -143,14 +148,18 @@ func _make(size: Vector2i, pivot: Vector2, rng: RandomNumberGenerator, cracks: i
 				level -= 0.2
 			level += (NelvarPixelArt.hash01(x, y, 0x1D) - 0.5) * 0.18
 			image.set_pixel(x, y, NelvarPixelArt.ramp(BODY, level, Vector2i(x, y)))
+	var hole_image: Image
 	if hole:
-		_cut_hole(image, mask, w, h, Vector2(6.5 + MARGIN, 9.5 + MARGIN), rng)
+		hole_image = Image.create(w, h, false, Image.FORMAT_RGBA8)
+		_cut_hole(image, mask, w, h, Vector2(6.5 + MARGIN, 9.5 + MARGIN), rng, hole_image)
 	for i in cracks:
 		_crack(image, glow, mask, w, h, rng)
 	var part := Part.new()
 	part.texture = ImageTexture.create_from_image(image)
 	part.glow = ImageTexture.create_from_image(glow)
 	part.contour = ImageTexture.create_from_image(contour)
+	if hole_image != null:
+		part.hole = ImageTexture.create_from_image(hole_image)
 	part.pivot = pivot + Vector2(MARGIN, MARGIN)
 	if mirror:
 		part.pivot.x = size.x - pivot.x + MARGIN
@@ -160,7 +169,7 @@ func _make(size: Vector2i, pivot: Vector2, rng: RandomNumberGenerator, cracks: i
 
 ## An irregular hole through the chest: the Void shows through it.
 func _cut_hole(image: Image, mask: PackedByteArray, w: int, h: int, center: Vector2,
-		rng: RandomNumberGenerator) -> void:
+		rng: RandomNumberGenerator, hole_image: Image) -> void:
 	var lobes := Vector3(rng.randf() * TAU, rng.randf() * TAU, rng.randf_range(1.7, 2.1))
 	for y in h:
 		for x in w:
@@ -169,6 +178,7 @@ func _cut_hole(image: Image, mask: PackedByteArray, w: int, h: int, center: Vect
 			var r := d.length()
 			if r <= reach:
 				image.set_pixel(x, y, Color.TRANSPARENT)
+				hole_image.set_pixel(x, y, Color.WHITE)
 				mask[y * w + x] = 0
 			elif r <= reach + 1.0 and mask[y * w + x] == 1:
 				image.set_pixel(x, y, HOLE_RIM)

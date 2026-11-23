@@ -67,6 +67,11 @@ var _trail_life := 0.7
 var _trail_width := 30.0
 var _last_attack := &""
 var _rng := RandomNumberGenerator.new()
+var _aim: NelvarVoidHazards.Aim
+var _aim_age := 0.0
+var _aim_total := 1.0
+var _afterimage_left := 0.0
+var _spark_left := 0.0
 
 
 func _ready() -> void:
@@ -107,12 +112,21 @@ func begin(target: NelvarPlayer, center: Vector2, hazards: Node2D) -> void:
 	arena_center = center
 	hazard_layer = hazards
 	health_changed.emit(health, max_health)
+	# A pillar of light out of the sigil, the Void streaming into it, then a body.
+	var pillar := NelvarVoidHazards.Pillar.new()
+	pillar.life = INTRO_TIME
+	_spawn(pillar, global_position, 0.0)
+	NelvarVoidFx.glitch(self, 0.4, 0.4)
 	body.glitch(INTRO_TIME * 0.6)
 	var tween := create_tween()
 	tween.tween_property(body, "presence", 1.0, INTRO_TIME).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_IN)
 	await tween.finished
 	if dead:
 		return
+	_burst(260.0, 1.1)
+	NelvarVoidFx.flash(self, NelvarVoidFx.PALE, 0.35, 0.5)
+	NelvarVoidFx.glitch(self, 0.35, 0.8)
+	body.flare(1.5)
 	_invulnerable = false
 	active = true
 	_brain(_token)
@@ -123,6 +137,11 @@ func take_damage(amount: float) -> void:
 		return
 	health = maxf(health - amount, 0.0)
 	body.flash()
+	body.flare(0.25)
+	if _spark_left <= 0.0:
+		_spark_left = 0.07
+		var at := global_position + Vector2(_rng.randf_range(-18.0, 18.0), _rng.randf_range(-130.0, -30.0))
+		NelvarVoidFx.burst(hazard_layer if hazard_layer != null else self, at, 7, NelvarVoidFx.PALE, 170.0, 0.3)
 	health_changed.emit(health, max_health)
 	if health <= 0.0:
 		_die()
@@ -149,6 +168,13 @@ func _physics_process(delta: float) -> void:
 	if dead or player == null:
 		return
 	body.aim = global_position.direction_to(player.global_position)
+	_spark_left -= delta
+	if is_instance_valid(_aim):
+		_aim_age += delta
+		var reach := _dash_target()
+		_aim.from = global_position
+		_aim.to = global_position + reach
+		_aim.charge = clampf(_aim_age / _aim_total, 0.0, 1.0)
 	if _dashing:
 		_step_dash(delta)
 		return
@@ -177,6 +203,10 @@ func _start_dash(direction: Vector2, distance: float) -> void:
 	_dash_left = distance
 	_dash_start = global_position
 	body.pose = &"dash"
+	body.flare(1.0)
+	_afterimage_left = 0.0
+	NelvarVoidFx.shock(self, global_position, 0.3)
+	NelvarVoidFx.burst(hazard_layer, global_position + Vector2(0.0, -40.0), 16, NelvarVoidFx.VIOLET, 240.0, 0.4)
 
 
 func _step_dash(delta: float) -> void:
@@ -184,6 +214,11 @@ func _step_dash(delta: float) -> void:
 	var hit := move_and_collide(_dash_direction * step)
 	_dash_left -= step
 	_touch(DASH_DAMAGE)
+	# Afterimages: the body leaves copies of itself as it tears through.
+	_afterimage_left -= delta
+	if _afterimage_left <= 0.0:
+		_afterimage_left = 0.035
+		body.afterimage()
 	if hit != null or _dash_left <= 0.0:
 		_end_dash()
 
@@ -192,6 +227,8 @@ func _end_dash() -> void:
 	if not _dashing:
 		return
 	_dashing = false
+	if not dead:
+		_burst(90.0, 0.35)
 	if _dash_start.distance_to(global_position) > 20.0 and not dead:
 		var trail := NelvarVoidHazards.Trail.new()
 		trail.from = _dash_start
@@ -200,6 +237,13 @@ func _end_dash() -> void:
 		trail.width = _trail_width
 		_spawn(trail, Vector2.ZERO, DAMAGE["trail"])
 	_dash_finished.emit()
+
+
+func _burst(radius: float, power: float, at := Vector2.INF) -> void:
+	var burst := NelvarVoidHazards.Burst.new()
+	burst.radius = radius
+	burst.power = power
+	_spawn(burst, global_position if at == Vector2.INF else at, 0.0)
 
 
 func _spawn(hazard: NelvarVoidHazards.Hazard, at: Vector2, damage: float) -> NelvarVoidHazards.Hazard:
@@ -218,7 +262,9 @@ func _blink_to(point: Vector2, token: int) -> bool:
 	if token != _token or dead:
 		body.presence = 1.0
 		return false
+	_burst(80.0, 0.0)
 	global_position = point
+	_burst(110.0, 0.4)
 	var back := create_tween()
 	back.tween_property(body, "presence", 1.0, 0.22)
 	await back.finished
@@ -304,15 +350,13 @@ func _wait(seconds: float, token: int) -> bool:
 ## `long_last`, the final one leaves a trail that lingers.
 func _attack_dashes(token: int, windups: Array, life: float, width: float, long_last := false) -> void:
 	for i in windups.size():
-		body.pose = &"windup"
-		if not await _wait(windups[i], token):
+		if not await _wind_up(windups[i], token):
 			return
 		var last := i == windups.size() - 1
 		_trail_life = 3.0 if long_last and last else life
 		_trail_width = 46.0 if long_last and last else width
-		var target := player.global_position
-		var direction := global_position.direction_to(target)
-		_start_dash(direction, minf(global_position.distance_to(target) + 140.0, DASH_REACH))
+		var reach := _dash_target()
+		_start_dash(reach.normalized(), reach.length())
 		await _dash_finished
 		if token != _token or dead:
 			return
@@ -322,9 +366,38 @@ func _attack_dashes(token: int, windups: Array, life: float, width: float, long_
 	await _wait(0.45, token)
 
 
+## The dash as it would go now: through the player and a little past them.
+func _dash_target() -> Vector2:
+	var to_player := player.global_position - global_position
+	return to_player.normalized() * minf(to_player.length() + 140.0, DASH_REACH)
+
+
+## Crouches, gathers the Void into itself and shows where it is about to go.
+func _wind_up(time: float, token: int) -> bool:
+	body.pose = &"windup"
+	body.flare(0.6)
+	NelvarVoidFx.burst(hazard_layer, global_position + Vector2(0.0, -70.0), 22, NelvarVoidFx.VIOLET,
+		-220.0, minf(time, 0.6), 110.0)
+	_aim = NelvarVoidHazards.Aim.new()
+	_aim_age = 0.0
+	_aim_total = time
+	_spawn(_aim, Vector2.ZERO, 0.0)
+	var alive := await _wait(time, token)
+	_drop_aim()
+	return alive
+
+
+func _drop_aim() -> void:
+	if is_instance_valid(_aim):
+		_aim.queue_free()
+	_aim = null
+
+
 ## 0: around itself; 1: next to the player; 2: two, on either side of the player.
 func _attack_pull(token: int, mode: int) -> void:
 	body.pose = &"cast"
+	body.flare(1.2)
+	NelvarVoidFx.burst(hazard_layer, global_position + Vector2(0.0, -110.0), 20, NelvarVoidFx.PALE, 200.0, 0.5)
 	if not await _wait(0.3, token):
 		return
 	var centers: Array[Vector2] = [global_position]
@@ -356,6 +429,8 @@ func _attack_rifts(token: int, count: int, spread: float) -> void:
 		body.reach = 1.0
 		return
 	var direction := global_position.direction_to(player.global_position)
+	body.flare(1.0)
+	_burst(70.0, 0.4, global_position + direction * 60.0)
 	for i in count:
 		var rift := NelvarVoidHazards.Rift.new()
 		rift.direction = direction.rotated((i - (count - 1) * 0.5) * spread)
@@ -376,6 +451,8 @@ func _attack_cross_rifts(token: int) -> void:
 	if not await _wait(0.4, token):
 		body.reach = 1.0
 		return
+	body.flare(1.2)
+	NelvarVoidFx.glitch(self, 0.2, 0.4)
 	var count := 5
 	for i in count:
 		var through := player.global_position + Vector2.from_angle(_rng.randf() * TAU) * _rng.randf_range(0.0, 180.0)
@@ -398,6 +475,7 @@ func _attack_collapse(token: int) -> void:
 	if not await _blink_to(arena_center, token):
 		return
 	body.pose = &"spread"
+	body.flare(1.5)
 	var sectors := NelvarVoidHazards.Sectors.new()
 	sectors.count = 6
 	sectors.arc = 0.52
@@ -419,6 +497,8 @@ func _attack_shards(token: int) -> void:
 	if not await _wait(0.35, token):
 		return
 	for ring in 2:
+		body.flare(1.2)
+		_burst(120.0, 0.45)
 		var count := 18
 		for i in count:
 			var shard := NelvarVoidHazards.Shard.new()
@@ -433,6 +513,8 @@ func _attack_shards(token: int) -> void:
 ## The Void closes in from the edges of the arena; one gap in the ring lets the player out.
 func _attack_squeeze(token: int) -> void:
 	body.pose = &"cast"
+	body.flare(1.5)
+	NelvarVoidFx.glitch(self, 0.3, 0.6)
 	var squeeze := NelvarVoidHazards.Squeeze.new()
 	squeeze.gap = _rng.randf() * TAU
 	squeeze.start_radius = NelvarVoidData.ARENA_REACH * 0.95
@@ -451,15 +533,19 @@ func _shift_phase() -> void:
 	_invulnerable = true
 	_walking = false
 	_end_dash()
+	_drop_aim()
 	body.reach = 1.0
 	phase += 1
 	body.phase = phase
 	body.glitch(SHIFT_TIME)
 	body.pose = &"spread"
 	phase_changed.emit(phase)
-	var burst := NelvarVoidHazards.Burst.new()
-	burst.radius = 220.0
-	_spawn(burst, global_position, 0.0)
+	# The world stutters with it: slow motion, the picture tears, a flash, a wave.
+	NelvarVoidFx.slow_motion(self, 0.35, 0.55)
+	NelvarVoidFx.glitch(self, 0.7, 1.0)
+	NelvarVoidFx.flash(self, NelvarVoidFx.PALE, 0.35, 0.45)
+	body.flare(2.0)
+	_burst(300.0, 1.2)
 	if phase >= 3:
 		await _blink_to(arena_center, token)
 	await get_tree().create_timer(SHIFT_TIME, false).timeout
@@ -479,17 +565,26 @@ func _die() -> void:
 	if _dashing:
 		_dashing = false
 		_dash_finished.emit()
+	_drop_aim()
 	for hazard in get_tree().get_nodes_in_group("void_hazards"):
 		hazard.queue_free()
 	body.pose = &"spread"
 	body.glitch(DEATH_TIME)
-	for i in 3:
-		var burst := NelvarVoidHazards.Burst.new()
-		burst.radius = 160.0 + i * 120.0
-		burst.life = 0.6 + i * 0.3
-		_spawn(burst, global_position, 0.0)
+	body.flare(2.5)
+	# Everything slows; the Void it was made of is sucked back into it...
+	NelvarVoidFx.slow_motion(self, 0.3, 1.3)
+	NelvarVoidFx.glitch(self, 1.3, 0.9)
+	var heart := global_position + Vector2(0.0, -70.0)
+	NelvarVoidFx.burst(hazard_layer, heart, 70, NelvarVoidFx.PALE, -420.0, 1.0, 340.0)
+	await get_tree().create_timer(DEATH_TIME * 0.5, false).timeout
+	# ...and it comes apart in light.
+	NelvarVoidFx.flash(self, NelvarVoidFx.PALE, 0.7, 1.2)
+	_burst(520.0, 1.5)
+	_burst(220.0, 0.0, heart)
+	NelvarVoidFx.burst(hazard_layer, heart, 90, NelvarVoidFx.PALE, 700.0, 1.2)
+	NelvarVoidFx.burst(hazard_layer, heart, 40, NelvarVoidFx.DARK, 420.0, 1.4, 0.0, false)
 	var tween := create_tween()
-	tween.tween_property(body, "presence", 0.0, DEATH_TIME).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_IN)
+	tween.tween_property(body, "presence", 0.0, DEATH_TIME * 0.5).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
 	await tween.finished
 	defeated.emit()
 	queue_free()
