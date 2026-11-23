@@ -135,6 +135,9 @@ func _check_gameplay() -> void:
 		var inside := middle - normal * (NelvarPlayer.BODY_RADIUS + 24.0)
 		if not data.has_clearance(inside, NelvarPlayer.BODY_RADIUS + 1.0):
 			continue
+		# The walk to the coast must not run into a rock instead.
+		if not game.prop_data.has_clearance(inside, NelvarPlayer.BODY_RADIUS + 40.0):
+			continue
 		player.position = inside
 		player.velocity = Vector2.ZERO
 		_press_direction(normal)

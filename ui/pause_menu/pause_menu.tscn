@@ -1,0 +1,74 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://ui/pause_menu/pause_menu.gd" id="1"]
+[ext_resource type="PackedScene" path="res://ui/main_menu/settings_panel.tscn" id="2"]
+[ext_resource type="Resource" path="res://ui/main_menu/elements/ice.tres" id="3"]
+
+[node name="PauseMenu" type="CanvasLayer"]
+process_mode = 3
+layer = 10
+visible = false
+script = ExtResource("1")
+settings_element = ExtResource("3")
+
+[node name="Shade" type="ColorRect" parent="."]
+texture_filter = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.02, 0.03, 0.05, 0.68)
+
+[node name="Center" type="CenterContainer" parent="Shade"]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Dialog" type="PanelContainer" parent="Shade/Center"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(480, 0)
+layout_mode = 2
+
+[node name="Rows" type="VBoxContainer" parent="Shade/Center/Dialog"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Header" type="Label" parent="Shade/Center/Dialog/Rows"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 33
+text = "Пауза"
+
+[node name="Rule" type="ColorRect" parent="Shade/Center/Dialog/Rows"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 3)
+color = Color(0.64, 0.9, 1, 1)
+
+[node name="Resume" type="Button" parent="Shade/Center/Dialog/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 33
+text = "Продолжить"
+alignment = 0
+
+[node name="Settings" type="Button" parent="Shade/Center/Dialog/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 33
+text = "Настройки"
+alignment = 0
+
+[node name="MainMenu" type="Button" parent="Shade/Center/Dialog/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 33
+text = "В главное меню"
+alignment = 0
+
+[node name="Quit" type="Button" parent="Shade/Center/Dialog/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 33
+text = "Выйти из игры"
+alignment = 0
+
+[node name="SettingsPanel" parent="Shade/Center" instance=ExtResource("2")]
+unique_name_in_owner = true
+layout_mode = 2

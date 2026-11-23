@@ -1,5 +1,7 @@
 class_name NelvarWorldView
 extends Node2D
+## Island surfaces (one node per occupied chunk), island undersides and bridges.
+## The sky below is NelvarCloudSea on its own canvas layer.
 
 const BridgeDetails = preload("res://scripts/world/bridge_details.gd")
 
@@ -9,8 +11,6 @@ var world: NelvarWorldData
 var terrain_art: Array[NelvarIslandArt] = []
 var bridge_art: Array[NelvarBridgeArt] = []
 var details: Node2D
-var clouds: Array[NelvarCloudPainter.Cloud] = []
-var _sky: Rect2
 
 
 func build(data: NelvarWorldData) -> void:
@@ -21,8 +21,6 @@ func build(data: NelvarWorldData) -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	terrain_art = NelvarTerrainPainter.new().paint(data, terrain_style)
 	bridge_art = NelvarBridgePainter.new().paint(data, terrain_style)
-	_sky = data.bounds.grow(1400.0)
-	clouds = NelvarCloudPainter.new().paint(data, terrain_style, _sky, 70)
 	for leaf in data.leaves:
 		var chunk := NelvarWorldChunk.new()
 		chunk.setup(data, leaf, terrain_art)
@@ -31,17 +29,6 @@ func build(data: NelvarWorldData) -> void:
 	details.world = data
 	details.bridge_art = bridge_art
 	add_child(details)
-	queue_redraw()
-
-
-func _process(delta: float) -> void:
-	if world == null:
-		return
-	# Clouds drift with the wind and wrap around the sky rectangle.
-	for cloud in clouds:
-		cloud.position.x += cloud.speed * delta
-		if cloud.position.x > _sky.end.x:
-			cloud.position.x -= _sky.size.x + cloud.size.x
 	queue_redraw()
 
 
@@ -56,11 +43,5 @@ func toggle_chunks() -> bool:
 func _draw() -> void:
 	if world == null:
 		return
-	var step := float(maxi(1, terrain_style.pixel_size))
-	for cloud in clouds:
-		# Snap to the terrain pixel grid so drifting clouds stay crisp.
-		var at := (cloud.position / step).round() * step
-		draw_texture_rect(cloud.texture, Rect2(at, cloud.size), false,
-			Color(1, 1, 1, cloud.opacity))
 	for art in terrain_art:
 		draw_texture_rect(art.underside_texture, art.world_rect, false)

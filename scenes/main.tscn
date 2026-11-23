@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/world/world_view.gd" id="2"]
@@ -7,10 +7,17 @@
 [ext_resource type="Script" path="res://enemies/enemy_spawner.gd" id="6"]
 [ext_resource type="Script" path="res://ui/health_label.gd" id="7"]
 [ext_resource type="Resource" path="res://resources/earth_map_config.tres" id="4"]
+[ext_resource type="PackedScene" path="res://ui/pause_menu/pause_menu.tscn" id="8"]
+[ext_resource type="Script" path="res://scripts/world/cloud_sea.gd" id="9"]
+[ext_resource type="Script" path="res://scripts/fx/wind_particles.gd" id="10"]
 
 [node name="Nelvar" type="Node2D"]
 script = ExtResource("1")
 world_config = ExtResource("4")
+
+[node name="CloudSea" type="CanvasLayer" parent="."]
+layer = -1
+script = ExtResource("9")
 
 [node name="World" type="Node2D" parent="."]
 z_index = -10
@@ -27,6 +34,10 @@ script = ExtResource("6")
 enemy_scene = ExtResource("5")
 player = NodePath("../Player")
 auto_start = false
+
+[node name="Wind" type="CPUParticles2D" parent="."]
+z_index = 20
+script = ExtResource("10")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
@@ -87,4 +98,6 @@ layout_mode = 2
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.72, 0.79, 0.83, 1)
 theme_override_font_sizes/font_size = 22
-text = "WASD / стрелки — ходьба   ·   Ctrl — бег   ·   Shift — полёт\nЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)\nКолесо — масштаб   ·   F3 — чанки и коллизии   ·   F12 — скрыть панель"
+text = "WASD / стрелки — ходьба   ·   Ctrl — бег   ·   Shift — полёт\nЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)\nКолесо — масштаб   ·   F3 — чанки и коллизии   ·   F12 — скрыть панель   ·   Esc — пауза"
+
+[node name="PauseMenu" parent="." instance=ExtResource("8")]

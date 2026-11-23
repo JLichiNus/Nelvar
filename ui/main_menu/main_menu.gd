@@ -59,11 +59,8 @@ var _panel_owner: Button
 @onready var settings_button: Button = %Settings
 @onready var about_button: Button = %About
 @onready var quit_button: Button = %Quit
-@onready var settings_panel: NelvarMenuPanel = %SettingsPanel
+@onready var settings_panel: NelvarSettingsPanel = %SettingsPanel
 @onready var about_panel: NelvarMenuPanel = %AboutPanel
-@onready var fullscreen_check: CheckButton = %Fullscreen
-@onready var info_panel_check: CheckButton = %InfoPanel
-@onready var settings_back: Button = %SettingsBack
 @onready var about_back: Button = %AboutBack
 
 
@@ -98,18 +95,11 @@ func _ready() -> void:
 		button.focus_entered.connect(_on_button_focus_entered.bind(button))
 		button.focus_exited.connect(_on_button_focus_exited.bind(button))
 	play_button.pressed.connect(_on_play_pressed)
-	settings_button.pressed.connect(_open.bind(settings_panel, settings_button, fullscreen_check))
+	settings_button.pressed.connect(_open.bind(settings_panel, settings_button, settings_panel.fullscreen_check))
 	about_button.pressed.connect(_open.bind(about_panel, about_button, about_back))
 	quit_button.pressed.connect(get_tree().quit)
-	settings_back.pressed.connect(_close_panel)
+	settings_panel.back_button.pressed.connect(_close_panel)
 	about_back.pressed.connect(_close_panel)
-
-	fullscreen_check.set_pressed_no_signal(FullscreenToggle.is_fullscreen())
-	fullscreen_check.toggled.connect(FullscreenToggle.set_fullscreen)
-	FullscreenToggle.fullscreen_changed.connect(fullscreen_check.set_pressed_no_signal)
-	info_panel_check.set_pressed_no_signal(GameSettings.show_info_panel)
-	info_panel_check.toggled.connect(GameSettings.set_show_info_panel)
-	GameSettings.info_panel_changed.connect(info_panel_check.set_pressed_no_signal)
 
 	settings_panel.hide()
 	about_panel.hide()

@@ -7,8 +7,8 @@ extends Resource
 @export_range(1, 8) var large_count_max: int = 3
 @export_range(0, 24) var small_count_min: int = 6
 @export_range(0, 24) var small_count_max: int = 7
-@export var large_radius: Vector2 = Vector2(490.0, 650.0)
-@export var small_radius: Vector2 = Vector2(190.0, 290.0)
+@export var large_radius: Vector2 = Vector2(350.0, 460.0)
+@export var small_radius: Vector2 = Vector2(150.0, 210.0)
 @export var island_gap: Vector2 = Vector2(180.0, 370.0)
 
 @export_group("Bridges")
