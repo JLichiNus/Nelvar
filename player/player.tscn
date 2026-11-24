@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3 uid="uid://dcaj77phiguvn"]
+[gd_scene load_steps=18 format=3 uid="uid://dcaj77phiguvn"]
 
 [ext_resource type="Script" uid="uid://4psdfeenr6lm" path="res://player/player.gd" id="1_oul6g"]
 [ext_resource type="PackedScene" path="res://attacks/wind_projectile/wind_projectile.tscn" id="2_projectile"]
@@ -8,6 +8,11 @@
 [ext_resource type="SpriteFrames" path="res://player/sprites/player_torso_frames.tres" id="6_torso"]
 [ext_resource type="Script" path="res://scripts/fx/occlusion_outline.gd" id="7_outline"]
 [ext_resource type="Script" path="res://mutations/mutation_director.gd" id="8_mutations"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/wind.wav" id="9_shot_wind"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/wind_wave.tres" id="10_wave_sound"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/flight_lift.tres" id="11_lift_sound"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/flight_air.wav" id="12_flight_air"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/flight_land.tres" id="13_land_sound"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_player"]
 radius = 14.0
@@ -106,3 +111,29 @@ fill_color = Color(0.78, 0.92, 1, 0.2)
 
 [node name="Mutations" type="Node" parent="."]
 script = ExtResource("8_mutations")
+
+[node name="ShotWind" type="AudioStreamPlayer" parent="."]
+bus = &"SFX"
+stream = ExtResource("9_shot_wind")
+volume_db = -80.0
+
+[node name="WaveSound" type="AudioStreamPlayer" parent="."]
+bus = &"SFX"
+stream = ExtResource("10_wave_sound")
+volume_db = -22.0
+max_polyphony = 2
+
+[node name="LiftSound" type="AudioStreamPlayer" parent="."]
+bus = &"SFX"
+stream = ExtResource("11_lift_sound")
+volume_db = -24.0
+
+[node name="FlightAir" type="AudioStreamPlayer" parent="."]
+bus = &"SFX"
+stream = ExtResource("12_flight_air")
+volume_db = -80.0
+
+[node name="LandSound" type="AudioStreamPlayer" parent="."]
+bus = &"SFX"
+stream = ExtResource("13_land_sound")
+volume_db = -25.0

@@ -34,6 +34,14 @@ const ARC_RADIUS := 69.0  # = COMPRESSION_RADIUS (46) * 1.5 из gen_attack_spri
 @export var pulse_frequency: float = 4.0
 @export var approach_start_alpha: float = 0.35
 
+@export_category("Sound")
+## The hold loop rises from the first pitch to the second over the squeeze:
+## the pressure builds (sounds: tools/gen_sfx.py, compression_*).
+@export var hold_pitch_start: float = 0.94
+@export var hold_pitch_end: float = 1.1
+## Seconds for the sounds to fade out when the compression ends.
+@export var sound_fade: float = 0.3
+
 var _target: Node2D
 var _phase := Phase.IDLE
 var _phase_time := 0.0
@@ -45,6 +53,10 @@ var _fade_start_alpha := 1.0
 @onready var axis: Node2D = $Axis
 @onready var wave_a: Node2D = $Axis/WaveA
 @onready var wave_b: Node2D = $Axis/WaveB
+## Air rushing in and striking; its strike lands on the impact (0.3 s).
+@onready var start_sound: AudioStreamPlayer = $StartSound
+## The squeeze: a looped tight wind, playing from the impact to the end.
+@onready var hold_sound: AudioStreamPlayer = $HoldSound
 
 
 func _ready() -> void:
@@ -69,6 +81,7 @@ func start_compression(target: Node2D, caster_position: Vector2) -> void:
 
 	_set_waves(approach_distance, approach_start_alpha)
 	visible = true
+	start_sound.play()
 	_enter_phase(Phase.APPROACH)
 
 
@@ -111,10 +124,14 @@ func _impact() -> void:
 	if _target.has_method("apply_hold"):
 		_target.call("apply_hold", squeeze_duration)
 	_ticks_done = 0
+	hold_sound.pitch_scale = hold_pitch_start
+	hold_sound.play()
 	_enter_phase(Phase.SQUEEZE)
 
 
 func _update_squeeze() -> void:
+	hold_sound.pitch_scale = lerpf(hold_pitch_start, hold_pitch_end,
+		clampf(_phase_time / maxf(squeeze_duration, 0.01), 0.0, 1.0))
 	var pulse := sin(_phase_time * TAU * pulse_frequency)
 	_set_waves(
 		hold_distance + pulse_distance * pulse,
@@ -142,6 +159,7 @@ func _start_fade() -> void:
 		return
 	_fade_start_distance = _wave_distance
 	_fade_start_alpha = modulate.a
+	_fade_sounds()
 	_enter_phase(Phase.FADE)
 
 
@@ -153,7 +171,21 @@ func _update_fade() -> void:
 	)
 	if t >= 1.0:
 		_phase = Phase.IDLE
-		queue_free()
+		visible = false
+		# Freed only once the sounds have faded, or they would be cut off.
+		var remaining := maxf(sound_fade - fade_duration, 0.0) + 0.05
+		get_tree().create_timer(remaining, false).timeout.connect(queue_free)
+
+
+# A finished compression fades out what is still sounding instead of
+# cutting it: the hold loop, and the strike too if the target died before it.
+func _fade_sounds() -> void:
+	var tween := create_tween().set_parallel()
+	for player: AudioStreamPlayer in [start_sound, hold_sound]:
+		if player.playing:
+			tween.tween_property(player, "volume_db", player.volume_db - 40.0, sound_fade) \
+				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tween.chain().tween_callback(hold_sound.stop)
 
 
 func _enter_phase(phase: Phase) -> void:
