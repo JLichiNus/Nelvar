@@ -73,6 +73,7 @@ var _music_tween: Tween
 @onready var about_back: Button = %AboutBack
 @onready var music: AudioStreamPlayer = $Music
 @onready var hover_sound: AudioStreamPlayer = $HoverSound
+@onready var click_sound: AudioStreamPlayer = $ClickSound
 
 
 func _ready() -> void:
@@ -105,6 +106,12 @@ func _ready() -> void:
 		button.mouse_entered.connect(button.grab_focus)
 		button.focus_entered.connect(_on_button_focus_entered.bind(button))
 		button.focus_exited.connect(_on_button_focus_exited.bind(button))
+	# Every button of the menu and its panels sounds on hover and press,
+	# including ones added later. Hooked up before the buttons' own handlers so
+	# the click is already playing when Play or Quit leaves the menu.
+	for button in find_children("*", "BaseButton", true, false):
+		_add_button_sounds(button)
+	get_tree().node_added.connect(_on_node_added)
 	play_button.pressed.connect(_on_play_pressed)
 	settings_button.pressed.connect(_open.bind(settings_panel, settings_button, settings_panel.fullscreen_check))
 	about_button.pressed.connect(_open.bind(about_panel, about_button, about_back))
@@ -125,11 +132,6 @@ func _ready() -> void:
 	# Every launch opens in a random reality until the player points at something.
 	_show_instant(_button_elements.values().pick_random())
 	_start_music()
-	# Every button of the menu and its panels sounds on hover, including ones
-	# added later.
-	for button in find_children("*", "BaseButton", true, false):
-		_add_hover_sound(button)
-	get_tree().node_added.connect(_on_node_added)
 
 
 func _exit_tree() -> void:
@@ -447,6 +449,7 @@ func _on_play_pressed() -> void:
 	for button: Button in _button_elements:
 		button.disabled = true
 	_fade_out_music()
+	_keep_click_sound()
 	get_tree().change_scene_to_file(VOID_SCENE if GameSettings.start_in_void else GAME_SCENE)
 
 
@@ -457,6 +460,8 @@ func _quit() -> void:
 		button.disabled = true
 	music.stop()
 	hover_sound.stop()
+	if click_sound.playing:
+		await click_sound.finished
 	await get_tree().create_timer(0.1).timeout
 	get_tree().quit()
 
@@ -465,19 +470,30 @@ func _quit() -> void:
 
 func _on_node_added(node: Node) -> void:
 	if node is BaseButton and is_ancestor_of(node):
-		_add_hover_sound(node)
+		_add_button_sounds(node)
 
 
-func _add_hover_sound(button: BaseButton) -> void:
-	if button.has_meta(&"hover_sound"):
+func _add_button_sounds(button: BaseButton) -> void:
+	if button.has_meta(&"button_sounds"):
 		return
-	button.set_meta(&"hover_sound", true)
+	button.set_meta(&"button_sounds", true)
 	button.mouse_entered.connect(_on_button_hovered.bind(button))
+	button.pressed.connect(click_sound.play)
 
 
 func _on_button_hovered(button: BaseButton) -> void:
 	if not button.disabled:
 		hover_sound.play()
+
+
+## The game scene replaces the menu: the click moves to the tree root so it is
+## not cut off, and frees itself once it has played.
+func _keep_click_sound() -> void:
+	var player := click_sound
+	player.reparent(get_tree().root)
+	player.process_mode = Node.PROCESS_MODE_ALWAYS
+	get_tree().create_timer(player.stream.get_length() + 0.1, true) \
+		.timeout.connect(player.queue_free)
 
 
 # --- Music -------------------------------------------------------------------
