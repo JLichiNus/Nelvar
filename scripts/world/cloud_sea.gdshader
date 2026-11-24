@@ -16,12 +16,16 @@ uniform float breath_time = 0.0;     // seconds; puffs slowly swell and settle
 uniform float hole_amount = 0.14;    // 0 = solid cover; higher tears more and wider gaps
 uniform vec2 seed_offset;            // integer pixel offset: a different sea per world
 
-// Puff grid in cloud pixels; rows are staggered by half a cell and centres jitter by
-// JITTER of a cell. A puff reaches at most (1.5 - JITTER) cells from its own cell
-// centre (wobble and breathing included), so a 3x3 neighbourhood finds every puff
-// that can cover a pixel.
+// Two layers of puffs, each on its own grid in cloud pixels: a field of small and
+// middling puffs and, over it, sparse big billows. Rows are staggered by half a cell
+// and centres jitter by JITTER of a cell. Whole areas of the sea hold more big
+// billows or more small fluff. A puff reaches at most (1.5 - JITTER) cells of its own
+// grid from its cell centre (wobble and breathing included), so a 3x3 neighbourhood
+// of each grid finds every puff that can cover a pixel.
 const vec2 CELL = vec2(26.0, 13.0);
+const vec2 BIG_CELL = vec2(68.0, 34.0);
 const float JITTER = 0.15;
+const float REGION_SCALE = 140.0;    // size of the areas of big or small puffs, cloud pixels
 const float FLAT = 0.6;              // puffs are cut flat below this unit height
 const float HOLE_SCALE = 64.0;       // size of the sparse regions, cloud pixels
 const vec3 SUN = vec3(0.4194, -0.5792, 0.6990);
@@ -99,42 +103,67 @@ float density(vec2 p) {
 	return value_noise(p / HOLE_SCALE);
 }
 
-// The top-most puff covering pixel centre p: xy = position on that puff in unit
-// coordinates, z = 1 when covered. Lower rows are drawn on top.
+// Share of big billows around p: 0 = only small fluff.
+float region(vec2 p) {
+	return smoothstep(0.2, 0.8, value_noise(p / REGION_SCALE + 17.0));
+}
+
+// Tests one puff of the given grid against pixel centre p. A puff sits on its flat
+// base, and the puff whose base lies lower is in front: it keeps the best one in
+// `best` (xy = position on the puff in unit coordinates, z = 1 when covered).
+void try_puff(vec2 p, vec2 cell, vec2 grid, float shift, bool big, inout vec3 best,
+		inout float best_base) {
+	vec3 h = hash32(cell + (big ? vec2(913.0, 377.0) : vec2(0.0)));
+	vec2 center = (cell + vec2(0.5 + shift, 0.5) + (h.xy - 0.5) * 2.0 * JITTER) * grid;
+	float thick = density(center);
+	float share = region(center);
+	float size;
+	if (big) {
+		// Big billows stand away from the gaps and only in part of the cells.
+		if (thick < hole_amount + 0.06 || hash12(cell + 71.0) > mix(0.12, 0.8, share)) {
+			return;
+		}
+		size = mix(0.55, 1.0, h.z);
+	} else {
+		if (thick < hole_amount) {
+			return;
+		}
+		size = mix(0.55, 1.0, h.z) * mix(0.82, 1.0, share);
+	}
+	// Puffs shrink towards a gap, so its rim stays fluffy.
+	size *= mix(0.8, 1.0, smoothstep(hole_amount, hole_amount + 0.16, thick));
+	size *= 1.0 + 0.035 * sin(breath_time * 0.4 + h.x * 6.2832);
+	vec2 axes = vec2(1.0, 0.55) * size * grid.x;
+	float base = center.y + FLAT * axes.y;
+	if (base <= best_base) {
+		return;
+	}
+	vec2 l = (p - center) / axes;
+	if (l.y > FLAT) {
+		return;
+	}
+	float angle = atan(l.y, l.x);
+	float edge = 1.0 + 0.07 * sin(angle * 5.0 + h.y * 6.2832) + 0.04 * sin(angle * 11.0 + h.z * 6.2832);
+	if (length(l) < edge) {
+		best = vec3(l / edge, 1.0);
+		best_base = base;
+	}
+}
+
+// The front-most puff of both layers covering pixel centre p.
 vec3 puff_at(vec2 p) {
-	float row = floor(p.y / CELL.y);
 	vec3 best = vec3(0.0);
-	float best_y = -1.0e20;
-	for (int j = -1; j <= 1; j++) {
-		float r = row + float(j);
-		float shift = 0.5 * mod(r, 2.0);
-		float column = floor(p.x / CELL.x - shift);
-		for (int i = -1; i <= 1; i++) {
-			vec2 cell = vec2(column + float(i), r);
-			vec3 h = hash32(cell);
-			vec2 center = (cell + vec2(0.5 + shift, 0.5) + (h.xy - 0.5) * 2.0 * JITTER) * CELL;
-			if (center.y <= best_y) {
-				continue;
-			}
-			float thick = density(center);
-			if (thick < hole_amount) {
-				continue;
-			}
-			// Puffs shrink towards a gap, so its rim stays fluffy; whole areas of the
-			// sea grow slightly bigger or smaller puffs.
-			float size = mix(0.74, 0.95, h.z) * mix(0.8, 1.0, smoothstep(hole_amount, hole_amount + 0.16, thick));
-			size *= mix(0.86, 1.0, value_noise(center / 48.0 + 17.0));
-			size *= 1.0 + 0.035 * sin(breath_time * 0.4 + h.x * 6.2832);
-			vec2 axes = vec2(1.0, 0.55) * size * CELL.x;
-			vec2 l = (p - center) / axes;
-			if (l.y > FLAT) {
-				continue;
-			}
-			float angle = atan(l.y, l.x);
-			float edge = 1.0 + 0.07 * sin(angle * 5.0 + h.y * 6.2832) + 0.04 * sin(angle * 11.0 + h.z * 6.2832);
-			if (length(l) < edge) {
-				best = vec3(l / edge, 1.0);
-				best_y = center.y;
+	float best_base = -1.0e20;
+	for (int layer = 0; layer < 2; layer++) {
+		bool big = layer == 1;
+		vec2 grid = big ? BIG_CELL : CELL;
+		float row = floor(p.y / grid.y);
+		for (int j = -1; j <= 1; j++) {
+			float r = row + float(j);
+			float shift = 0.5 * mod(r, 2.0);
+			float column = floor(p.x / grid.x - shift);
+			for (int i = -1; i <= 1; i++) {
+				try_puff(p, vec2(column + float(i), r), grid, shift, big, best, best_base);
 			}
 		}
 	}

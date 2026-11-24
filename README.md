@@ -155,7 +155,9 @@ and height differences are not implemented yet.
 The world wears the style of the air reality from the main menu. The islands
 float above a sea of clouds (`scripts/world/cloud_sea.gd` and its shader): puffy
 pixel clouds in overlapping rows, lit from the upper right and dithered like the
-menu art, with small gaps where the sky shows through. The sea lies deeper than
+menu art, with small gaps where the sky shows through. Puffs come in two layers —
+a field of small and middling ones and sparse big billows over it — and whole
+areas of the sea hold more big billows or more small fluff. The sea lies deeper than
 the islands, so it follows the camera with parallax, and drifts smoothly with the
 wind. It is computed once per cloud pixel in a small viewport and stretched over
 the screen with a sub-pixel offset. Thin wind streaks, as in the menu, fly over
@@ -179,7 +181,10 @@ Visual settings are exposed in `resources/earth_terrain_style.tres`:
 `root_length` in terrain pixels, `grass_density` controls tuft placement and
 `flower_density` the share of tufts with a flower.
 
-Trees are generated in groves, leaving open ground between groups. Their
+Trees are generated in few small groves, leaving open ground between groups:
+the air map is windswept and sparse, and many small islands stay bare. Each tree
+is young, grown or old, so sizes in a grove clearly differ, and the number of
+crown tiers follows the crown size. Their
 placement uses a separate seeded generator with minimum trunk spacing, clear
 island hubs, reserved bridge routes and a clear spawn area. Each tree gets a
 different canopy silhouette, palette, bark and size, baked to the terrain's

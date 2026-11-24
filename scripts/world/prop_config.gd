@@ -18,8 +18,8 @@ extends Resource
 @export_range(0.0, 1.0, 0.01) var moss_chance: float = 0.45
 
 @export_group("Bushes")
-@export var large_island_bushes: Vector2i = Vector2i(6, 10)
-@export var small_island_bushes: Vector2i = Vector2i(2, 4)
+@export var large_island_bushes: Vector2i = Vector2i(3, 6)
+@export var small_island_bushes: Vector2i = Vector2i(1, 3)
 ## Half-width of a bush, world units.
 @export var bush_radius: Vector2 = Vector2(26.0, 38.0)
 ## Share of bushes growing at the foot of a tree rather than in the open.
