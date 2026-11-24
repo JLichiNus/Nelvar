@@ -6,15 +6,13 @@ extends Control
 const GAME_SCENE := "res://scenes/main.tscn"
 ## Developer setting "Запускать игру в Пустоте" starts here instead.
 const VOID_SCENE := "res://scenes/void.tscn"
-const TRANSITION_TIME := 0.8
+const TRANSITION_TIME := 0.3
 ## Speed-up for a wave that is interrupted by another hover.
 const HURRY_SPEED := 2.5
 const PARTICLE_FADE := 0.6
 ## The pixel logo is drawn at this integer scale.
 const LOGO_SCALE := 4
 const PARTICLE_AMOUNT := 90
-## Tip of the element cursors (tools/gen_ui.py): art pixel (1, 1) at 2x.
-const CURSOR_HOTSPOT := Vector2(2, 2)
 const IDLE_TEXT := Color(0.78, 0.78, 0.78)
 ## Text inset from the button's left edge; the highlighted text slides one art
 ## pixel further (the theme's button frames are drawn at 3x).
@@ -135,7 +133,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	Input.set_custom_mouse_cursor(null)
+	NelvarLocationCursor.apply(null)
 	get_tree().auto_accept_quit = true
 
 
@@ -254,7 +252,7 @@ func _show_labels_and_particles(element: NelvarMenuElement) -> void:
 
 ## The cursor changes together with the reality behind the menu.
 func _set_cursor(element: NelvarMenuElement) -> void:
-	Input.set_custom_mouse_cursor(element.cursor, Input.CURSOR_ARROW, CURSOR_HOTSPOT)
+	NelvarLocationCursor.apply(element.cursor)
 
 
 ## Converts a point on screen to background texture UV (the background is drawn "cover").

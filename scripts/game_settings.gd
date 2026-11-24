@@ -5,11 +5,20 @@ extends Node
 
 signal info_panel_changed(shown: bool)
 signal start_in_void_changed(enabled: bool)
+signal damage_vignette_changed()
 
 const PATH := "user://settings.cfg"
 
 ## In-game panel with the seed, world stats and controls. Hidden by default.
 var show_info_panel := false
+## Red vignette when the player is hurt: strength per level, the first is off.
+const VIGNETTE_LEVELS: Array[float] = [0.0, 0.4, 0.7, 1.0]
+const VIGNETTE_NAMES: Array[String] = ["выкл.", "слабая", "средняя", "сильная"]
+
+## Index into VIGNETTE_LEVELS.
+var damage_vignette_level := 2
+## Show only the side of the vignette facing whatever hurt the player.
+var damage_vignette_directional := false
 ## Developer menu: "Играть" opens the Void (scenes/void.tscn) instead of the usual world.
 var start_in_void := false
 
@@ -20,6 +29,10 @@ func _ready() -> void:
 	if config.load(PATH) == OK:
 		show_info_panel = config.get_value("hud", "show_info_panel", show_info_panel)
 		start_in_void = config.get_value("dev", "start_in_void", start_in_void)
+		damage_vignette_level = clampi(config.get_value("hud", "damage_vignette_level",
+			damage_vignette_level), 0, VIGNETTE_LEVELS.size() - 1)
+		damage_vignette_directional = config.get_value("hud", "damage_vignette_directional",
+			damage_vignette_directional)
 
 
 func _input(event: InputEvent) -> void:
@@ -44,11 +57,34 @@ func set_start_in_void(enabled: bool) -> void:
 	start_in_void_changed.emit(enabled)
 
 
+func damage_vignette_strength() -> float:
+	return VIGNETTE_LEVELS[damage_vignette_level]
+
+
+func set_damage_vignette_level(level: int) -> void:
+	level = clampi(level, 0, VIGNETTE_LEVELS.size() - 1)
+	if level == damage_vignette_level:
+		return
+	damage_vignette_level = level
+	_save()
+	damage_vignette_changed.emit()
+
+
+func set_damage_vignette_directional(enabled: bool) -> void:
+	if enabled == damage_vignette_directional:
+		return
+	damage_vignette_directional = enabled
+	_save()
+	damage_vignette_changed.emit()
+
+
 func _save() -> void:
 	var config := ConfigFile.new()
 	config.load(PATH)  # keep any other sections already saved
 	config.set_value("hud", "show_info_panel", show_info_panel)
 	config.set_value("dev", "start_in_void", start_in_void)
+	config.set_value("hud", "damage_vignette_level", damage_vignette_level)
+	config.set_value("hud", "damage_vignette_directional", damage_vignette_directional)
 	var error := config.save(PATH)
 	if error != OK:
 		push_warning("Не удалось сохранить настройки: %s" % error_string(error))

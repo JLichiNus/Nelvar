@@ -7,6 +7,7 @@ visible = false
 custom_minimum_size = Vector2(408, 0)
 script = ExtResource("1")
 accent = Color(0.66, 0.5, 0.92, 1)
+reveal_text = false
 
 [node name="Rows" type="VBoxContainer" parent="."]
 layout_mode = 2

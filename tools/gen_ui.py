@@ -1585,6 +1585,9 @@ CURSOR_STYLES = {
             [(255, 255, 255), (232, 238, 244), (204, 216, 228)]),
     "air": ((26, 58, 92), (255, 255, 255), (110, 176, 222),
             [(255, 255, 255), (206, 236, 250), (150, 208, 238)]),
+    # Пустота: чёрный наконечник в белой обводке (своего шрифта у неё нет).
+    "void": ((255, 255, 255), (44, 42, 52), (0, 0, 0),
+             [(16, 15, 20), (10, 9, 13), (4, 4, 6)]),
 }
 
 
@@ -1629,10 +1632,106 @@ def make_element_ui():
     for name, style in (("earth", style_earth), ("fire", style_fire), ("ice", style_ice), ("air", style_air)):
         make_styled_font(name, style)
         make_cursor(name)
+    make_cursor("void")
     print("element fonts and cursors saved")
+
+
+# --- Иконки способностей -------------------------------------------------------
+# 16×16 арт-пикселей (в игре ×3), палитра воздуха, тёмная обводка рисуется сама.
+ICON_SIZE = 16
+ICON_OUTLINE = (20, 40, 66)
+ICON_WHITE = (255, 255, 255)
+ICON_LIGHT = (206, 236, 250)
+ICON_MID = (130, 194, 232)
+ICON_DEEP = (70, 130, 186)
+
+
+def _icon_save(pixels, name):
+    """pixels: {(x, y): rgb}; обводка в 8 соседей вокруг рисунка."""
+    img = Image.new("RGBA", (ICON_SIZE, ICON_SIZE), (0, 0, 0, 0))
+    p = img.load()
+    for x, y in {(x + dx, y + dy) for x, y in pixels for dx, dy in EIGHT} - set(pixels):
+        if 0 <= x < ICON_SIZE and 0 <= y < ICON_SIZE:
+            p[x, y] = ICON_OUTLINE + (255,)
+    for (x, y), c in pixels.items():
+        if 0 <= x < ICON_SIZE and 0 <= y < ICON_SIZE:
+            p[x, y] = c + (255,)
+    save_scaled(img, f"ability_{name}.png")
+
+
+def icon_primary():
+    """ЛКМ: вихревой снаряд летит вправо, за ним тянутся струи ветра."""
+    px = {}
+    cx, cy, r = 10.5, 7.5, 3.6
+    for y in range(16):
+        for x in range(16):
+            d = ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2) ** 0.5
+            if d <= r:
+                light = (x + 0.5 - cx) + (y + 0.5 - cy)  # блик сверху-слева
+                px[(x, y)] = ICON_WHITE if light < -2.0 else ICON_LIGHT if d < r - 1.2 or light < 0 else ICON_MID
+    for y, x0, x1, c in ((5, 3, 6, ICON_LIGHT), (7, 1, 6, ICON_WHITE), (9, 3, 6, ICON_LIGHT), (11, 5, 7, ICON_MID)):
+        for x in range(x0, x1 + 1):
+            px[(x, y)] = c
+    return px
+
+
+def icon_wave():
+    """ПКМ: три расходящиеся дуги ветра."""
+    import math
+    px = {}
+    ox, oy = 1.5, 8.0
+    for radius, c in ((5.0, ICON_MID), (8.5, ICON_LIGHT), (12.0, ICON_WHITE)):
+        for y in range(16):
+            for x in range(16):
+                dx, dy = x + 0.5 - ox, y + 0.5 - oy
+                d = math.hypot(dx, dy)
+                ang = math.degrees(math.atan2(dy, dx))
+                spread = 62 - radius * 1.2
+                if abs(d - radius) <= 0.75 and abs(ang) <= spread:
+                    px[(x, y)] = c
+    return px
+
+
+def icon_flight():
+    """Shift: смерч оторвался от земли, под ним тень."""
+    import math
+    px = {}
+    for y in range(1, 12):
+        half = 6.5 - (y - 1) * 0.5
+        cx = 8.0 + math.sin(y * 0.7) * 1.0
+        band = ICON_WHITE if y % 3 == 1 else ICON_LIGHT if y % 3 == 2 else ICON_MID
+        for x in range(16):
+            if abs(x + 0.5 - cx) <= half:
+                px[(x, y)] = band
+    for x in range(5, 11):
+        px[(x, 14)] = ICON_DEEP
+    return px
+
+
+def icon_compression():
+    """R: четыре стрелки-треугольника сходятся к сжатому ядру."""
+    px = {}
+    for x, y in ((7, 7), (8, 7), (7, 8), (8, 8)):
+        px[(x, y)] = ICON_WHITE
+    for k in range(3):
+        c = ICON_LIGHT if k < 2 else ICON_MID
+        for t in range(7 - k, 9 + k):
+            px[(t, 4 - k)] = c   # сверху, остриём вниз
+            px[(t, 11 + k)] = c  # снизу
+            px[(4 - k, t)] = c   # слева
+            px[(11 + k, t)] = c  # справа
+    return px
+
+
+def make_ability_icons():
+    for name, draw in (("primary", icon_primary), ("wave", icon_wave),
+                       ("flight", icon_flight), ("compression", icon_compression)):
+        _icon_save(draw(), name)
+    print("ability icons saved")
 
 
 if __name__ == "__main__":
     make_font()
     make_ui()
     make_element_ui()
+    make_ability_icons()

@@ -25,7 +25,7 @@ const PHASE_TITLES: Array[String] = ["Единственный", "Искажен
 const PHASE_NUMERALS: Array[String] = ["I", "II", "III", "IV"]
 ## Share of health at which phases II, III and IV begin.
 const PHASE_AT: Array[float] = [0.7, 0.42, 0.14]
-const MAX_HEALTH := 1600.0
+const MAX_HEALTH := 3200.0
 const WALK_SPEED := 95.0
 const DASH_SPEED := 1150.0
 const DASH_REACH := 950.0
@@ -194,7 +194,7 @@ func _touch(damage: float) -> void:
 	if player.is_airborne() or player.is_falling():
 		return
 	if player.global_position.distance_to(global_position) < CONTACT_RADIUS:
-		player.take_damage(damage)
+		player.take_damage(damage, global_position)
 
 
 func _start_dash(direction: Vector2, distance: float) -> void:
@@ -558,6 +558,7 @@ func _shift_phase() -> void:
 
 func _die() -> void:
 	dead = true
+	get_tree().call_group(&"player", &"register_kill")
 	_token += 1
 	active = false
 	_invulnerable = true
