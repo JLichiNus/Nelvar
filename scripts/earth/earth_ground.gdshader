@@ -218,7 +218,7 @@ vec4 upland_tree(vec2 pixel, vec2 np, float grove, float firs, float rocky) {
 		for (int i = -1; i <= 1; i++) {
 			vec2 c = cell + vec2(float(i), float(j));
 			vec3 h = hash32(c * 1.3 + 17.0);
-			if (h.x > grove * 0.8 + 0.012) {
+			if (h.x > grove * 0.55 + 0.006) {
 				continue;
 			}
 			vec2 center = c * TREE_CELL + 1.0 + h.yz * (TREE_CELL - 2.0);
@@ -340,9 +340,9 @@ vec3 uplands(vec2 pixel, vec2 np, float beyond, float foot) {
 		if (water > -0.012) {
 			// The damp shore.
 			color *= 0.78;
-		} else if (h < 0.0015 + meadow * 0.004) {
+		} else if (h < 0.0007 + meadow * 0.002) {
 			color = PAL[FLOWER + int(hash12(np * 0.53 + 3.0) * 3.99)];
-		} else if (h > 0.996 - max(rocky, 0.0) * 0.03) {
+		} else if (h > 0.998 - max(rocky, 0.0) * 0.015) {
 			color = PAL[STONE + int(hash12(np * 0.7) * 1.99)];
 		}
 		if (scree) {
@@ -419,10 +419,10 @@ void fragment() {
 		color = ramp(GRASS, 5, level, pixel);
 		// Leaves under the crowns; flowers, thickest in the meadows.
 		float h = hash12(np * 1.37 + 7.1);
-		if (shade > 0.2 && h < shade * 0.1) {
+		if (shade > 0.2 && h < shade * 0.05) {
 			color = PAL[LITTER + int(hash12(np * 0.71) * 2.99)];
 		} else {
-			float bloom = (0.0012 + meadow * 0.014) * (1.0 - shade);
+			float bloom = (0.0006 + meadow * 0.006) * (1.0 - shade);
 			if (h < bloom) {
 				color = PAL[FLOWER + int(hash12(np * 0.53 + 3.0) * 3.99)];
 			} else if (hash12((np + vec2(0.0, 1.0)) * 1.37 + 7.1) < bloom) {
@@ -434,7 +434,7 @@ void fragment() {
 			// Tufts gather in patches; between them the grass is short. They thin out
 			// towards the foot, where the uplands' short grass begins.
 			float patches = smoothstep(0.3, 0.7, value_noise(np / 23.0 + 71.0));
-			vec4 blade = tuft(pixel, (0.06 + patches * 0.36 + meadow * 0.3) * (1.0 - shade * 0.7)
+			vec4 blade = tuft(pixel, (0.03 + patches * 0.2 + meadow * 0.15) * (1.0 - shade * 0.7)
 				* smoothstep(0.0, 10.0, inside));
 			if (blade.a > 0.0) {
 				color = blade.rgb;
@@ -447,9 +447,9 @@ void fragment() {
 				color = PAL[PATH_EDGE];
 			}
 			float stone = hash12(np * 2.17);
-			if (stone < 0.025) {
+			if (stone < 0.012) {
 				color = PAL[STONE];
-			} else if (stone < 0.04) {
+			} else if (stone < 0.02) {
 				color = PAL[STONE + 1];
 			}
 		}

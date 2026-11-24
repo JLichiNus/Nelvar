@@ -33,12 +33,12 @@ extends Resource
 @export_range(0, 4) var mountain_trails: int = 2
 
 @export_group("Trees")
-@export var grove_count: Vector2i = Vector2i(10, 13)
+@export var grove_count: Vector2i = Vector2i(7, 9)
 @export var grove_radius: Vector2 = Vector2(170.0, 300.0)
-@export var grove_trees: Vector2i = Vector2i(6, 13)
-@export var lone_trees: Vector2i = Vector2i(16, 24)
+@export var grove_trees: Vector2i = Vector2i(5, 10)
+@export var lone_trees: Vector2i = Vector2i(9, 14)
 ## Pines in small stands along the mountain foot.
-@export var foothill_pines: Vector2i = Vector2i(22, 32)
+@export var foothill_pines: Vector2i = Vector2i(12, 18)
 @export var willows_per_pond: Vector2i = Vector2i(1, 2)
 ## Smallest distance between two trunks.
 @export var tree_spacing: float = 92.0
@@ -48,29 +48,29 @@ extends Resource
 @export var path_clearance: float = 26.0
 
 @export_group("Rocks")
-@export var rocks: Vector2i = Vector2i(24, 34)
+@export var rocks: Vector2i = Vector2i(13, 19)
 ## Boulders gathered at the mountain foot.
-@export var scree_rocks: Vector2i = Vector2i(40, 56)
+@export var scree_rocks: Vector2i = Vector2i(22, 30)
 ## Petrified creatures: huge boulders with a closed eye.
 @export var statues: Vector2i = Vector2i(2, 4)
-@export var stumps_and_logs: Vector2i = Vector2i(7, 11)
+@export var stumps_and_logs: Vector2i = Vector2i(4, 7)
 
 @export_group("Plants")
-@export var bushes: Vector2i = Vector2i(44, 60)
-@export var tall_grass: Vector2i = Vector2i(110, 150)
-@export var ferns: Vector2i = Vector2i(40, 60)
-@export var flower_clumps: Vector2i = Vector2i(60, 84)
-@export var mushrooms: Vector2i = Vector2i(16, 26)
-@export var reeds_per_pond: Vector2i = Vector2i(4, 8)
-@export var lilies_per_pond: Vector2i = Vector2i(3, 7)
+@export var bushes: Vector2i = Vector2i(24, 34)
+@export var tall_grass: Vector2i = Vector2i(50, 70)
+@export var ferns: Vector2i = Vector2i(20, 30)
+@export var flower_clumps: Vector2i = Vector2i(28, 40)
+@export var mushrooms: Vector2i = Vector2i(8, 14)
+@export var reeds_per_pond: Vector2i = Vector2i(3, 5)
+@export var lilies_per_pond: Vector2i = Vector2i(2, 4)
 
 @export_group("Mountains")
 ## Rows of peaks around the valley, from the foot outwards.
 @export_range(1, 4) var peak_rows: int = 3
 ## Rocky outcrops on the high plateau beyond the range.
-@export var plateau_crags: Vector2i = Vector2i(28, 38)
+@export var plateau_crags: Vector2i = Vector2i(18, 24)
 ## Boulders on the plateau, besides those beside the crags.
-@export var plateau_boulders: Vector2i = Vector2i(70, 95)
+@export var plateau_boulders: Vector2i = Vector2i(35, 50)
 
 
 func validation_error() -> String:
