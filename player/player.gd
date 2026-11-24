@@ -8,6 +8,10 @@ extends CharacterBody2D
 
 signal health_changed(current: float, maximum: float)
 signal died
+## Health was lost; `from` is the world point of the source, INF when unknown.
+signal damaged(amount: float, from: Vector2)
+## Level or kills toward the next one changed.
+signal level_changed(level: int, kills: int, kills_needed: int)
 
 enum SpeedBoostState { READY, ACTIVE, COOLDOWN }
 
@@ -30,8 +34,9 @@ const ATTACK_PRIORITY := {
 @export var deceleration: float = 2000.0
 @export var run_speed_multiplier: float = 1.5
 @export var speed_boost_multiplier: float = 1.5
-@export var speed_boost_duration: float = 2.0
-@export var speed_boost_cooldown: float = 10.0
+@export var speed_boost_duration: float = 3.0
+## Counted from landing, after the flight itself.
+@export var speed_boost_cooldown: float = 7.0
 @export var flight_height: float = 14.0
 @export var flight_lift_duration: float = 0.12
 # Покачивание корпуса над смерчем: на сколько текселей и с каким периодом.
@@ -43,7 +48,9 @@ const ATTACK_PRIORITY := {
 @export var wave_scene: PackedScene
 @export var compression_scene: PackedScene
 @export var primary_cooldown: float = 0.20
-@export var wave_cooldown: float = 0.80
+## Each shot leaves up to this many degrees off the aim, either side.
+@export var primary_spread_degrees: float = 4.0
+@export var wave_cooldown: float = 3.0
 @export var compression_cooldown: float = 8.0
 @export var wave_spawn_distance: float = 53.0
 @export var compression_max_range: float = 650.0
@@ -52,15 +59,29 @@ const ATTACK_PRIORITY := {
 # ЛКМ спиной вперёд он дёргался бы между выстрелами.
 @export var attack_facing_hold: float = 0.25
 
+@export_category("Damage")
+## Base damage at level 1; every level adds base_damage_per_level. Attacks deal
+## a percentage of it (RoR2-style).
+@export var base_damage_start: float = 5.0
+@export var base_damage_per_level: float = 1.0
+## Kills from level 1 to 2; every next level needs level_kills_growth times more
+## (rounded up): 20, 30, 45, 68, 102...
+@export var first_level_kills: int = 20
+@export var level_kills_growth: float = 1.5
+@export var primary_damage_percent: float = 200.0
+@export var wave_damage_percent: float = 1000.0
+@export var compression_impact_percent: float = 500.0
+## Every compression tick_interval while the target is squeezed.
+@export var compression_tick_percent: float = 300.0
+
 @export_category("Health")
 @export var max_health: float = 100.0
 @export var invulnerability_duration: float = 1.0
-@export var blink_frequency: float = 10.0
-@export var blink_alpha: float = 0.35
 @export var death_restart_delay: float = 1.5
 
 @export_category("Camera")
-@export var zoom_min: float = 0.18
+## Zoom out at most 2x from the starting camera zoom (1.15).
+@export var zoom_min: float = 0.575
 @export var zoom_max: float = 1.6
 
 var aim_direction := Vector2.RIGHT
@@ -71,6 +92,9 @@ var _speed_boost_state := SpeedBoostState.READY
 # Ctrl переключает бег/ходьбу; любая атака или остановка сбрасывает бег.
 var _is_running := false
 var health: float
+var level := 1
+## Kills since the last level-up.
+var level_kills := 0
 var _invulnerability_left := 0.0
 var _is_dead := false
 var _flight_tween: Tween
@@ -103,6 +127,8 @@ var _is_falling := false
 
 func _ready() -> void:
 	health = max_health
+	# Enemies report kills to this group (register_kill).
+	add_to_group(&"player")
 	(collision_shape.shape as CircleShape2D).radius = BODY_RADIUS
 	_body_scale = body_visual.scale.abs()
 	_body_rest_position = body_visual.position
@@ -114,7 +140,6 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _is_dead or _is_falling:
 		return
-	_update_blink()
 	_update_hover(delta)
 	_update_aim()
 	_primary_cooldown_left = maxf(_primary_cooldown_left - delta, 0.0)
@@ -179,12 +204,12 @@ func _physics_process(delta: float) -> void:
 	if direction == Vector2.ZERO:
 		_is_running = false
 
-	# Ускорение задаёт фиксированную скорость независимо от бега/ходьбы.
+	# Полёт умножает текущую скорость: бег в полёте быстрее ходьбы в полёте.
 	var speed_multiplier := 1.0
+	if _is_running:
+		speed_multiplier *= run_speed_multiplier
 	if _speed_boost_state == SpeedBoostState.ACTIVE:
-		speed_multiplier = speed_boost_multiplier
-	elif _is_running:
-		speed_multiplier = run_speed_multiplier
+		speed_multiplier *= speed_boost_multiplier
 	var target_velocity := direction * speed * speed_multiplier
 	var rate := acceleration if direction != Vector2.ZERO else deceleration
 	velocity = velocity.move_toward(target_velocity, rate * delta)
@@ -269,6 +294,50 @@ func _on_torso_animation_finished() -> void:
 		_attack_animation = &""
 
 
+## Seconds of cooldown left (0 = none). The primary shot has no cooldown, only
+## a fire rate, so it always reports 0. Flight reports 0 while it is going on
+## (see is_ability_active): its cooldown starts on landing.
+## Abilities: &"primary", &"wave", &"flight", &"compression".
+func ability_cooldown_left(ability: StringName) -> float:
+	match ability:
+		&"wave":
+			return _wave_cooldown_left
+		&"compression":
+			return _compression_cooldown_left
+		&"flight":
+			if _speed_boost_state == SpeedBoostState.COOLDOWN:
+				return boost_cooldown_timer.time_left
+	return 0.0
+
+
+## True while the ability is in use and cannot be used again (flight in the air).
+func is_ability_active(ability: StringName) -> bool:
+	return ability == &"flight" and _speed_boost_state == SpeedBoostState.ACTIVE
+
+
+func base_damage() -> float:
+	return base_damage_start + base_damage_per_level * (level - 1)
+
+
+func kills_to_next_level() -> int:
+	return ceili(first_level_kills * pow(level_kills_growth, level - 1))
+
+
+## Called by an enemy when it dies (through the "player" group).
+func register_kill() -> void:
+	if _is_dead:
+		return
+	level_kills += 1
+	while level_kills >= kills_to_next_level():
+		level_kills -= kills_to_next_level()
+		level += 1
+	level_changed.emit(level, level_kills, kills_to_next_level())
+
+
+func _damage(percent: float) -> float:
+	return base_damage() * percent / 100.0
+
+
 func is_airborne() -> bool:
 	return _speed_boost_state == SpeedBoostState.ACTIVE
 
@@ -311,12 +380,14 @@ func recover_at(point: Vector2) -> void:
 	camera.reset_smoothing()
 
 
-func take_damage(amount: float) -> void:
+## `from`: world point the hit came from (for the damage vignette); INF if none.
+func take_damage(amount: float, from: Vector2 = Vector2.INF) -> void:
 	if _is_dead or is_airborne() or _invulnerability_left > 0.0 \
 			or amount <= 0.0:
 		return
 	health = maxf(health - amount, 0.0)
 	health_changed.emit(health, max_health)
+	damaged.emit(amount, from)
 	if health <= 0.0:
 		_die()
 		return
@@ -330,16 +401,8 @@ func _check_enemy_contact() -> void:
 		return
 	for body in hurtbox.get_overlapping_bodies():
 		if body.is_in_group("enemies") and "contact_damage" in body:
-			take_damage(body.get("contact_damage"))
+			take_damage(body.get("contact_damage"), body.global_position)
 			return
-
-
-func _update_blink() -> void:
-	if _invulnerability_left <= 0.0:
-		body_visual.modulate.a = 1.0
-		return
-	var phase := int(_invulnerability_left * blink_frequency * 2.0)
-	body_visual.modulate.a = 1.0 if phase % 2 == 0 else blink_alpha
 
 
 func _die() -> void:
@@ -377,7 +440,9 @@ func _try_primary_attack() -> void:
 	_primary_cooldown_left = primary_cooldown
 	_is_running = false
 	_play_attack_animation(&"attack_primary")
-	projectile.call("launch", projectile_spawn.global_position, aim_direction)
+	projectile.set("damage", _damage(primary_damage_percent))
+	var spread := deg_to_rad(randf_range(-primary_spread_degrees, primary_spread_degrees))
+	projectile.call("launch", projectile_spawn.global_position, aim_direction.rotated(spread))
 
 
 func _try_wave_attack() -> void:
@@ -389,6 +454,7 @@ func _try_wave_attack() -> void:
 	_wave_cooldown_left = wave_cooldown
 	_is_running = false
 	_play_attack_animation(&"attack_wave")
+	wave.set("damage", _damage(wave_damage_percent))
 	var wave_origin := get_aim_origin() + aim_direction * wave_spawn_distance
 	wave.call("launch", wave_origin, aim_direction)
 
@@ -416,6 +482,8 @@ func _try_compression() -> void:
 	_compression_cooldown_left = compression_cooldown
 	_is_running = false
 	_play_attack_animation(&"attack_compression")
+	compression.set("impact_damage", _damage(compression_impact_percent))
+	compression.set("tick_damage", _damage(compression_tick_percent))
 	compression.call("start_compression", target, get_aim_origin())
 
 

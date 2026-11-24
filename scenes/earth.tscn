@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=18 format=3]
 
 [ext_resource type="Script" path="res://scripts/earth/earth_main.gd" id="1"]
 [ext_resource type="Resource" path="res://resources/earth_valley_config.tres" id="2"]
@@ -10,8 +10,13 @@
 [ext_resource type="Script" path="res://scripts/earth/butterflies.gd" id="8"]
 [ext_resource type="Script" path="res://scripts/fx/wind_particles.gd" id="9"]
 [ext_resource type="Shader" path="res://scripts/earth/cloud_shadows.gdshader" id="10"]
-[ext_resource type="Script" path="res://ui/health_label.gd" id="11"]
+[ext_resource type="Script" path="res://ui/health_bar.gd" id="11"]
 [ext_resource type="PackedScene" path="res://ui/pause_menu/pause_menu.tscn" id="12"]
+[ext_resource type="Script" path="res://scripts/location_cursor.gd" id="cursor_script"]
+[ext_resource type="Texture2D" path="res://assets/textures/ui/cursor_earth.png" id="cursor_tex"]
+[ext_resource type="Script" path="res://ui/ability_bar.gd" id="ability_bar"]
+[ext_resource type="Script" path="res://ui/level_line.gd" id="level_line"]
+[ext_resource type="Script" path="res://ui/damage_vignette.gd" id="damage_vignette"]
 
 [node name="Earth" type="Node2D"]
 script = ExtResource("1")
@@ -63,6 +68,17 @@ shader = ExtResource("10")
 [node name="HUD" type="CanvasLayer" parent="."]
 layer = 3
 
+[node name="DamageVignette" type="ColorRect" parent="HUD" node_paths=PackedStringArray("player")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("damage_vignette")
+player = NodePath("../../Actors/Player")
+
 [node name="Margin" type="MarginContainer" parent="HUD"]
 texture_filter = 1
 offset_left = 20.0
@@ -73,20 +89,6 @@ mouse_filter = 2
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 9
-
-[node name="HealthPanel" type="PanelContainer" parent="HUD/Margin/Stack"]
-layout_mode = 2
-size_flags_horizontal = 0
-mouse_filter = 2
-
-[node name="Health" type="Label" parent="HUD/Margin/Stack/HealthPanel" node_paths=PackedStringArray("player")]
-layout_mode = 2
-mouse_filter = 2
-theme_override_colors/font_color = Color(1, 0.584314, 0.584314, 1)
-theme_override_font_sizes/font_size = 22
-text = "HP: 100 / 100"
-script = ExtResource("11")
-player = NodePath("../../../../../Actors/Player")
 
 [node name="Panel" type="PanelContainer" parent="HUD/Margin/Stack"]
 visible = false
@@ -125,3 +127,52 @@ text = "WASD / стрелки — ходьба   ·   Ctrl — бег   ·   Shi
 Колесо — масштаб   ·   F3 — коллизии   ·   F12 — скрыть панель   ·   Esc — пауза"
 
 [node name="PauseMenu" parent="." instance=ExtResource("12")]
+
+[node name="LocationCursor" type="Node" parent="."]
+script = ExtResource("cursor_script")
+cursor = ExtResource("cursor_tex")
+
+[node name="HealthBar" type="Control" parent="HUD" node_paths=PackedStringArray("player")]
+layout_mode = 3
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -60.0
+offset_right = 360.0
+offset_bottom = -24.0
+grow_vertical = 0
+mouse_filter = 2
+script = ExtResource("11")
+player = NodePath("../../Actors/Player")
+
+[node name="AbilityBar" type="Control" parent="HUD" node_paths=PackedStringArray("player")]
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -300.0
+offset_top = -84.0
+offset_right = -24.0
+offset_bottom = -24.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+script = ExtResource("ability_bar")
+player = NodePath("../../Actors/Player")
+
+[node name="LevelLine" type="Control" parent="HUD" node_paths=PackedStringArray("player")]
+layout_mode = 3
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -96.0
+offset_right = 360.0
+offset_bottom = -69.0
+grow_vertical = 0
+mouse_filter = 2
+script = ExtResource("level_line")
+player = NodePath("../../Actors/Player")

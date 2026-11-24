@@ -4,7 +4,7 @@ extends CharacterBody2D
 enum State { IDLE, JUMPING, DEAD }
 
 @export_category("Health")
-@export var max_health: float = 20.0
+@export var max_health: float = 40.0
 @export var contact_damage: float = 10.0
 @export var hit_flash_color := Color(2.0, 2.0, 2.0)
 @export var hit_flash_duration: float = 0.1
@@ -262,6 +262,7 @@ func _flash() -> void:
 func _die() -> void:
 	_state = State.DEAD
 	remove_from_group("enemies")
+	get_tree().call_group(&"player", &"register_kill")
 	# take_damage приходит из физического сигнала, поэтому только отложенно.
 	collision_shape.set_deferred("disabled", true)
 	_jump_velocity = Vector2.ZERO

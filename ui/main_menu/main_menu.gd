@@ -10,20 +10,22 @@ const VOID_SCENE := "res://scenes/void.tscn"
 const EARTH_SCENE := "res://scenes/earth.tscn"
 ## Developer setting "Запускать игру в Огне": the fire forge.
 const FIRE_SCENE := "res://scenes/fire.tscn"
-const TRANSITION_TIME := 0.8
+const TRANSITION_TIME := 0.3
 ## Speed-up for a wave that is interrupted by another hover.
 const HURRY_SPEED := 2.5
 const PARTICLE_FADE := 0.6
 ## The pixel logo is drawn at this integer scale.
 const LOGO_SCALE := 4
 const PARTICLE_AMOUNT := 90
-## Tip of the element cursors (tools/gen_ui.py): art pixel (1, 1) at 2x.
-const CURSOR_HOTSPOT := Vector2(2, 2)
 const IDLE_TEXT := Color(0.78, 0.78, 0.78)
 ## Text inset from the button's left edge; the highlighted text slides one art
 ## pixel further (the theme's button frames are drawn at 3x).
 const TEXT_INSET := 24.0
 const TEXT_SLIDE := 3.0
+## The menu music (looped on import) fades in on entering the menu and fades
+## out when the game starts.
+const MUSIC_FADE_IN := 2.5
+const MUSIC_FADE_OUT := 1.5
 
 @export var play_element: NelvarMenuElement
 @export var settings_element: NelvarMenuElement
@@ -57,6 +59,7 @@ var _wind := 0.0
 var _open_panel: NelvarMenuPanel
 var _panel_owner: Button
 var _menu_tween: Tween
+var _music_tween: Tween
 
 @onready var background: TextureRect = $Background
 @onready var particle_root: Node2D = $Particles
@@ -70,6 +73,9 @@ var _menu_tween: Tween
 @onready var settings_panel: NelvarSettingsPanel = %SettingsPanel
 @onready var about_panel: NelvarMenuPanel = %AboutPanel
 @onready var about_back: Button = %AboutBack
+@onready var music: AudioStreamPlayer = $Music
+@onready var hover_sound: AudioStreamPlayer = $HoverSound
+@onready var click_sound: AudioStreamPlayer = $ClickSound
 
 
 func _ready() -> void:
@@ -102,10 +108,18 @@ func _ready() -> void:
 		button.mouse_entered.connect(button.grab_focus)
 		button.focus_entered.connect(_on_button_focus_entered.bind(button))
 		button.focus_exited.connect(_on_button_focus_exited.bind(button))
+	# Every button of the menu and its panels sounds on hover and press,
+	# including ones added later. Hooked up before the buttons' own handlers so
+	# the click is already playing when Play or Quit leaves the menu.
+	for button in find_children("*", "BaseButton", true, false):
+		_add_button_sounds(button)
+	get_tree().node_added.connect(_on_node_added)
 	play_button.pressed.connect(_on_play_pressed)
 	settings_button.pressed.connect(_open.bind(settings_panel, settings_button, settings_panel.fullscreen_check))
 	about_button.pressed.connect(_open.bind(about_panel, about_button, about_back))
-	quit_button.pressed.connect(get_tree().quit)
+	quit_button.pressed.connect(_quit)
+	# Closing the window goes through _quit too, so the sounds stop first.
+	get_tree().auto_accept_quit = false
 	settings_panel.back_button.pressed.connect(_close_panel)
 	settings_panel.dev_panel_toggled.connect(_on_dev_panel_toggled)
 	about_back.pressed.connect(_close_panel)
@@ -119,10 +133,17 @@ func _ready() -> void:
 	_layout_particles()
 	# Every launch opens in a random reality until the player points at something.
 	_show_instant(_button_elements.values().pick_random())
+	_start_music()
 
 
 func _exit_tree() -> void:
-	Input.set_custom_mouse_cursor(null)
+	NelvarLocationCursor.apply(null)
+	get_tree().auto_accept_quit = true
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		_quit()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -235,7 +256,7 @@ func _show_labels_and_particles(element: NelvarMenuElement) -> void:
 
 ## The cursor changes together with the reality behind the menu.
 func _set_cursor(element: NelvarMenuElement) -> void:
-	Input.set_custom_mouse_cursor(element.cursor, Input.CURSOR_ARROW, CURSOR_HOTSPOT)
+	NelvarLocationCursor.apply(element.cursor)
 
 
 ## Converts a point on screen to background texture UV (the background is drawn "cover").
@@ -429,6 +450,8 @@ func _on_dev_panel_toggled(open: bool) -> void:
 func _on_play_pressed() -> void:
 	for button: Button in _button_elements:
 		button.disabled = true
+	_fade_out_music()
+	_keep_click_sound()
 	var scene := GAME_SCENE
 	if GameSettings.start_in_void:
 		scene = VOID_SCENE
@@ -437,3 +460,70 @@ func _on_play_pressed() -> void:
 	elif GameSettings.start_in_fire:
 		scene = FIRE_SCENE
 	get_tree().change_scene_to_file(scene)
+
+
+## Quitting with sounds still held by the audio server leaks them at exit:
+## stop the players and let the audio thread release them first.
+func _quit() -> void:
+	for button: Button in _button_elements:
+		button.disabled = true
+	music.stop()
+	hover_sound.stop()
+	if click_sound.playing:
+		await click_sound.finished
+	await get_tree().create_timer(0.1).timeout
+	get_tree().quit()
+
+
+# --- Sounds ------------------------------------------------------------------
+
+func _on_node_added(node: Node) -> void:
+	if node is BaseButton and is_ancestor_of(node):
+		_add_button_sounds(node)
+
+
+func _add_button_sounds(button: BaseButton) -> void:
+	if button.has_meta(&"button_sounds"):
+		return
+	button.set_meta(&"button_sounds", true)
+	button.mouse_entered.connect(_on_button_hovered.bind(button))
+	button.pressed.connect(click_sound.play)
+
+
+func _on_button_hovered(button: BaseButton) -> void:
+	if not button.disabled:
+		hover_sound.play()
+
+
+## The game scene replaces the menu: the click moves to the tree root so it is
+## not cut off, and frees itself once it has played.
+func _keep_click_sound() -> void:
+	var player := click_sound
+	player.reparent(get_tree().root)
+	player.process_mode = Node.PROCESS_MODE_ALWAYS
+	get_tree().create_timer(player.stream.get_length() + 0.1, true) \
+		.timeout.connect(player.queue_free)
+
+
+# --- Music -------------------------------------------------------------------
+
+func _start_music() -> void:
+	music.volume_linear = 0.0
+	music.play()
+	_music_tween = music.create_tween()
+	_music_tween.tween_property(music, "volume_linear", 1.0, MUSIC_FADE_IN) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+
+## The player moves to the tree root so the fade outlives the menu and plays
+## over the game's first moments, then frees itself.
+func _fade_out_music() -> void:
+	if _music_tween != null:
+		_music_tween.kill()
+	var player := music
+	player.reparent(get_tree().root)
+	player.process_mode = Node.PROCESS_MODE_ALWAYS
+	var tween := player.create_tween()
+	tween.tween_property(player, "volume_linear", 0.0, MUSIC_FADE_OUT) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_callback(player.queue_free)

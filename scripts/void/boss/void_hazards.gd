@@ -60,7 +60,7 @@ class Hazard:
 
 	func hurt() -> void:
 		if is_instance_valid(player) and not player.is_falling():
-			player.take_damage(damage)
+			player.take_damage(damage, global_position)
 
 	func player_point() -> Vector2:
 		return player.global_position if is_instance_valid(player) else Vector2.INF

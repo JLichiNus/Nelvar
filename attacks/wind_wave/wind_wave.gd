@@ -13,6 +13,7 @@ const SHEET_TEXEL := 3.0
 @export var fade_duration: float = 0.10  # текстура сама рассыпается, это лишь добивка
 @export var start_size := Vector2(70.0, 70.0)
 @export var end_size := Vector2(180.0, 180.0)
+## Set by the player at launch from its base damage (wave_damage_percent).
 @export var damage: float = 8.0
 @export var knockback_force: float = 550.0
 

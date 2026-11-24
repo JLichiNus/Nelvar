@@ -8,6 +8,7 @@ visible = false
 custom_minimum_size = Vector2(480, 0)
 script = ExtResource("1")
 back_button = NodePath("Rows/SettingsBack")
+reveal_text = false
 
 [node name="Rows" type="VBoxContainer" parent="."]
 layout_mode = 2
@@ -54,6 +55,25 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
 theme_override_font_sizes/font_size = 22
 text = "F12 — показать или скрыть в игре"
+
+[node name="DamageVignette" type="Button" parent="Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Виньетка урона: средняя"
+alignment = 0
+
+[node name="VignetteDirection" type="CheckButton" parent="Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Виньетка со стороны удара"
+
+[node name="VignetteHint" type="Label" parent="Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
+theme_override_font_sizes/font_size = 22
+text = "Красный край экрана при получении урона"
 
 [node name="DevMenu" type="Button" parent="Rows"]
 unique_name_in_owner = true

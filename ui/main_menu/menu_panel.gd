@@ -29,6 +29,9 @@ const PAUSES := {".": 0.22, "!": 0.22, "?": 0.22, ",": 0.08, "—": 0.1}
 @export var typed_text: Label
 ## Shown (and clickable) only once the rest of the panel is revealed.
 @export var back_button: Button
+## Off: the header, content and back button are on screen as soon as the panel
+## opens; only the panel itself fades/slides in and the rule is drawn.
+@export var reveal_text := true
 
 var _run := 0
 var _tween: Tween
@@ -86,15 +89,16 @@ func play_open() -> void:
 	_stop()
 	show()
 	modulate.a = 0.0
-	header.modulate.a = 0.0
+	var text_alpha := 0.0 if reveal_text else 1.0
+	header.modulate.a = text_alpha
 	_set_rule_width(0.0)
 	for item in _items():
-		item.modulate.a = 0.0
+		item.modulate.a = text_alpha
 	if typed_text != null:
-		typed_text.visible_characters = 0
+		typed_text.visible_characters = 0 if reveal_text else -1
 	if back_button != null:
-		back_button.modulate.a = 0.0
-		back_button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		back_button.modulate.a = text_alpha
+		back_button.mouse_filter = Control.MOUSE_FILTER_IGNORE if reveal_text else Control.MOUSE_FILTER_STOP
 	# Let the container place the panel before sliding it in.
 	await get_tree().process_frame
 	if run != _run:
@@ -104,10 +108,13 @@ func play_open() -> void:
 	_tween.tween_method(_slide.bind(target), SLIDE, 0.0, OPEN_TIME) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	_tween.parallel().tween_property(self, "modulate:a", 1.0, OPEN_TIME)
-	_tween.tween_property(header, "modulate:a", 1.0, 0.15)
+	if reveal_text:
+		_tween.tween_property(header, "modulate:a", 1.0, 0.15)
 	_tween.tween_method(_set_rule_width, 0.0, 1.0, 0.3) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	_tween.tween_callback(_pulse_rule)
+	if not reveal_text:
+		return
 	# Content items one after another.
 	var items := _items()
 	for i in items.size():
