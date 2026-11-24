@@ -16,6 +16,9 @@ const SHEET_TEXEL := 3.0
 ## Set by the player at launch from its base damage (wave_damage_percent).
 @export var damage: float = 8.0
 @export var knockback_force: float = 550.0
+## Mutations grow or shrink the wave. The sprite stays on whole texels, so
+## the size snaps to multiples of 1/SHEET_TEXEL (4/3, 5/3, 2/3...).
+@export var size_multiplier: float = 1.0
 
 var direction := Vector2.RIGHT
 var _hit_targets: Dictionary = {}
@@ -37,7 +40,8 @@ func launch(
 	if launch_direction.length_squared() > 0.0001:
 		direction = launch_direction.normalized()
 	rotation = direction.angle()
-	scale = Vector2.ONE
+	var size := _snapped_size()
+	scale = Vector2.ONE * size
 	modulate.a = 1.0
 	_hit_targets.clear()
 	_setup_visual()
@@ -54,7 +58,7 @@ func launch(
 	tween.tween_property(
 		self,
 		"scale",
-		end_size / start_size,
+		end_size / start_size * size,
 		duration
 	).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	tween.tween_property(
@@ -85,7 +89,12 @@ func _update_visual(progress: float) -> void:
 	var column := mini(int(progress * _visual.hframes), _visual.hframes - 1)
 	_visual.frame_coords = Vector2i(column, _sheet_row)
 	_visual.global_rotation = 0.0
-	_visual.global_scale = Vector2(SHEET_TEXEL, SHEET_TEXEL)
+	var texel := SHEET_TEXEL * _snapped_size()
+	_visual.global_scale = Vector2(texel, texel)
+
+
+func _snapped_size() -> float:
+	return maxf(roundf(SHEET_TEXEL * size_multiplier), 1.0) / SHEET_TEXEL
 
 
 func _on_body_entered(body: Node) -> void:

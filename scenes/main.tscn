@@ -15,6 +15,7 @@
 [ext_resource type="Script" path="res://ui/ability_bar.gd" id="ability_bar"]
 [ext_resource type="Script" path="res://ui/level_line.gd" id="level_line"]
 [ext_resource type="Script" path="res://ui/damage_vignette.gd" id="damage_vignette"]
+[ext_resource type="PackedScene" path="res://ui/mutations/mutation_hud.tscn" id="mutation_hud"]
 
 [node name="Nelvar" type="Node2D"]
 script = ExtResource("1")
@@ -100,7 +101,7 @@ layout_mode = 2
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.72, 0.79, 0.83, 1)
 theme_override_font_sizes/font_size = 22
-text = "WASD / стрелки — ходьба   ·   Ctrl — бег   ·   Shift — полёт\nЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)\nКолесо — масштаб   ·   F3 — чанки и коллизии   ·   F12 — скрыть панель   ·   Esc — пауза"
+text = "WASD / стрелки — ходьба   ·   Ctrl — бег   ·   Shift — полёт\nЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)   ·   E — мутация\nКолесо — масштаб   ·   F3 — чанки и коллизии   ·   F12 — скрыть панель   ·   Esc — пауза"
 
 [node name="PauseMenu" parent="." instance=ExtResource("8")]
 
@@ -152,3 +153,6 @@ grow_vertical = 0
 mouse_filter = 2
 script = ExtResource("level_line")
 player = NodePath("../../Actors/Player")
+
+[node name="MutationHud" parent="." node_paths=PackedStringArray("player") instance=ExtResource("mutation_hud")]
+player = NodePath("../Actors/Player")

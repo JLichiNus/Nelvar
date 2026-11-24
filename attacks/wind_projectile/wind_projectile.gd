@@ -13,7 +13,11 @@ const SHEET_TEXEL := 3.0
 @export var lifetime: float = 2.5
 @export var frame_duration: float = 0.07
 
+## Enemies the projectile flies through before it stops (mutations).
+@export var pierce: int = 0
+
 var direction := Vector2.RIGHT
+var _hit_targets: Dictionary = {}
 var _sheet_row := 0
 var _anim_time := 0.0
 var _visual: Sprite2D
@@ -74,10 +78,20 @@ func _on_area_entered(area: Area2D) -> void:
 
 func _hit(target: Node) -> void:
 	var collision_object := target as CollisionObject2D
-	if (
+	var is_enemy := (
 		collision_object != null
 		and collision_object.collision_layer & 8 != 0
 		and target.has_method("take_damage")
-	):
-		target.call("take_damage", damage)
-	queue_free()
+	)
+	if not is_enemy:
+		queue_free()
+		return
+	var target_id := target.get_instance_id()
+	if _hit_targets.has(target_id):
+		return
+	_hit_targets[target_id] = true
+	target.call("take_damage", damage)
+	if pierce <= 0:
+		queue_free()
+		return
+	pierce -= 1

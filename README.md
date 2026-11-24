@@ -34,7 +34,9 @@ in the upper-left corner and printed to Output.
 - **Ctrl:** toggle running.
 - **Shift:** short flight (speed boost); airborne the player ignores contact damage.
 - **LMB:** wind projectile. **RMB:** wind wave. **R:** compression on the enemy nearest to the cursor.
+- **E:** open the choice of a ripe mutation (see Mutations below).
 - **Mouse wheel:** zoom the camera attached to the player.
+- **F4** (debug builds): fill the adaptation meter at once.
 - **F3:** show occupied chunks, collision boundaries, trunk circles, rock footprints and island IDs.
 
 The player (`player/player.tscn`) is drawn from two animated layers: legs play
@@ -43,6 +45,41 @@ is at the feet, under a circular collider of `NelvarPlayer.BODY_RADIUS`; aiming
 and attacks start from the body center (`AimPivot`). Hopper enemies spawn on
 walkable ground around the player, away from trunks. At zero HP the scene
 restarts with a new seed.
+
+### Mutations
+
+Every mutation gives something and takes something (`mutations/`). The
+player's body adapts to what it lives through: the **adaptation** meter
+above the level line fills from lost health (most), kills and, slowly, time.
+A full meter ripens a mutation, and each ripening belongs in advance to one of
+the four linked versions of the Wanderer — the player's own (Air), Earth, Fire,
+Ice — or to none (spontaneous). The next owners are shown as element sigils
+next to the meter, so the player can plan around them.
+
+- **The player's own** waits: the sigil pulses, the meter stops and **E**
+  opens three cards (the game pauses; 1/2/3 or a click picks, Esc/E puts it
+  off). Left waiting for 40 s, another version seizes it and picks from the
+  same cards for itself.
+- **Another version's** is picked by that version from three cards by what
+  its element values (`NelvarMutation.VERSION_WEIGHTS`: Air — speed and
+  flight, Earth — health and defence, Fire — damage, Ice — cooldowns and
+  control). Each card says which version would like it.
+- **Spontaneous** ones are random.
+
+Received mutations line up along the top of the screen as small tiles (first
+letter, frame in the colour of the version that picked it, a mark of its layer,
+one pip per stage); hovering one shows its short summary. **Esc → Инвентарь**
+lists them all with exact numbers, layer and who picked each stage.
+
+The player's share of ripenings falls from 70% to 25% over the first 12
+mutations. Taking a mutation again deepens it to stage II (both sides doubled).
+Mutations come in three layers: **body** (stat trades), **ability** (how a skill
+works: split shot, piercing wind, longer or broader wave, longer flight, ...)
+and **rule** (hollow vortex — flight no longer protects; rooting — armour when
+standing still; storm core; last breath). The catalog is
+`mutations/mutation_catalog.gd`; stats live in `NelvarStats`, which the player
+reads instead of its exports; the meter, the queue and the choice are
+`NelvarMutationDirector` under the player; the HUD is `ui/mutations/`.
 
 `test_world.tscn` is a flat arena for tuning combat without the generator (F6).
 
@@ -166,6 +203,7 @@ godot --headless --path . --script tests/test_terrain.gd
 godot --headless --path . --script tests/test_forest.gd -- --seed=20261120
 godot --headless --path . --script tests/test_props.gd
 godot --headless --path . --script tests/test_void.gd -- --seeds=50 --walks=6
+godot --headless --path . --script tests/test_mutations.gd
 ```
 
 Here `godot` means the path to your Godot 4.7.2 executable. The checks cover

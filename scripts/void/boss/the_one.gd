@@ -191,7 +191,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _touch(damage: float) -> void:
-	if player.is_airborne() or player.is_falling():
+	if player.is_flight_protected() or player.is_falling():
 		return
 	if player.global_position.distance_to(global_position) < CONTACT_RADIUS:
 		player.take_damage(damage, global_position)

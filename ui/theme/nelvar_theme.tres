@@ -1,4 +1,4 @@
-[gd_resource type="Theme" load_steps=16 format=3]
+[gd_resource type="Theme" load_steps=17 format=3]
 
 [ext_resource type="FontFile" path="res://assets/fonts/nelvar_pixel.fnt" id="1"]
 [ext_resource type="Texture2D" path="res://assets/textures/ui/button.png" id="2"]
@@ -75,6 +75,17 @@ texture_margin_top = 12.0
 texture_margin_right = 12.0
 texture_margin_bottom = 12.0
 
+[sub_resource type="StyleBoxTexture" id="tooltip"]
+content_margin_left = 18.0
+content_margin_top = 15.0
+content_margin_right = 18.0
+content_margin_bottom = 15.0
+texture = ExtResource("6")
+texture_margin_left = 12.0
+texture_margin_top = 12.0
+texture_margin_right = 12.0
+texture_margin_bottom = 12.0
+
 [sub_resource type="StyleBoxEmpty" id="check_normal"]
 content_margin_left = 6.0
 content_margin_top = 6.0
@@ -118,3 +129,4 @@ Label/constants/line_spacing = 4
 Label/constants/shadow_offset_x = 2
 Label/constants/shadow_offset_y = 2
 PanelContainer/styles/panel = SubResource("panel")
+TooltipPanel/styles/panel = SubResource("tooltip")
