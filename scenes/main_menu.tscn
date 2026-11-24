@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3]
+[gd_scene load_steps=22 format=3]
 
 [ext_resource type="Script" path="res://ui/main_menu/main_menu.gd" id="1"]
 [ext_resource type="Shader" path="res://ui/main_menu/menu_background.gdshader" id="2"]
@@ -13,6 +13,9 @@
 [ext_resource type="Shader" path="res://ui/main_menu/logo_glow.gdshader" id="11"]
 [ext_resource type="Script" path="res://ui/main_menu/menu_panel.gd" id="12"]
 [ext_resource type="PackedScene" path="res://ui/main_menu/settings_panel.tscn" id="13"]
+[ext_resource type="AudioStream" uid="uid://bnj4fb1a81xwh" path="res://assets/audio/music/main_menu.wav" id="14"]
+[ext_resource type="AudioStream" uid="uid://cirqysvg3ccq2" path="res://assets/audio/sfx/ui_hover.wav" id="15"]
+[ext_resource type="AudioStream" uid="uid://cmkd11qmiw7gx" path="res://assets/audio/sfx/ui_click.wav" id="16"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_bg"]
 shader = ExtResource("2")
@@ -212,3 +215,17 @@ layout_mode = 2
 size_flags_horizontal = 0
 theme_override_font_sizes/font_size = 22
 text = "Назад"
+
+[node name="Music" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("14")
+volume_db = -80.0
+
+[node name="HoverSound" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("15")
+volume_db = -6.0
+max_polyphony = 4
+
+[node name="ClickSound" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("16")
+volume_db = -6.0
+max_polyphony = 4
