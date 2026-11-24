@@ -148,6 +148,56 @@ with the same gusts in whole art pixels. Cloud shadows drift over everything
 and butterflies flutter between flowers and scatter from the player
 (`NelvarButterflies`). F3 shows the colliders, the mountain foot and the shores.
 
+### The fire forge (developer menu)
+
+Settings → «Меню разработчика» → «Запускать игру в Огне» makes «Играть» open
+`scenes/fire.tscn`: a basin of ash and basalt ringed by black ridges and volcanoes, in
+the style of the «Огонь» menu background — a world that is still being forged rather
+than one that burnt. Only one of the three start options is on at a time.
+
+`NelvarFireGenerator` lays it out from the seed (parameters in
+`resources/fire_forge_config.tres`): 1–2 great volcanoes in the north of the ring,
+2–4 lava lakes (the bigger ones hold islands of black plates), a lava stream from under
+each volcano into a lake (sometimes one from lake to lake), roads of cooled lava — black,
+glossy and wrinkled — joining the clearings, magma fissures (about half of them erupt),
+magma fields where the basalt's joints glow, fumarole fields with yellow sulfur and banks
+of smoke over them, stands of burnt trees (charred with embers at the tips, smouldering
+trunks split open and glowing, grey ashen ones) and small groves of emberleaves — the
+red-crowned tree that lives in the heat — broken snags and logs, basalt boulders (bare,
+capped with ash or glowing through their cracks), blue-green crystals and a few plants:
+ember grass, ash flowers, scorched shrubs.
+
+Lava is on physics layer 7 («Lava»): it stops the walking player but not the flying one
+(Shift) and not projectiles. Whoever comes down in it burns: the player sinks in a flash
+of sparks and comes back on the ground they last stood on safely, 20 HP worse for it.
+Standing right at the lava's edge scorches a little. Every stretch of a stream inside the
+basin has a crossing — a raft of set crust — within `crossing_spacing`, so all open ground
+can be reached on foot; the islands only by flight. Hoppers do not jump into the lava
+(`is_safe_landing`), but a wind wave can blow them in, and then they burn. An active
+fissure glows brighter for a moment, then erupts: the burst hurts whoever stands on the
+crack (flight passes over it) and throws hoppers back.
+
+The ridges are `NelvarMountainPainter`'s height fields painted by `NelvarVolcanoPainter`:
+basalt with a fiery rim on the skyline, columnar walls, dull ash where snow would lie,
+cinder slopes with dead snags. The giant's look is a volcano with a crater; the molten
+ones hold lava, and a great volcano's runs down its front to where its stream begins.
+Some massifs pour lavafalls; cinder cones stand on the plateau beyond. Glowing pixels of
+every sprite are keyed by alpha and animated by `fire_molten.gdshader` (flowing lava,
+churning hot spots, breathing embers).
+
+The floor (`scripts/fire/fire_ground.gdshader`, fed by `NelvarFireField`) draws the
+cooling joints, ash ripples, cinder, roads, sulfur, plates, fissures and the lava — floes
+of crust drifting with each stream's flow or churning slowly in a lake, a hot rim at the
+shore — and beyond the ridges the land runs on with rivers of lava. Over the world:
+the light of the lava and the magma, breathing slowly and added in dithered steps
+(`fire_glow.gdshader`), eruptions and craters flashing; shadows of smoke drifting by; heat
+haze shimmering over the lava and the fissures (`NelvarHeatHaze`). Ash drifts and sparks
+rise from the lava, glowing cracks and craters (`NelvarEmbers`); wisps rise from the vents
+and smouldering trunks and plumes from the craters (`NelvarSmoke`). The player's wind
+blows ash, sparks and smoke away and thins the smoke banks, which grow back. Ember moths
+flutter over the heat and scatter, salamanders bask on the shores and dive into the lava
+when the player comes close (`NelvarFireCritters`). F3 shows the walls and the fissures.
+
 The earth map contains 2–3 large floating islands and 6–7 small ones, connected
 by narrow wooden bridges. Shorelines and bridge sides block movement; falling
 and height differences are not implemented yet.
@@ -226,6 +276,7 @@ godot --headless --path . --script tests/test_forest.gd -- --seed=20261120
 godot --headless --path . --script tests/test_props.gd
 godot --headless --path . --script tests/test_void.gd -- --seeds=50 --walks=6
 godot --headless --path . --script tests/test_earth.gd -- --seeds=30
+godot --headless --path . --script tests/test_fire.gd -- --seeds=30
 ```
 
 Here `godot` means the path to your Godot 4.7.2 executable. The checks cover
@@ -244,3 +295,10 @@ reachable from the spawn, repeatable art on the world grid, the ground map, the
 start setting, and in the real scene: the mountain foot and ponds stop the player,
 projectiles fly over water, trunks block and tall grass does not, statues open
 their eye, plants sway, every peak is painted and enemies appear on open ground.
+Fire checks cover the forge's layout (lava, crossings, roads, islands, fissures,
+passages, a closed ring of ridges), that open ground is reachable across the crossings,
+repeatable art on the world grid (volcanoes with lava running down them), the ground and
+light maps, the start setting, and in the real scene: lava stops the walking player, the
+flight carries them over a lake, coming down in it burns and throws them back, crossings
+let them over a stream, a hopper blown into the lava burns, a fissure erupts and hurts,
+a salamander dives and the wind thins a smoke bank.

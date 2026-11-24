@@ -278,8 +278,9 @@ func is_falling() -> bool:
 
 
 # Пустота: под ногами ничего нет. Тело уходит вниз, сжимается и тает в
-# фиолетовой тьме; управление вернёт recover_at().
-func fall_into_abyss(duration: float) -> void:
+# фиолетовой тьме; управление вернёт recover_at(). Огненная кузня зовёт то же
+# самое, когда полёт кончился над лавой, — с оранжевым `tint`.
+func fall_into_abyss(duration: float, tint := Color(0.45, 0.25, 0.85, 0.0)) -> void:
 	if _is_dead or _is_falling:
 		return
 	_is_falling = true
@@ -292,7 +293,7 @@ func fall_into_abyss(duration: float) -> void:
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tween.tween_property(body_visual, "scale", body_visual.scale * 0.25, duration) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tween.tween_property(body_visual, "modulate", Color(0.45, 0.25, 0.85, 0.0), duration)
+	tween.tween_property(body_visual, "modulate", tint, duration)
 
 
 func recover_at(point: Vector2) -> void:

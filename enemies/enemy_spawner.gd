@@ -10,8 +10,8 @@ extends Node2D
 @export var player: Node2D
 # false — ждать вызова start(), например пока генерируется мир.
 @export var auto_start: bool = true
-@export var initial_count: int = 5
-@export var max_alive: int = 10
+@export var initial_count: int = 25
+@export var max_alive: int = 100
 @export var spawn_interval: float = 2.5
 @export var min_distance_from_player: float = 450.0
 @export var spawn_area := Rect2(80, 80, 3296, 1784)
@@ -78,6 +78,9 @@ func _try_spawn() -> void:
 		push_warning("Сцена врага должна начинаться с Node2D.")
 		return
 	enemy.position = to_local(point)
+	# Карта с опасной землёй (кузня) подсказывает врагу, куда не прыгать.
+	if _ground != null and _ground.has_method("is_safe_landing") and "ground" in enemy:
+		enemy.set("ground", _ground)
 	add_child(enemy)
 	if enemy.has_method("play_spawn_animation"):
 		enemy.call("play_spawn_animation", appear_duration)

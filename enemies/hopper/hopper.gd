@@ -39,6 +39,11 @@ enum State { IDLE, JUMPING, DEAD }
 @export var eye_color := Color("3a1222")
 @export var shadow_color := Color(0.0, 0.0, 0.0, 0.35)
 
+## Карта, по которой прыгает враг (ставит спавнер). Если у неё есть
+## is_safe_landing(point), прыжки выбираются так, чтобы не приземлиться в
+## опасное место (лава кузни). Отброс ветром этого не проверяет.
+var ground: Object
+
 # Текстуры одинаковы у всех прыгунов с одинаковыми параметрами — печём один раз.
 static var _texture_cache := {}
 
@@ -99,6 +104,15 @@ func take_damage(amount: float) -> void:
 	_flash()
 	if health <= 0.0:
 		_die()
+
+
+## В прыжке враг над землёй: лава и выбросы его не трогают.
+func is_airborne() -> bool:
+	return _state == State.JUMPING
+
+
+func is_dead() -> bool:
+	return _state == State.DEAD
 
 
 func apply_knockback(force: Vector2) -> void:
@@ -173,11 +187,25 @@ func _update_idle(delta: float) -> void:
 
 
 func _start_jump() -> void:
+	var direction := Vector2.from_angle(randf() * TAU)
+	var distance := randf_range(jump_distance_min, jump_distance_max)
+	if ground != null and ground.has_method("is_safe_landing"):
+		# Несколько попыток в разные стороны; если опасно везде — пропускаем прыжок.
+		var found := false
+		for attempt in 8:
+			var landing := global_position + direction * distance
+			var middle := global_position + direction * distance * 0.5
+			if ground.call("is_safe_landing", landing) and ground.call("is_safe_landing", middle):
+				found = true
+				break
+			direction = direction.rotated(TAU / 8.0 * 3.0)
+		if not found:
+			_restart_visual_tween().tween_property(visual, "scale", Vector2.ONE, landing_recovery)
+			_enter_idle()
+			return
 	_state = State.JUMPING
 	_is_winding_up = false
 	_jump_time = 0.0
-	var direction := Vector2.from_angle(randf() * TAU)
-	var distance := randf_range(jump_distance_min, jump_distance_max)
 	_jump_velocity = direction * distance / maxf(jump_duration, 0.01)
 
 	var tween := _restart_visual_tween()

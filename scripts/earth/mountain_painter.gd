@@ -100,6 +100,8 @@ class Style:
 	var snow := Vector2(0.26, 0.4)
 	var glacier := 0.0
 	var strata := false
+	## Columnar rock on the walls: upright bands (the fire forge's basalt).
+	var columns := false
 
 
 ## Everything a pixel's colour depends on, per peak.
@@ -121,41 +123,21 @@ class Look:
 	var steep := 1.0
 	## How far the edge of the base wanders, round the base (_ring).
 	var base_ring := PackedFloat32Array()
+	## Stands on the uplands beyond the nearest row (its foot is their meadow).
+	var on_plateau := false
+	## The lit rim on the sunny skyline and on lit crests.
+	var rim: Color
+	## Volcanoes (NelvarVolcanoPainter): the crater's radius as a share of the main
+	## summit's; 0 for none. `molten`: lava in the crater; `channel`: and down the front.
+	var crater := 0.0
+	var molten := false
+	var channel := false
 
 
 func paint(thing: NelvarEarthData.Thing) -> NelvarEarthArt:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = thing.appearance_seed
-	var shape: int = thing.variant
-	var look := Look.new()
-	look.half = thing.size.x / STEP * 0.5
-	look.depth = look.half * DEPTH
-	look.tall = maxf(6.0, thing.size.y / STEP * LOWER - look.depth)
-	var plateau := shape == Peak.CRAG
-	# Everything but the nearest row stands on the uplands: its foot is their meadow.
-	var on_plateau := plateau or thing.row > 0
-	var haze := clampf(thing.row * 0.05, 0.0, 0.15) if not plateau else 0.04
-	var tint: Array = ROCK_TINTS[rng.randi_range(0, ROCK_TINTS.size() - 1)]
-	for i in ROCK_FAR.size():
-		var near: Color = tint[i]
-		look.rock.append(near.lerp(ROCK_FAR[i], minf(0.4, thing.row * 0.12) if not plateau else 0.05)
-			.lerp(HAZE, haze * 0.5))
-	for color in SNOW:
-		look.snow.append(color.lerp(HAZE, haze * 0.3))
-	look.foot = MEADOW if on_plateau else FOOT
-	look.outline = OUTLINE.lerp(look.rock[1], haze)
-	look.edge = look.rock[0].lerp(OUTLINE, 0.35)
-	look.style = _style(shape, rng)
-	look.summits = _summits(shape, rng, look.half, look.depth, look.tall)
-	look.salt = rng.randi() & 0xffff
-	look.snow_depth = rng.randf_range(look.style.snow.x, look.style.snow.y)
-	# About the same number of gullies on every peak: a giant gets broader ones.
-	look.gullies = clampf(look.half / 18.0, 2.0, 4.5)
-	look.steep = maxf(0.6, look.tall / look.half * 1.2)
-	look.base_ring = _ring(look.salt + 1, 7.0, 2.2)
-	for summit in look.summits:
-		if summit.flat > 0.0:
-			summit.rim = _ring(look.salt + 12, summit.x, 1.8)
+	var look := _look(thing, rng)
 	var main := look.summits[0]
 	var reach := look.tall * 1.15 + 4.0
 	var canvas := NelvarEarthCanvas.new(thing.position, Rect2(-look.half - 2.0,
@@ -245,6 +227,9 @@ func paint(thing: NelvarEarthData.Thing) -> NelvarEarthArt:
 				var band := maxf(3.0, look.tall * 0.1)
 				var wobble := (NelvarPixelArt.value_noise(gx * 0.08, 2.5, look.salt + 8) - 0.5) * band * 0.8
 				level += 0.08 if int(floor((height + wobble) / band)) % 2 == 0 else -0.06
+			elif look.style.columns and ground == Ground.ROCK and steep > 0.5:
+				# Columnar rock: upright bands two pixels wide.
+				level += 0.07 if int(floor(gx / 2.0)) % 2 == 0 else -0.05
 			var bottom := mini(highest - 1, row)
 			for y in range(top, bottom + 1):
 				var spot := canvas.grid + Vector2i(x, y)
@@ -261,12 +246,63 @@ func paint(thing: NelvarEarthData.Thing) -> NelvarEarthArt:
 		tops[x] = highest
 	_edges(look, data, grounds, crests, canvas.levels, w, h)
 	canvas.image = Image.create_from_data(w, h, false, Image.FORMAT_RGBA8, data)
-	_firs(canvas, rng, look, heights, grounds, back, rows,
-		MEADOW_FIRS if on_plateau else FOOT.slice(0, 2), 0.3 if on_plateau else 0.5)
+	_decorate(canvas, rng, look, heights, grounds, back, rows)
 	var art := NelvarEarthArt.from_canvas(canvas)
 	art.relief = relief
-	if thing.accent and shape in [Peak.SUMMIT, Peak.MASSIF, Peak.MESA, Peak.GIANT]:
+	if _has_waterfall(thing):
 		art.waterfall = _waterfall(canvas, rng, look, main, tops, bottoms, grounds)
+	return _finish(art, look, thing)
+
+
+## Everything a pixel's colour depends on: palettes, the look's style, its summits.
+func _look(thing: NelvarEarthData.Thing, rng: RandomNumberGenerator) -> Look:
+	var shape: int = thing.variant
+	var look := Look.new()
+	look.half = thing.size.x / STEP * 0.5
+	look.depth = look.half * DEPTH
+	look.tall = maxf(6.0, thing.size.y / STEP * LOWER - look.depth)
+	var plateau := shape == Peak.CRAG
+	# Everything but the nearest row stands on the uplands: its foot is their meadow.
+	look.on_plateau = plateau or thing.row > 0
+	var haze := clampf(thing.row * 0.05, 0.0, 0.15) if not plateau else 0.04
+	var tint: Array = ROCK_TINTS[rng.randi_range(0, ROCK_TINTS.size() - 1)]
+	for i in ROCK_FAR.size():
+		var near: Color = tint[i]
+		look.rock.append(near.lerp(ROCK_FAR[i], minf(0.4, thing.row * 0.12) if not plateau else 0.05)
+			.lerp(HAZE, haze * 0.5))
+	for color in SNOW:
+		look.snow.append(color.lerp(HAZE, haze * 0.3))
+	look.foot = MEADOW if look.on_plateau else FOOT
+	look.outline = OUTLINE.lerp(look.rock[1], haze)
+	look.edge = look.rock[0].lerp(OUTLINE, 0.35)
+	look.rim = look.rock[4]
+	look.style = _style(shape, rng)
+	look.summits = _summits(shape, rng, look.half, look.depth, look.tall)
+	look.salt = rng.randi() & 0xffff
+	look.snow_depth = rng.randf_range(look.style.snow.x, look.style.snow.y)
+	# About the same number of gullies on every peak: a giant gets broader ones.
+	look.gullies = clampf(look.half / 18.0, 2.0, 4.5)
+	look.steep = maxf(0.6, look.tall / look.half * 1.2)
+	look.base_ring = _ring(look.salt + 1, 7.0, 2.2)
+	for summit in look.summits:
+		if summit.flat > 0.0:
+			summit.rim = _ring(look.salt + 12, summit.x, 1.8)
+	return look
+
+
+## What grows on the painted peak: firs on the grassy foot.
+func _decorate(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, look: Look,
+		heights: PackedFloat32Array, grounds: PackedByteArray, back: int, rows: int) -> void:
+	_firs(canvas, rng, look, heights, grounds, back, rows,
+		MEADOW_FIRS if look.on_plateau else FOOT.slice(0, 2), 0.3 if look.on_plateau else 0.5)
+
+
+func _has_waterfall(thing: NelvarEarthData.Thing) -> bool:
+	return thing.accent and thing.variant in [Peak.SUMMIT, Peak.MASSIF, Peak.MESA, Peak.GIANT]
+
+
+## The finished art, for a painter that keeps more about the peak.
+func _finish(art: NelvarEarthArt, _look_used: Look, _thing: NelvarEarthData.Thing) -> NelvarEarthArt:
 	return art
 
 
@@ -387,10 +423,10 @@ func _edges(look: Look, data: PackedByteArray, grounds: PackedByteArray, crests:
 				if level < 0.45:
 					color = look.outline if open_up else look.edge
 				elif open_up:
-					color = look.snow[2] if ground == Ground.SNOW else look.rock[4]
+					color = look.snow[2] if ground == Ground.SNOW else look.rim
 			elif crests[index] == 1:
 				if level >= 0.45:
-					color = look.snow[2] if ground == Ground.SNOW else look.rock[4]
+					color = look.snow[2] if ground == Ground.SNOW else look.rim
 				else:
 					color = look.snow[0] if ground == Ground.SNOW else look.rock[0]
 			if color.a > 0.0:
