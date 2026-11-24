@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://ui/ability_bar.gd" id="ability_bar"]
 [ext_resource type="Script" path="res://ui/level_line.gd" id="level_line"]
 [ext_resource type="Script" path="res://ui/damage_vignette.gd" id="damage_vignette"]
+[ext_resource type="PackedScene" path="res://ui/mutations/mutation_hud.tscn" id="mutation_hud"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_horizontal_boundary"]
 size = Vector2(3520, 32)
@@ -170,3 +171,6 @@ grow_vertical = 0
 mouse_filter = 2
 script = ExtResource("level_line")
 player = NodePath("../../Player")
+
+[node name="MutationHud" parent="." node_paths=PackedStringArray("player") instance=ExtResource("mutation_hud")]
+player = NodePath("../Player")

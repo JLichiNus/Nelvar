@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3 uid="uid://dcaj77phiguvn"]
+[gd_scene load_steps=13 format=3 uid="uid://dcaj77phiguvn"]
 
 [ext_resource type="Script" uid="uid://4psdfeenr6lm" path="res://player/player.gd" id="1_oul6g"]
 [ext_resource type="PackedScene" path="res://attacks/wind_projectile/wind_projectile.tscn" id="2_projectile"]
@@ -7,6 +7,7 @@
 [ext_resource type="SpriteFrames" path="res://player/sprites/player_vortex_frames.tres" id="5_vortex"]
 [ext_resource type="SpriteFrames" path="res://player/sprites/player_torso_frames.tres" id="6_torso"]
 [ext_resource type="Script" path="res://scripts/fx/occlusion_outline.gd" id="7_outline"]
+[ext_resource type="Script" path="res://mutations/mutation_director.gd" id="8_mutations"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_player"]
 radius = 14.0
@@ -102,3 +103,6 @@ script = ExtResource("7_outline")
 sources = [NodePath("../Body/Vortex"), NodePath("../Body/Torso")]
 outline_color = Color(0.94, 0.98, 1, 0.95)
 fill_color = Color(0.78, 0.92, 1, 0.2)
+
+[node name="Mutations" type="Node" parent="."]
+script = ExtResource("8_mutations")

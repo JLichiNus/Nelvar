@@ -5,6 +5,8 @@ extends CanvasLayer
 @onready var dialog: PanelContainer = %Dialog
 @onready var resume_button: Button = %Resume
 @onready var settings_button: Button = %Settings
+@onready var inventory_button: Button = %Inventory
+@onready var inventory_panel: NelvarMutationInventory = %InventoryPanel
 @onready var settings_panel: NelvarSettingsPanel = %SettingsPanel
 @onready var center: CenterContainer = $Shade/Center
 
@@ -13,6 +15,8 @@ func _ready() -> void:
 	settings_panel.accent = settings_element.accent
 	resume_button.pressed.connect(_resume)
 	settings_button.pressed.connect(_open_settings)
+	inventory_button.pressed.connect(_open_inventory)
+	inventory_panel.back_button.pressed.connect(_close_inventory)
 	%MainMenu.pressed.connect(_return_to_menu)
 	%Quit.pressed.connect(get_tree().quit)
 	settings_panel.back_button.pressed.connect(_close_settings)
@@ -25,10 +29,14 @@ func _input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 	if not visible:
 		get_tree().paused = true
+		# Only scenes with a mutating player have an inventory.
+		inventory_button.visible = _mutations() != null
 		show()
 		resume_button.grab_focus()
 	elif settings_panel.visible:
 		_close_settings()
+	elif inventory_panel.visible:
+		_close_inventory()
 	else:
 		_resume()
 
@@ -55,6 +63,26 @@ func _close_settings() -> void:
 func _on_dev_panel_toggled(open: bool) -> void:
 	var dev := settings_panel.dev_panel
 	center.offset_left = dev.get_combined_minimum_size().x + dev.GAP if open else 0.0
+
+
+func _open_inventory() -> void:
+	dialog.hide()
+	inventory_panel.refresh(_mutations())
+	inventory_panel.show()
+	inventory_panel.back_button.grab_focus()
+
+
+func _close_inventory() -> void:
+	inventory_panel.hide()
+	dialog.show()
+	inventory_button.grab_focus()
+
+
+func _mutations() -> NelvarMutationDirector:
+	var player := get_tree().get_first_node_in_group(&"player")
+	if player == null:
+		return null
+	return player.get_node_or_null("Mutations") as NelvarMutationDirector
 
 
 func _return_to_menu() -> void:

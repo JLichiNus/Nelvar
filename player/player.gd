@@ -12,12 +12,20 @@ signal died
 signal damaged(amount: float, from: Vector2)
 ## Level or kills toward the next one changed.
 signal level_changed(level: int, kills: int, kills_needed: int)
+## An enemy died to the player (feeds the adaptation meter).
+signal enemy_killed
 
 enum SpeedBoostState { READY, ACTIVE, COOLDOWN }
 
 # Радиус круга-«следа» под ногами; на него опираются проверки мира и спавн.
 const BODY_RADIUS := 14.0
 const DEAD_COLOR := Color(0.45, 0.47, 0.5, 1.0)
+## "Low health" for mutations that wake up near death: below this share.
+const LOW_HEALTH_SHARE := 0.3
+## Extra projectiles of one shot spread in a fan this many degrees apart.
+const FAN_STEP_DEGREES := 9.0
+## Standing still for mutations: slower than this counts as not moving.
+const STILL_SPEED := 12.0
 # Анимация атаки с большим приоритетом не прерывается меньшей.
 const ATTACK_PRIORITY := {
 	&"attack_primary": 1,
@@ -73,7 +81,12 @@ const ATTACK_PRIORITY := {
 @export var compression_tick_percent: float = 300.0
 
 @export_category("Health")
-@export var max_health: float = 100.0
+## Before mutations; the current maximum is get_max_health().
+@export var max_health: float = 100.0:
+	set(value):
+		max_health = value
+		if stats != null:
+			stats.set_base(&"max_health", value)
 @export var invulnerability_duration: float = 1.0
 @export var death_restart_delay: float = 1.5
 
@@ -82,6 +95,9 @@ const ATTACK_PRIORITY := {
 @export var zoom_min: float = 0.575
 @export var zoom_max: float = 1.6
 
+## The exports above are the base values; mutations change them through
+## stats (see NelvarStats), and the code reads the current values from it.
+var stats := NelvarStats.new()
 var aim_direction := Vector2.RIGHT
 var _primary_cooldown_left := 0.0
 var _wave_cooldown_left := 0.0
@@ -107,6 +123,9 @@ var _attack_facing_left := 0.0
 var _hover_time := 0.0
 # Пустота: тело проваливается в пропасть, управление отключено.
 var _is_falling := false
+var _max_health_now := 0.0
+# Health shown by the bar, so regeneration does not spam health_changed.
+var _shown_health := 0
 
 @onready var aim_pivot: Node2D = $AimPivot
 @onready var projectile_spawn: Marker2D = $AimPivot/ProjectileSpawn
@@ -122,7 +141,9 @@ var _is_falling := false
 
 
 func _ready() -> void:
-	health = max_health
+	_init_stats()
+	health = get_max_health()
+	_max_health_now = health
 	# Enemies report kills to this group (register_kill).
 	add_to_group(&"player")
 	(collision_shape.shape as CircleShape2D).radius = BODY_RADIUS
@@ -189,6 +210,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_invulnerability_left = maxf(_invulnerability_left - delta, 0.0)
 	_attack_facing_left = maxf(_attack_facing_left - delta, 0.0)
+	_regenerate(delta)
 
 	var direction := Input.get_vector(
 		"move_left",
@@ -205,14 +227,19 @@ func _physics_process(delta: float) -> void:
 	if _is_running:
 		speed_multiplier *= run_speed_multiplier
 	if _speed_boost_state == SpeedBoostState.ACTIVE:
-		speed_multiplier *= speed_boost_multiplier
-	var target_velocity := direction * speed * speed_multiplier
+		speed_multiplier *= stats.value(&"flight_speed")
+	if is_low_health():
+		speed_multiplier *= 1.0 + stats.value(&"low_health_speed") / 100.0
+	var target_velocity := direction * stats.value(&"move_speed") * speed_multiplier
+	# Mutations change acceleration and braking together.
+	var handling := stats.value(&"acceleration") / acceleration
 	var rate := acceleration if direction != Vector2.ZERO else deceleration
+	rate *= handling
 	velocity = velocity.move_toward(target_velocity, rate * delta)
 	move_and_slide()
 	_update_animation(direction)
 	# В полёте игрок проходит над врагами и не получает контактного урона.
-	if not is_airborne():
+	if not is_flight_protected():
 		_check_enemy_contact()
 
 
@@ -321,6 +348,8 @@ func kills_to_next_level() -> int:
 func register_kill() -> void:
 	if _is_dead:
 		return
+	heal(stats.value(&"kill_heal"))
+	enemy_killed.emit()
 	level_kills += 1
 	while level_kills >= kills_to_next_level():
 		level_kills -= kills_to_next_level()
@@ -328,12 +357,47 @@ func register_kill() -> void:
 	level_changed.emit(level, level_kills, kills_to_next_level())
 
 
-func _damage(percent: float) -> float:
-	return base_damage() * percent / 100.0
+# `attack_stat`: the attack's own damage multiplier (primary_damage...).
+# Mutations multiply it with the common damage and the situational bonuses.
+func _damage(percent: float, attack_stat: StringName) -> float:
+	var situational := stats.value(&"air_damage") if is_airborne() else stats.value(&"ground_damage")
+	if is_low_health():
+		situational += stats.value(&"low_health_damage")
+	var multiplier := stats.value(&"damage") * stats.value(attack_stat) * maxf(1.0 + situational / 100.0, 0.1)
+	return base_damage() * percent / 100.0 * multiplier
 
 
 func is_airborne() -> bool:
 	return _speed_boost_state == SpeedBoostState.ACTIVE
+
+
+## In flight the player passes over enemies and hazards unharmed, unless a
+## mutation (Полый вихрь) took that away.
+func is_flight_protected() -> bool:
+	return is_airborne() and not stats.flag(&"flight_unprotected")
+
+
+func is_dead() -> bool:
+	return _is_dead
+
+
+func get_max_health() -> float:
+	return stats.value(&"max_health")
+
+
+func is_low_health() -> bool:
+	return health < get_max_health() * LOW_HEALTH_SHARE
+
+
+func is_standing_still() -> bool:
+	return velocity.length() < STILL_SPEED and not _is_move_input_held()
+
+
+func heal(amount: float) -> void:
+	if _is_dead or amount <= 0.0 or health >= get_max_health():
+		return
+	health = minf(health + amount, get_max_health())
+	_emit_health()
 
 
 func is_falling() -> bool:
@@ -375,16 +439,71 @@ func recover_at(point: Vector2) -> void:
 
 ## `from`: world point the hit came from (for the damage vignette); INF if none.
 func take_damage(amount: float, from: Vector2 = Vector2.INF) -> void:
-	if _is_dead or is_airborne() or _invulnerability_left > 0.0 \
+	if _is_dead or is_flight_protected() or _invulnerability_left > 0.0 \
 			or amount <= 0.0:
 		return
+	amount *= _damage_taken_multiplier()
 	health = maxf(health - amount, 0.0)
-	health_changed.emit(health, max_health)
+	_emit_health()
 	damaged.emit(amount, from)
 	if health <= 0.0:
 		_die()
 		return
-	_invulnerability_left = invulnerability_duration
+	_invulnerability_left = stats.value(&"invulnerability")
+
+
+func _damage_taken_multiplier() -> float:
+	var situational := 0.0
+	if is_standing_still():
+		situational -= stats.value(&"still_armor")
+	else:
+		situational += stats.value(&"moving_vulnerability")
+	return stats.value(&"damage_taken") * maxf(1.0 + situational / 100.0, 0.1)
+
+
+func _regenerate(delta: float) -> void:
+	var regen := stats.value(&"regen")
+	if regen <= 0.0 or health >= get_max_health():
+		return
+	health = minf(health + regen * delta, get_max_health())
+	if ceili(health) != _shown_health:
+		_emit_health()
+
+
+func _emit_health() -> void:
+	_shown_health = ceili(health)
+	health_changed.emit(health, get_max_health())
+
+
+func _init_stats() -> void:
+	var bases := {
+		&"move_speed": speed,
+		&"acceleration": acceleration,
+		&"max_health": max_health,
+		&"invulnerability": invulnerability_duration,
+		&"primary_cooldown": primary_cooldown,
+		&"primary_spread": primary_spread_degrees,
+		&"wave_cooldown": wave_cooldown,
+		&"compression_cooldown": compression_cooldown,
+		&"flight_duration": speed_boost_duration,
+		&"flight_cooldown": speed_boost_cooldown,
+		&"flight_speed": speed_boost_multiplier,
+	}
+	for stat in bases:
+		stats.set_base(stat, bases[stat])
+	stats.changed.connect(_on_stats_changed)
+
+
+# A larger maximum adds the difference to health, a smaller one cuts it.
+func _on_stats_changed() -> void:
+	var new_max := get_max_health()
+	if is_equal_approx(new_max, _max_health_now):
+		return
+	if new_max > _max_health_now and not _is_dead:
+		health += new_max - _max_health_now
+	health = minf(health, new_max)
+	_max_health_now = new_max
+	_emit_health()
 
 
 func _check_enemy_contact() -> void:
@@ -427,15 +546,22 @@ func _restart_scene() -> void:
 func _try_primary_attack() -> void:
 	if _primary_cooldown_left > 0.0:
 		return
-	var projectile := _instantiate_attack(projectile_scene, "ЛКМ-снаряд")
-	if projectile == null:
-		return
-	_primary_cooldown_left = primary_cooldown
+	# Split shot: extra projectiles fan out evenly around the aim.
+	var count := maxi(roundi(stats.value(&"primary_projectiles")), 1)
+	var spread_degrees := stats.value(&"primary_spread")
+	var spread := deg_to_rad(randf_range(-spread_degrees, spread_degrees))
+	for i in count:
+		var projectile := _instantiate_attack(projectile_scene, "ЛКМ-снаряд")
+		if projectile == null:
+			return
+		var fan := deg_to_rad(FAN_STEP_DEGREES * (i - (count - 1) / 2.0))
+		projectile.set("damage", _damage(primary_damage_percent, &"primary_damage"))
+		projectile.set("speed", float(projectile.get("speed")) * stats.value(&"projectile_speed"))
+		projectile.set("pierce", roundi(stats.value(&"projectile_pierce")))
+		projectile.call("launch", projectile_spawn.global_position, aim_direction.rotated(spread + fan))
+	_primary_cooldown_left = stats.value(&"primary_cooldown")
 	_is_running = false
 	_play_attack_animation(&"attack_primary")
-	projectile.set("damage", _damage(primary_damage_percent))
-	var spread := deg_to_rad(randf_range(-primary_spread_degrees, primary_spread_degrees))
-	projectile.call("launch", projectile_spawn.global_position, aim_direction.rotated(spread))
 
 
 func _try_wave_attack() -> void:
@@ -444,10 +570,12 @@ func _try_wave_attack() -> void:
 	var wave := _instantiate_attack(wave_scene, "ПКМ-волна")
 	if wave == null:
 		return
-	_wave_cooldown_left = wave_cooldown
+	_wave_cooldown_left = stats.value(&"wave_cooldown")
 	_is_running = false
 	_play_attack_animation(&"attack_wave")
-	wave.set("damage", _damage(wave_damage_percent))
+	wave.set("damage", _damage(wave_damage_percent, &"wave_damage"))
+	wave.set("travel_distance", float(wave.get("travel_distance")) * stats.value(&"wave_range"))
+	wave.set("size_multiplier", stats.value(&"wave_size"))
 	var wave_origin := get_aim_origin() + aim_direction * wave_spawn_distance
 	wave.call("launch", wave_origin, aim_direction)
 
@@ -456,7 +584,7 @@ func _try_speed_boost() -> void:
 	if _speed_boost_state != SpeedBoostState.READY:
 		return
 	_speed_boost_state = SpeedBoostState.ACTIVE
-	boost_duration_timer.start(speed_boost_duration)
+	boost_duration_timer.start(stats.value(&"flight_duration"))
 	_play_lift_off()
 
 
@@ -470,11 +598,11 @@ func _try_compression() -> void:
 	var compression := _instantiate_attack(compression_scene, "R-сжатие")
 	if compression == null:
 		return
-	_compression_cooldown_left = compression_cooldown
+	_compression_cooldown_left = stats.value(&"compression_cooldown")
 	_is_running = false
 	_play_attack_animation(&"attack_compression")
-	compression.set("impact_damage", _damage(compression_impact_percent))
-	compression.set("tick_damage", _damage(compression_tick_percent))
+	compression.set("impact_damage", _damage(compression_impact_percent, &"compression_damage"))
+	compression.set("tick_damage", _damage(compression_tick_percent, &"compression_damage"))
 	compression.call("start_compression", target, get_aim_origin())
 
 
@@ -482,7 +610,8 @@ func _try_compression() -> void:
 # и compression_max_range от игрока.
 func _find_compression_target() -> Node2D:
 	var cursor := get_global_mouse_position()
-	var max_range_sq := compression_max_range * compression_max_range
+	var max_range := compression_max_range * stats.value(&"compression_range")
+	var max_range_sq := max_range * max_range
 	var best_distance_sq := compression_target_radius * compression_target_radius
 	var best: Node2D = null
 	for node in get_tree().get_nodes_in_group("enemies"):
@@ -540,7 +669,7 @@ func _restart_flight_tween() -> Tween:
 
 func _on_boost_duration_timeout() -> void:
 	_speed_boost_state = SpeedBoostState.COOLDOWN
-	boost_cooldown_timer.start(speed_boost_cooldown)
+	boost_cooldown_timer.start(stats.value(&"flight_cooldown"))
 	if not _is_dead:
 		_play_landing()
 
