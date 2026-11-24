@@ -13,6 +13,8 @@ enum SpeedBoostState { READY, ACTIVE, COOLDOWN }
 
 # Радиус круга-«следа» под ногами; на него опираются проверки мира и спавн.
 const BODY_RADIUS := 14.0
+# Номер слоя мелких валунов (NelvarProp.LOW_OBSTACLE_LAYER) для set_collision_mask_value.
+const LOW_OBSTACLE_LAYER_NUMBER := 6
 const DEAD_COLOR := Color(0.45, 0.47, 0.5, 1.0)
 # Анимация атаки с большим приоритетом не прерывается меньшей.
 const ATTACK_PRIORITY := {
@@ -81,6 +83,8 @@ var _facing_left := false
 var _attack_animation := &""
 var _attack_facing_left := 0.0
 var _hover_time := 0.0
+# Полёт кончился, но под смерчем мелкий камень: приземлимся, когда он останется позади.
+var _landing_pending := false
 # Пустота: тело проваливается в пропасть, управление отключено.
 var _is_falling := false
 
@@ -185,6 +189,8 @@ func _physics_process(delta: float) -> void:
 	var rate := acceleration if direction != Vector2.ZERO else deceleration
 	velocity = velocity.move_toward(target_velocity, rate * delta)
 	move_and_slide()
+	if _landing_pending and not _is_over_low_obstacle():
+		_land()
 	_update_animation(direction)
 	# В полёте игрок проходит над врагами и не получает контактного урона.
 	if not is_airborne():
@@ -390,6 +396,8 @@ func _try_speed_boost() -> void:
 	if _speed_boost_state != SpeedBoostState.READY:
 		return
 	_speed_boost_state = SpeedBoostState.ACTIVE
+	# В полёте мелкие валуны остаются внизу.
+	set_collision_mask_value(LOW_OBSTACLE_LAYER_NUMBER, false)
 	boost_duration_timer.start(speed_boost_duration)
 	_play_lift_off()
 
@@ -471,10 +479,30 @@ func _restart_flight_tween() -> Tween:
 
 
 func _on_boost_duration_timeout() -> void:
+	# Над валуном не садимся — иначе смерч застрянет в камне.
+	if not _is_dead and _is_over_low_obstacle():
+		_landing_pending = true
+		return
+	_land()
+
+
+func _land() -> void:
+	_landing_pending = false
 	_speed_boost_state = SpeedBoostState.COOLDOWN
+	set_collision_mask_value(LOW_OBSTACLE_LAYER_NUMBER, true)
 	boost_cooldown_timer.start(speed_boost_cooldown)
 	if not _is_dead:
 		_play_landing()
+
+
+# Перекрывает ли след смерча мелкий валун (слой, который в полёте не мешает).
+func _is_over_low_obstacle() -> bool:
+	var query := PhysicsShapeQueryParameters2D.new()
+	query.shape = collision_shape.shape
+	query.transform = collision_shape.global_transform
+	query.collision_mask = NelvarProp.LOW_OBSTACLE_LAYER
+	query.exclude = [get_rid()]
+	return not get_world_2d().direct_space_state.intersect_shape(query, 1).is_empty()
 
 
 func _on_boost_cooldown_timeout() -> void:

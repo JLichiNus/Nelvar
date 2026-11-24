@@ -4,6 +4,18 @@ extends StaticBody2D
 ## against the player, and for rocks also the elliptic collider. Bushes do not collide.
 
 const FOOTPRINT_POINTS := 16
+## Physics layer 1 ("World"): blocks everyone.
+const WORLD_LAYER := 1
+## Physics layer 6 ("LowObstacles"): small rocks. They stop walkers, enemies and
+## projectiles, but the flying player passes over them.
+const LOW_OBSTACLE_LAYER := 32
+## Rocks up to this radius are low enough to fly over, on both maps.
+const LOW_ROCK_RADIUS := 28.0
+
+
+## The layer a rock of this radius collides on.
+static func rock_layer(radius: float) -> int:
+	return LOW_OBSTACLE_LAYER if radius <= LOW_ROCK_RADIUS else WORLD_LAYER
 
 var prop_data: NelvarPropData.PropSpec
 var art: NelvarPropArt
@@ -20,7 +32,7 @@ func setup(data: NelvarPropData.PropSpec, artwork: NelvarPropArt) -> void:
 	collision_mask = 0
 	if not data.is_solid():
 		return
-	collision_layer = 1
+	collision_layer = rock_layer(data.radius)
 	collision_mask = 2
 	var shape := ConvexPolygonShape2D.new()
 	shape.points = footprint_polygon(data.footprint())

@@ -45,7 +45,9 @@ func setup(spec: NelvarEarthData.Thing, artwork: NelvarEarthArt) -> void:
 	set_process(spec.kind == Kind.STATUE)
 	if not spec.solid:
 		return
-	collision_layer = 1
+	collision_layer = NelvarProp.WORLD_LAYER
+	if spec.kind == Kind.ROCK:
+		collision_layer = NelvarProp.rock_layer(spec.radius)
 	collision_mask = 2
 	var collider := CollisionShape2D.new()
 	collider.name = "Collision"

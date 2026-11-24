@@ -101,7 +101,8 @@ func _physics_check() -> void:
 			"Prop cannot sort against the player")
 		var collider := node.get_node_or_null("RockCollision") as CollisionShape2D
 		if node.prop_data.is_solid():
-			_check(collider != null and node.collision_layer == 1, "A rock has no collider")
+			_check(collider != null and node.collision_layer == NelvarProp.rock_layer(node.prop_data.radius),
+				"A rock has no collider")
 			if rock == null and _open_around(game, node.position, node.prop_data.radius + 60.0):
 				rock = node
 		else:
