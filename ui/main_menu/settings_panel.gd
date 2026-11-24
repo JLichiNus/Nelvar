@@ -8,6 +8,8 @@ signal dev_panel_toggled(open: bool)
 
 @onready var fullscreen_check: CheckButton = %Fullscreen
 @onready var info_panel_check: CheckButton = %InfoPanel
+@onready var damage_vignette_button: Button = %DamageVignette
+@onready var vignette_direction_check: CheckButton = %VignetteDirection
 @onready var dev_menu_button: Button = %DevMenu
 @onready var dev_panel: NelvarDevPanel = %DevPanel
 
@@ -20,6 +22,12 @@ func _ready() -> void:
 	info_panel_check.set_pressed_no_signal(GameSettings.show_info_panel)
 	info_panel_check.toggled.connect(GameSettings.set_show_info_panel)
 	GameSettings.info_panel_changed.connect(info_panel_check.set_pressed_no_signal)
+	# Each press switches to the next strength, from the strongest back to off.
+	damage_vignette_button.pressed.connect(_next_vignette_level)
+	vignette_direction_check.set_pressed_no_signal(GameSettings.damage_vignette_directional)
+	vignette_direction_check.toggled.connect(GameSettings.set_damage_vignette_directional)
+	GameSettings.damage_vignette_changed.connect(_show_vignette_settings)
+	_show_vignette_settings()
 	dev_menu_button.toggled.connect(_set_dev_panel_open)
 	# Arrow keys move between the button and the panel it opened.
 	dev_menu_button.focus_neighbor_left = dev_menu_button.get_path_to(dev_panel.start_in_void_check)
@@ -42,6 +50,17 @@ func play_close() -> void:
 func close_now() -> void:
 	_close_dev_panel()
 	super()
+
+
+func _next_vignette_level() -> void:
+	var count := GameSettings.VIGNETTE_LEVELS.size()
+	GameSettings.set_damage_vignette_level((GameSettings.damage_vignette_level + 1) % count)
+
+
+func _show_vignette_settings() -> void:
+	damage_vignette_button.text = "Виньетка урона: %s" % \
+		GameSettings.VIGNETTE_NAMES[GameSettings.damage_vignette_level]
+	vignette_direction_check.set_pressed_no_signal(GameSettings.damage_vignette_directional)
 
 
 func _set_dev_panel_open(open: bool) -> void:

@@ -1,9 +1,12 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="PackedScene" path="res://player/player.tscn" id="1_player"]
 [ext_resource type="PackedScene" path="res://enemies/hopper/hopper.tscn" id="2_hopper"]
 [ext_resource type="Script" path="res://enemies/enemy_spawner.gd" id="3_spawner"]
-[ext_resource type="Script" path="res://ui/health_label.gd" id="4_health_label"]
+[ext_resource type="Script" path="res://ui/health_bar.gd" id="4_health_bar"]
+[ext_resource type="Script" path="res://ui/ability_bar.gd" id="ability_bar"]
+[ext_resource type="Script" path="res://ui/level_line.gd" id="level_line"]
+[ext_resource type="Script" path="res://ui/damage_vignette.gd" id="damage_vignette"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_horizontal_boundary"]
 size = Vector2(3520, 32)
@@ -107,6 +110,16 @@ position = Vector2(1728, 972)
 
 [node name="Interface" type="CanvasLayer" parent="."]
 
+[node name="DamageVignette" type="ColorRect" parent="Interface" node_paths=PackedStringArray("player")]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("damage_vignette")
+player = NodePath("../../Player")
+
 [node name="Instructions" type="Label" parent="Interface"]
 offset_left = 24.0
 offset_top = 20.0
@@ -116,13 +129,44 @@ theme_override_colors/font_color = Color(0.921569, 0.94902, 1, 1)
 theme_override_font_sizes/font_size = 24
 text = "WASD — движение | ЛКМ — снаряд | ПКМ — волна | Shift — полёт | R — сжатие (наведи на врага)"
 
-[node name="HealthLabel" type="Label" parent="Interface" node_paths=PackedStringArray("player")]
+[node name="HealthBar" type="Control" parent="Interface" node_paths=PackedStringArray("player")]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
 offset_left = 24.0
-offset_top = 60.0
-offset_right = 470.0
-offset_bottom = 96.0
-theme_override_colors/font_color = Color(1, 0.584314, 0.584314, 1)
-theme_override_font_sizes/font_size = 24
-text = "HP: 100 / 100"
-script = ExtResource("4_health_label")
+offset_top = -60.0
+offset_right = 360.0
+offset_bottom = -24.0
+grow_vertical = 0
+mouse_filter = 2
+script = ExtResource("4_health_bar")
+player = NodePath("../../Player")
+
+[node name="AbilityBar" type="Control" parent="Interface" node_paths=PackedStringArray("player")]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -300.0
+offset_top = -84.0
+offset_right = -24.0
+offset_bottom = -24.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+script = ExtResource("ability_bar")
+player = NodePath("../../Player")
+
+[node name="LevelLine" type="Control" parent="Interface" node_paths=PackedStringArray("player")]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -96.0
+offset_right = 360.0
+offset_bottom = -69.0
+grow_vertical = 0
+mouse_filter = 2
+script = ExtResource("level_line")
 player = NodePath("../../Player")

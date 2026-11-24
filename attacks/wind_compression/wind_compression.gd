@@ -24,6 +24,7 @@ const ARC_RADIUS := 69.0  # = COMPRESSION_RADIUS (46) * 1.5 из gen_attack_spri
 @export var fade_spread: float = 14.0
 
 @export_category("Damage")
+## Both set by the player from its base damage (compression_*_percent).
 @export var impact_damage: float = 10.0
 @export var tick_damage: float = 5.0
 @export var tick_interval: float = 0.25

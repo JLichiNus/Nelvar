@@ -8,6 +8,7 @@ const SHEET_TEXEL := 3.0
 
 
 @export var speed: float = 900.0
+## Set by the player at launch from its base damage (primary_damage_percent).
 @export var damage: float = 5.0
 @export var lifetime: float = 2.5
 @export var frame_duration: float = 0.07

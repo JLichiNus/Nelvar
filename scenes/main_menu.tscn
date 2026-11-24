@@ -175,6 +175,7 @@ layout_mode = 2
 script = ExtResource("12")
 typed_text = NodePath("Rows/Body")
 back_button = NodePath("Rows/AboutBack")
+reveal_text = false
 
 [node name="Rows" type="VBoxContainer" parent="Margin/Layout/Panels/AboutPanel"]
 layout_mode = 2
