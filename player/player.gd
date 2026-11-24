@@ -32,7 +32,7 @@ const ATTACK_PRIORITY := {
 @export var deceleration: float = 2000.0
 @export var run_speed_multiplier: float = 1.5
 @export var speed_boost_multiplier: float = 1.5
-@export var speed_boost_duration: float = 2.0
+@export var speed_boost_duration: float = 3.0
 ## Counted from landing, after the flight itself.
 @export var speed_boost_cooldown: float = 7.0
 @export var flight_height: float = 14.0
