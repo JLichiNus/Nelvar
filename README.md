@@ -153,7 +153,7 @@ and butterflies flutter between flowers and scatter from the player
 Settings → «Меню разработчика» → «Запускать игру в Огне» makes «Играть» open
 `scenes/fire.tscn`: a basin of ash and basalt ringed by black ridges and volcanoes, in
 the style of the «Огонь» menu background — a world that is still being forged rather
-than one that burnt. Only one of the three start options is on at a time.
+than one that burnt. Only one of the start options is on at a time.
 
 `NelvarFireGenerator` lays it out from the seed (parameters in
 `resources/fire_forge_config.tres`): 1–2 great volcanoes in the north of the ring,
@@ -197,6 +197,65 @@ and smouldering trunks and plumes from the craters (`NelvarSmoke`). The player's
 blows ash, sparks and smoke away and thins the smoke banks, which grow back. Ember moths
 flutter over the heat and scatter, salamanders bask on the shores and dive into the lava
 when the player comes close (`NelvarFireCritters`). F3 shows the walls and the fissures.
+
+### The ice valley (developer menu)
+
+Settings → «Меню разработчика» → «Запускать игру на Льду» makes «Играть» open
+`scenes/ice.tscn`: a snowy valley ringed by snowy mountains, in the style of the «Лёд»
+menu background — snow with sastrugi and sparkles, dry stems poking out of it, pines
+under snow, dead trees, rocks with snow caps, drifts, blocks of ice, petrified creatures
+with an eye, frozen lakes.
+
+`NelvarIceGenerator` lays it out from the seed (parameters in
+`resources/ice_valley_config.tres`): 2–4 frozen lakes with 1–3 patches of thin ice each
+and 1–3 creatures frozen into each, 2–4 crevasses from the mountain foot (some branching
+off another) whose width wanders along them, snow bridges over them, trodden trails
+between the clearings, groves of pines, dead trees, rocks and scree, drifts in the lee of
+rocks and trees, blocks and pressure ridges of ice (a few out on the lakes, the only cover
+there), dry grass and bare shrubs, fields of wind-blown snow, and the rows of peaks.
+Every stretch of a crevasse inside the valley has a bridge within `bridge_spacing`,
+trails cross crevasses only on bridges, and no crevasse comes within `ice_gap` (250) of the
+ice, so nobody slides off the ice into one. The spawn is on the snow.
+
+There are no walls but the mountain foot:
+
+- **The ice is slippery.** The map sets the player's `traction` every frame (snow 1, ice
+  0.15): on the ice they speed up slowly and coast a few body lengths after the keys are
+  let go. Hoppers take the grip too (`grip_at`): the wind wave blows them far over the ice,
+  and they slip a little where they land.
+- **Under the ice** (`NelvarIceDepths`, below the floor, which is translucent on the ice
+  through `NelvarCloudSea.transparent`) lies dark water with creatures frozen into it. It
+  follows the camera by 0.85, snapped to whole art pixels; the thin ice shows it best.
+  Some creatures slowly open an eye while the player stands over them and follow them.
+- **Crevasses** are falls. A step over one holds for a moment (0.09 s): walking is too
+  slow for any crack, a run (Ctrl) crosses up to about 40 wide, the flight (Shift) crosses
+  anything, the bridges are always there. A fall throws the player back on the snow they
+  last stood on safely, 12 HP worse; the first one says how a crevasse is crossed.
+- **Thin ice** holds a running player, not a standing one: standing still on it for 0.35 s
+  cracks it, and unless the player gets 40 away within 0.8 s it breaks into a hole and
+  they fall into the water (back on safe snow, 12 HP). A crack that held stays for 10 s and
+  breaks under the next step. A hole is open water, then slush, then thin ice again over
+  25 s. The flight leaves the ice alone.
+- **Blizzards** cross the valley (radius 500–800, 40–60 s, lulls of 40–70 s, planned from
+  the seed). Inside one the player moves at 0.7 and attacks at 0.65 of their pace
+  (`move_scale`, `attack_rate`: cooldowns, animations, projectile speed, the wave), hoppers
+  jump a little shorter (`jump_scale_at`), and a veil with dashes of snow covers the screen
+  (`NelvarBlizzard`). About 4 s before one arrives, snow streams along that edge of the
+  screen and «Надвигается метель» appears.
+- **Marks in the snow** (`NelvarSnowMarks`): the player leaves a swept furrow, a hopper a
+  dent where it lands. They live in a texture that is only drawn when there are new
+  marks; each pixel keeps the snow clock at its stamp, and the clock runs six times faster
+  in a blizzard, so blizzards drift the marks over faster. Marks show on snow only.
+- Hoppers do not jump into crevasses, holes or onto thin ice (`is_safe_landing`); blown
+  into a crevasse they fall, into a hole they drown.
+
+The floor (`scripts/ice/ice_ground.gdshader`, fed by `NelvarIceField`) draws the snow,
+trails, ice with white veins and drifting glints, thin ice, crevasses (the north wall of
+blue ice dropping into the dark, a snow cornice on the near edge), bridges, holes, cracks
+and marks, and beyond the foot the snowy uplands. The peaks are `NelvarMountainPainter`'s
+height fields painted by `NelvarFrostPainter`: grey-blue rock, deep snow, glaciers, frosted
+pines on a snowy foot. Snow falls over everything. F3 shows the mountain foot, the lakes
+and their thin ice, the crevasses with their bridges and the holes.
 
 The earth map contains 2–3 large floating islands and 6–7 small ones, connected
 by narrow wooden bridges. Shorelines and bridge sides block movement; falling
@@ -277,6 +336,7 @@ godot --headless --path . --script tests/test_props.gd
 godot --headless --path . --script tests/test_void.gd -- --seeds=50 --walks=6
 godot --headless --path . --script tests/test_earth.gd -- --seeds=30
 godot --headless --path . --script tests/test_fire.gd -- --seeds=30
+godot --headless --path . --script tests/test_ice.gd -- --seeds=30
 ```
 
 Here `godot` means the path to your Godot 4.7.2 executable. The checks cover
@@ -302,3 +362,12 @@ light maps, the start setting, and in the real scene: lava stops the walking pla
 flight carries them over a lake, coming down in it burns and throws them back, crossings
 let them over a stream, a hopper blown into the lava burns, a fissure erupts and hurts,
 a salamander dives and the wind thins a smoke bank.
+Ice checks cover the valley's layout (lakes, thin ice inside them, crevasses far from the
+ice and bridged, trails off the ice and the cracks, passages, frozen creatures under the
+ice, a closed ring of peaks), that open ground is reachable over the bridges, repeatable
+art on the world grid, the floor map, the start setting, and in the real scene: the
+player coasts much further on the ice, a wide crevasse drops a walker and throws them
+back hurt, the flight crosses it and a run crosses a narrow one, thin ice breaks under a
+standing player and not under a running one, a hole freezes over, hoppers blown into a
+crevasse or a hole die, a blizzard slows the player and lets go, walking leaves marks in
+the snow and a frozen creature opens its eye.

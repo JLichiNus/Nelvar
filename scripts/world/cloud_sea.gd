@@ -20,6 +20,9 @@ const SEA_SHADER := preload("res://scripts/world/cloud_sea.gdshader")
 @export_range(0.0, 0.6, 0.01) var hole_amount: float = 0.14
 ## What fills the backdrop; the Void draws its own sky with the same uniforms.
 @export var shader: Shader = SEA_SHADER
+## Keeps the shader's alpha: what lies below the layer shows through (the ice valley's
+## lakes over NelvarIceDepths). Off, the backdrop is opaque.
+@export var transparent := false
 
 var _viewport: SubViewport
 var _sea: ColorRect
@@ -38,7 +41,7 @@ func _ready() -> void:
 	_viewport = SubViewport.new()
 	_viewport.name = "SeaPixels"
 	_viewport.disable_3d = true
-	_viewport.transparent_bg = false
+	_viewport.transparent_bg = transparent
 	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	_viewport.size = Vector2i(2, 2)
 	add_child(_viewport)

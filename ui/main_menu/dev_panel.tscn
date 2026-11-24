@@ -49,6 +49,12 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "Запускать игру в Огне"
 
+[node name="StartOnIce" type="CheckButton" parent="Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Запускать игру на Льду"
+
 [node name="StartHint" type="Label" parent="Rows"]
 unique_name_in_owner = true
 layout_mode = 2

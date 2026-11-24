@@ -10,6 +10,8 @@ const VOID_SCENE := "res://scenes/void.tscn"
 const EARTH_SCENE := "res://scenes/earth.tscn"
 ## Developer setting "Запускать игру в Огне": the fire forge.
 const FIRE_SCENE := "res://scenes/fire.tscn"
+## Developer setting "Запускать игру на Льду": the ice valley.
+const ICE_SCENE := "res://scenes/ice.tscn"
 const TRANSITION_TIME := 0.3
 ## Speed-up for a wave that is interrupted by another hover.
 const HURRY_SPEED := 2.5
@@ -459,6 +461,8 @@ func _on_play_pressed() -> void:
 		scene = EARTH_SCENE
 	elif GameSettings.start_in_fire:
 		scene = FIRE_SCENE
+	elif GameSettings.start_on_ice:
+		scene = ICE_SCENE
 	get_tree().change_scene_to_file(scene)
 
 

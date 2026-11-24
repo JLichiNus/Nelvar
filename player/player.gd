@@ -85,6 +85,14 @@ const ATTACK_PRIORITY := {
 @export var zoom_max: float = 1.6
 
 var aim_direction := Vector2.RIGHT
+## Grip on the ground: 1 — ordinary ground, less — slippery (the ice valley's lakes).
+## The map sets it every physics frame; it scales how fast the player speeds up and
+## slows down.
+var traction := 1.0
+## Shared modifiers (the ice valley's blizzard; mutations later): a multiplier of the
+## movement speed, and of the rate of attacks (cooldowns, animations, projectiles).
+var move_scale := 1.0
+var attack_rate := 1.0
 var _primary_cooldown_left := 0.0
 var _wave_cooldown_left := 0.0
 var _compression_cooldown_left := 0.0
@@ -142,9 +150,10 @@ func _process(delta: float) -> void:
 		return
 	_update_hover(delta)
 	_update_aim()
-	_primary_cooldown_left = maxf(_primary_cooldown_left - delta, 0.0)
-	_wave_cooldown_left = maxf(_wave_cooldown_left - delta, 0.0)
-	_compression_cooldown_left = maxf(_compression_cooldown_left - delta, 0.0)
+	_primary_cooldown_left = maxf(_primary_cooldown_left - delta * attack_rate, 0.0)
+	_wave_cooldown_left = maxf(_wave_cooldown_left - delta * attack_rate, 0.0)
+	_compression_cooldown_left = maxf(_compression_cooldown_left - delta * attack_rate, 0.0)
+	torso_sprite.speed_scale = attack_rate
 
 	# Стоя на месте Ctrl ничего не делает.
 	if Input.is_action_just_pressed("toggle_run") and _is_move_input_held():
@@ -210,8 +219,8 @@ func _physics_process(delta: float) -> void:
 		speed_multiplier *= run_speed_multiplier
 	if _speed_boost_state == SpeedBoostState.ACTIVE:
 		speed_multiplier *= speed_boost_multiplier
-	var target_velocity := direction * speed * speed_multiplier
-	var rate := acceleration if direction != Vector2.ZERO else deceleration
+	var target_velocity := direction * speed * speed_multiplier * move_scale
+	var rate := (acceleration if direction != Vector2.ZERO else deceleration) * traction
 	velocity = velocity.move_toward(target_velocity, rate * delta)
 	move_and_slide()
 	if _landing_pending and not _is_over_low_obstacle():
@@ -441,6 +450,8 @@ func _try_primary_attack() -> void:
 	_is_running = false
 	_play_attack_animation(&"attack_primary")
 	projectile.set("damage", _damage(primary_damage_percent))
+	if attack_rate != 1.0:
+		projectile.set("speed", float(projectile.get("speed")) * attack_rate)
 	var spread := deg_to_rad(randf_range(-primary_spread_degrees, primary_spread_degrees))
 	projectile.call("launch", projectile_spawn.global_position, aim_direction.rotated(spread))
 
@@ -455,6 +466,8 @@ func _try_wave_attack() -> void:
 	_is_running = false
 	_play_attack_animation(&"attack_wave")
 	wave.set("damage", _damage(wave_damage_percent))
+	if attack_rate != 1.0:
+		wave.set("duration", float(wave.get("duration")) / maxf(attack_rate, 0.05))
 	var wave_origin := get_aim_origin() + aim_direction * wave_spawn_distance
 	wave.call("launch", wave_origin, aim_direction)
 

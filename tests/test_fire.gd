@@ -281,12 +281,12 @@ func _check_field(data: NelvarFireData) -> void:
 
 # --- The start setting -------------------------------------------------------------
 
-## The three start options exclude each other. The saved settings are put back as they were.
+## The four start options exclude each other. The saved settings are put back as they were.
 func _check_settings() -> void:
 	var settings: Node = root.get_node("GameSettings")
 	var path: String = settings.PATH
 	var saved := FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else PackedByteArray()
-	var was := [settings.start_in_void, settings.start_on_earth, settings.start_in_fire]
+	var was := [settings.start_in_void, settings.start_on_earth, settings.start_in_fire, settings.start_on_ice]
 	settings.set_start_on_earth(true)
 	settings.set_start_in_fire(true)
 	_check(settings.start_in_fire and not settings.start_on_earth and not settings.start_in_void,
@@ -295,9 +295,15 @@ func _check_settings() -> void:
 	_check(settings.start_in_void and not settings.start_in_fire, "The Void did not replace the fire at start")
 	settings.set_start_in_fire(true)
 	_check(settings.start_in_fire and not settings.start_in_void, "The fire did not replace the Void at start")
+	settings.set_start_on_ice(true)
+	_check(settings.start_on_ice and not settings.start_in_fire and not settings.start_on_earth
+		and not settings.start_in_void, "The ice did not replace the fire at start")
+	settings.set_start_on_earth(true)
+	_check(settings.start_on_earth and not settings.start_on_ice, "Earth did not replace the ice at start")
 	settings.start_in_void = was[0]
 	settings.start_on_earth = was[1]
 	settings.start_in_fire = was[2]
+	settings.start_on_ice = was[3]
 	if saved.is_empty():
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	else:
@@ -309,6 +315,9 @@ func _check_settings() -> void:
 		"«Играть» does not open the forge")
 	var panel: Node = load("res://ui/main_menu/dev_panel.tscn").instantiate()
 	_check(panel.get_node_or_null("Rows/StartInFire") is CheckButton, "The developer menu has no fire start")
+	_check(panel.get_node_or_null("Rows/StartOnIce") is CheckButton, "The developer menu has no ice start")
+	_check(menu.contains("res://scenes/ice.tscn") and menu.contains("GameSettings.start_on_ice"),
+		"«Играть» does not open the ice valley")
 	panel.free()
 
 

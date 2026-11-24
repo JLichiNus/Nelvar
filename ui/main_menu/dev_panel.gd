@@ -12,6 +12,7 @@ const SCREEN_MARGIN := 12.0
 @onready var start_in_void_check: CheckButton = %StartInVoid
 @onready var start_on_earth_check: CheckButton = %StartOnEarth
 @onready var start_in_fire_check: CheckButton = %StartInFire
+@onready var start_on_ice_check: CheckButton = %StartOnIce
 @onready var start_hint: Label = %StartHint
 
 
@@ -27,10 +28,14 @@ func _ready() -> void:
 	start_in_fire_check.set_pressed_no_signal(GameSettings.start_in_fire)
 	start_in_fire_check.toggled.connect(GameSettings.set_start_in_fire)
 	GameSettings.start_in_fire_changed.connect(start_in_fire_check.set_pressed_no_signal)
+	start_on_ice_check.set_pressed_no_signal(GameSettings.start_on_ice)
+	start_on_ice_check.toggled.connect(GameSettings.set_start_on_ice)
+	GameSettings.start_on_ice_changed.connect(start_on_ice_check.set_pressed_no_signal)
 	# The start options exclude each other; the hint names what "Играть" opens.
 	GameSettings.start_in_void_changed.connect(_update_hint.unbind(1))
 	GameSettings.start_on_earth_changed.connect(_update_hint.unbind(1))
 	GameSettings.start_in_fire_changed.connect(_update_hint.unbind(1))
+	GameSettings.start_on_ice_changed.connect(_update_hint.unbind(1))
 	_update_hint()
 
 
@@ -41,6 +46,8 @@ func _update_hint() -> void:
 		start_hint.text = "«Играть» откроет земляную долину"
 	elif GameSettings.start_in_fire:
 		start_hint.text = "«Играть» откроет огненную кузню"
+	elif GameSettings.start_on_ice:
+		start_hint.text = "«Играть» откроет ледяную долину"
 	else:
 		start_hint.text = "«Играть» откроет небесные острова"
 
