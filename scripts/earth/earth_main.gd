@@ -4,9 +4,10 @@ extends Node2D
 ## and groves with ponds and trails, ringed by snowy mountains, in the style of the
 ## "Земля" menu background.
 ##
-## Loading paints everything in the valley on all cores; the peaks round it are far
-## out of view at first, so they are painted in the background and rise as they are
-## ready. The floor (ground shader) and the cloud shadows are drawn on the GPU.
+## Loading paints everything — the valley and the peaks round it — on all cores at
+## once, then works out the ground under the range (its rocky foot and the shadows the
+## peaks cast) from the painted peaks: the map opens complete. The floor (ground
+## shader) and the cloud shadows are drawn on the GPU.
 
 const STEP := NelvarEarthData.PIXEL
 const WATERFALL_SHADER := preload("res://scripts/earth/waterfall.gdshader")
@@ -20,14 +21,15 @@ var peak_nodes: Array[NelvarEarthThing] = []
 var _time := 0.0
 var _swaying: Array[NelvarEarthThing] = []
 var _painter := NelvarEarthPainter.new()
+## Threads painting the art. Past about half the cores (a dozen at most) script
+## threads mostly wait for each other, and painting gets slower, not faster.
+var _painters := clampi(OS.get_processor_count() >> 1, 2, 12)
+## Everything to paint, the peaks first (largest first), and its art.
+var _painting: Array[NelvarEarthData.Thing] = []
 var _arts: Array = []
 var _field: NelvarEarthField
-var _valley_things: Array[NelvarEarthData.Thing] = []
+var _mountain_field: NelvarMountainField
 var _peaks: Array[NelvarEarthData.Thing] = []
-var _peak_arts: Array = []
-var _peak_task := -1
-var _peak_mutex := Mutex.new()
-var _peaks_ready := PackedInt32Array()
 var _waterfall_material: ShaderMaterial
 var _show_debug := false
 ## F3: the mountain foot and the pond shores as the physics sees them.
@@ -69,10 +71,9 @@ func _ready() -> void:
 		player.set_process(false)
 		return
 	_build_walls()
-	_paint_valley()
+	_paint_world()
 	_setup_ground()
 	_setup_sky()
-	_start_peaks()
 	player.position = data.spawn_position
 	player.camera.reset_smoothing()
 	butterflies.setup(data, player)
@@ -140,35 +141,54 @@ func _outline_shape(polygon: PackedVector2Array) -> CollisionShape2D:
 	return collider
 
 
-## Everything in the valley and the ground map, painted on all cores at once.
-func _paint_valley() -> void:
+## Everything in the valley, the peaks and the ground maps, painted on all cores at
+## once. The peaks take longest, the biggest most: they start first, and the small
+## things of the valley fill the cores up behind them.
+func _paint_world() -> void:
+	var valley_things: Array[NelvarEarthData.Thing] = []
 	for thing in data.things:
 		if thing.kind == NelvarEarthData.Kind.PEAK:
 			_peaks.append(thing)
 		else:
-			_valley_things.append(thing)
-	_arts.resize(_valley_things.size())
+			valley_things.append(thing)
+	_peaks.sort_custom(func(a: NelvarEarthData.Thing, b: NelvarEarthData.Thing) -> bool:
+		return a.size.x * a.size.y > b.size.x * b.size.y)
+	_painting.append_array(_peaks)
+	_painting.append_array(valley_things)
+	_arts.resize(_painting.size())
 	var field_task := WorkerThreadPool.add_task(_build_field, true, "Earth ground map")
-	var group := WorkerThreadPool.add_group_task(_paint_thing, _valley_things.size(), -1, true,
-		"Earth valley art")
+	var group := WorkerThreadPool.add_group_task(_paint_thing, _painting.size(), _painters, true,
+		"Earth art")
 	WorkerThreadPool.wait_for_group_task_completion(group)
+	# The range's foot and the peaks' shadows follow the painted peaks.
+	_mountain_field = NelvarMountainField.build(_peaks, _arts.slice(0, _peaks.size()))
 	WorkerThreadPool.wait_for_task_completion(field_task)
-	for i in _valley_things.size():
+	for i in _painting.size():
+		var thing := _painting[i]
 		var art: NelvarEarthArt = _arts[i]
 		art.bake()
 		var node := NelvarEarthThing.new()
-		node.setup(_valley_things[i], art)
-		if _valley_things[i].kind == NelvarEarthData.Kind.STATUE:
+		node.setup(thing, art)
+		if thing.kind == NelvarEarthData.Kind.STATUE:
 			node.watcher = player
+		if art.waterfall:
+			if _waterfall_material == null:
+				_waterfall_material = ShaderMaterial.new()
+				_waterfall_material.shader = WATERFALL_SHADER
+			node.material = _waterfall_material
 		actors.add_child(node)
-		thing_nodes.append(node)
+		if thing.kind == NelvarEarthData.Kind.PEAK:
+			peak_nodes.append(node)
+		else:
+			thing_nodes.append(node)
 		if art.sway > 0:
 			_swaying.append(node)
 	_arts.clear()
+	_painting.clear()
 
 
 func _paint_thing(index: int) -> void:
-	_arts[index] = _painter.paint(_valley_things[index])
+	_arts[index] = _painter.paint(_painting[index])
 
 
 func _build_field() -> void:
@@ -188,8 +208,13 @@ func _setup_ground() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = ("%d:earth:floor" % data.world_seed).hash()
 	material.set_shader_parameter("noise_offset", Vector2(rng.randi_range(-4096, 4096), rng.randi_range(-4096, 4096)))
+	material.set_shader_parameter("mountain_tex", _mountain_field.texture())
+	material.set_shader_parameter("mountain_origin", Vector2(_mountain_field.origin))
+	material.set_shader_parameter("mountain_size", Vector2(_mountain_field.size))
+	material.set_shader_parameter("mountain_scale", float(NelvarMountainField.SCALE))
 	ground.texel_size = STEP
 	_field = null
+	_mountain_field = null
 
 
 ## Cloud shadows over everything, pollen drifting in the warm air.
@@ -205,53 +230,9 @@ func _setup_sky() -> void:
 	pollen.preprocess = 4.0
 
 
-# --- Peaks, painted in the background ---------------------------------------------
-
-func _start_peaks() -> void:
-	_peak_arts.resize(_peaks.size())
-	_peak_task = WorkerThreadPool.add_group_task(_paint_peak, _peaks.size(), -1, false, "Earth peaks")
-
-
-func _paint_peak(index: int) -> void:
-	_peak_arts[index] = _painter.paint(_peaks[index])
-	_peak_mutex.lock()
-	_peaks_ready.append(index)
-	_peak_mutex.unlock()
-
-
-## True once every peak is painted and standing.
+## True once every peak stands (they are all painted while the map loads).
 func peaks_finished() -> bool:
-	return _peak_task < 0 and peak_nodes.size() == _peaks.size()
-
-
-func _raise_ready_peaks() -> void:
-	_peak_mutex.lock()
-	var ready := _peaks_ready
-	_peaks_ready = PackedInt32Array()
-	_peak_mutex.unlock()
-	for index in ready:
-		var art: NelvarEarthArt = _peak_arts[index]
-		art.bake()
-		var node := NelvarEarthThing.new()
-		node.setup(_peaks[index], art)
-		node.show_collision = _show_debug
-		if art.waterfall:
-			if _waterfall_material == null:
-				_waterfall_material = ShaderMaterial.new()
-				_waterfall_material.shader = WATERFALL_SHADER
-			node.material = _waterfall_material
-		actors.add_child(node)
-		peak_nodes.append(node)
-	if _peak_task >= 0 and WorkerThreadPool.is_group_task_completed(_peak_task):
-		WorkerThreadPool.wait_for_group_task_completion(_peak_task)
-		_peak_task = -1
-		_raise_ready_peaks()
-
-
-func _exit_tree() -> void:
-	if _peak_task >= 0:
-		WorkerThreadPool.wait_for_group_task_completion(_peak_task)
-		_peak_task = -1
+	return peak_nodes.size() == _peaks.size()
 
 
 # --- Every frame --------------------------------------------------------------------
@@ -267,8 +248,6 @@ func _process(delta: float) -> void:
 	if data == null:
 		return
 	_time += delta
-	if _peak_task >= 0 or not _peaks_ready.is_empty():
-		_raise_ready_peaks()
 	ground.backdrop_material().set_shader_parameter("wind_time", _time)
 	# Only plants near the view sway; the rest keep their last pose.
 	var viewport := get_viewport()

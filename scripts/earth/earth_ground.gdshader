@@ -4,9 +4,14 @@ render_mode unshaded;
 // The floor of the earth valley in the palette of the "Земля" menu: broad patches of
 // green, tufts of grass bending as gusts run across the meadow, small flowers, worn
 // trails with pebbles, ponds with a shaded north bank and drifting glints, darker
-// forest floor strewn with leaves under the groves, and beyond the mountain foot
-// scree, then the uplands: the valley again, paler and with less detail — meadows on
-// uneven grassy terraces, groves and lone trees, now and then a lake.
+// forest floor strewn with leaves under the groves, and beyond the mountain foot the
+// uplands: the valley again, paler and with less detail — meadows on uneven grassy
+// terraces, groves and lone trees, now and then a lake. The grass runs from the valley
+// on to the uplands without a seam.
+//
+// Under the range lies its foot (NelvarMountainField, R): darker ground, scree and
+// stands of firs, so the peaks rise out of one massif; the shadows the peaks cast
+// (G) fall over the uplands and the valley down and to the left of them.
 //
 // Runs through NelvarCloudSea with parallax 1 and no drift: one fragment per art
 // pixel of the world grid. NelvarEarthField supplies what lies where (ponds, trails,
@@ -28,6 +33,12 @@ uniform vec2 valley_center;
 uniform vec2 valley_axes = vec2(1750.0, 1500.0);
 uniform float valley_amp[6];
 uniform float valley_phase[6];
+// NelvarMountainField: R the range's foot, G the peaks' shadows; laid once the peaks
+// are painted (mountain_size stays zero until then).
+uniform sampler2D mountain_tex : filter_linear, repeat_disable;
+uniform vec2 mountain_origin;        // world art pixel of the first texel's corner
+uniform vec2 mountain_size = vec2(0.0);
+uniform float mountain_scale = 4.0;  // art pixels per texel
 
 const float TUFT_CELL = 6.0;
 
@@ -44,7 +55,6 @@ const int LITTER = 31;  // 3
 const int PATH_EDGE = 34;
 const int STONE = 35;   // 2
 const int GLINT = 37;
-const int FOOT_LINE = 38;
 const int LEAVES = 39;  // 5 (NelvarEarthPainter.LEAVES)
 const int PINE = 44;    // 3
 const vec3 PAL[47] = vec3[47](
@@ -75,6 +85,8 @@ const vec3 PAL[47] = vec3[47](
 const vec3 UPLAND_HAZE = vec3(128.0, 142.0, 124.0) / 255.0;
 const float UPLAND_FADE = 0.45;
 const float TREE_CELL = 6.0;
+// The peaks' cast shadow: a little deeper and cooler than a cloud's.
+const vec3 MOUNTAIN_SHADE = vec3(0.7, 0.77, 0.88);
 // NelvarPixelArt.BAYER: the sprites dither with the same matrix.
 const float BAYER[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0,
 	15.0, 7.0, 13.0, 5.0);
@@ -145,6 +157,18 @@ vec4 field_at(vec2 pixel) {
 	return texelFetch(field_tex, ivec2(f), 0);
 }
 
+// The range's foot (x) and the peaks' shadow (y) under a pixel.
+vec2 mountains_at(vec2 pixel) {
+	if (mountain_size.x <= 0.0) {
+		return vec2(0.0);
+	}
+	vec2 uv = (pixel + 0.5 - mountain_origin) / (mountain_size * mountain_scale);
+	if (uv.x <= 0.0 || uv.y <= 0.0 || uv.x >= 1.0 || uv.y >= 1.0) {
+		return vec2(0.0);
+	}
+	return texture(mountain_tex, uv).rg;
+}
+
 float pond_depth(vec4 field) {
 	return floor(field.r * 255.0 + 0.5) - 128.0;
 }
@@ -153,6 +177,21 @@ float pond_depth(vec4 field) {
 float gust(vec2 world) {
 	return 0.65 * sin(world.x * 0.0045 + world.y * 0.0012 - wind_time * 1.5)
 		+ 0.35 * sin(world.x * 0.011 - world.y * 0.006 - wind_time * 2.4);
+}
+
+// Light level of the valley's grass before shade and trails; the uplands start from it
+// at the mountain foot, so the floor runs on without a seam.
+float valley_grass(vec2 np, float meadow) {
+	return 0.58 + (fbm(np * vec2(0.022, 0.034)) - 0.5) * 0.7
+		+ (value_noise(np * 0.11) - 0.5) * 0.16 + meadow * 0.08;
+}
+
+// The range's foot (NelvarMountainField R), its edge broken up by noise.
+float rocky_at(vec2 np, float foot) {
+	if (foot <= 0.0) {
+		return 0.0;
+	}
+	return foot + (value_noise(np / 7.0 + 23.0) - 0.5) * 0.3 + (fbm(np * 0.05) - 0.5) * 0.2;
 }
 
 // Height step of the uplands: broad uneven terraces with wandering edges.
@@ -170,7 +209,8 @@ float lake(vec2 np) {
 // A tree of the uplands seen from afar: a round crown (or a fir's cone) with its lit
 // upper right, a dark lower-left rim and a shadow down and to the left. Returns the
 // colour, alpha 1 on a crown, alpha 0.5 in a shadow, 0 elsewhere.
-vec4 upland_tree(vec2 pixel, vec2 np, float grove) {
+// `firs`: share of the trees that are firs.
+vec4 upland_tree(vec2 pixel, vec2 np, float grove, float firs, float rocky) {
 	vec2 cell = floor(np / TREE_CELL);
 	vec4 found = vec4(0.0);
 	float front = -1e9;
@@ -182,11 +222,11 @@ vec4 upland_tree(vec2 pixel, vec2 np, float grove) {
 				continue;
 			}
 			vec2 center = c * TREE_CELL + 1.0 + h.yz * (TREE_CELL - 2.0);
-			if (lake(center) > -0.04) {
+			if (lake(center) - rocky * 0.6 > -0.04) {
 				continue;
 			}
 			float r = 2.2 + hash12(c + 5.0) * 1.8;
-			bool fir = hash12(c + 9.0) < 0.3;
+			bool fir = hash12(c + 9.0) < firs;
 			vec2 d = np - center;
 			vec4 color = vec4(0.0);
 			if (fir) {
@@ -231,14 +271,17 @@ vec4 upland_tree(vec2 pixel, vec2 np, float grove) {
 	return found;
 }
 
-// Beyond the mountain foot: scree, then the uplands — the valley again, faded and
-// simpler. Grass in broad patches with a few flowers and stones; the south edge of a
+// Beyond the mountain foot: the uplands — the valley again, faded and simpler; the
+// valley's grass turns into them over the first pixels past the foot. Grass in broad patches with a few flowers and stones; the south edge of a
 // higher terrace drops in a short grassy bank (a lit lip, the bank darkening
 // downwards, a shadow at its foot); groves and lone trees; now and then a lake with a
 // shaded north shore.
-vec3 uplands(vec2 pixel, vec2 np, float beyond) {
+vec3 uplands(vec2 pixel, vec2 np, float beyond, float foot) {
 	float h = hash12(np);
-	float water = lake(np);
+	// The range's foot, its edge broken up: no lakes there, darker ground, firs, then
+	// scree nearest the peaks.
+	float rocky = rocky_at(np, foot);
+	float water = lake(np) - max(rocky, 0.0) * 0.6;
 	float t = terrace(np);
 	// The nearest higher terrace up to 8 pixels north: this pixel is on its bank (3
 	// pixels per terrace of drop, plus one), or in the shadow at the bank's foot.
@@ -264,9 +307,16 @@ vec3 uplands(vec2 pixel, vec2 np, float beyond) {
 	}
 	float meadow = smoothstep(0.56, 0.74, value_noise(np / 80.0 + 13.7));
 	float grove = smoothstep(0.52, 0.7, value_noise(np / 60.0 + 101.0));
+	grove = max(grove, smoothstep(0.22, 0.45, rocky));
 	float level = 0.56 + (fbm(np * vec2(0.018, 0.028)) - 0.5) * 0.55 + meadow * 0.08
 		+ (t - 2.5) * 0.05 - grove * 0.18;
+	// Right past the foot the valley's grass runs on, turning into the uplands'.
+	level = mix(valley_grass(np, smoothstep(0.56, 0.74, value_noise(np / 70.0 + 13.7))), level,
+		smoothstep(0.0, 14.0, beyond)) - clamp(rocky, 0.0, 1.0) * 0.22;
 	vec3 color = ramp(GRASS, 5, level, pixel);
+	// Scree nearest the peaks, dithered into the grass; none right at the valley's
+	// edge, where the grass runs on into the uplands.
+	bool scree = (rocky - 0.58 - (1.0 - smoothstep(6.0, 30.0, beyond)) * 0.6) * 64.0 > bayer(pixel) + 0.5;
 	if (face > 0.0) {
 		// A grassy bank with a stone here and there.
 		color = face == 1.0 ? PAL[GRASS + 4] : ramp(GRASS, 5, 0.3 - face / height * 0.3, pixel);
@@ -292,10 +342,14 @@ vec3 uplands(vec2 pixel, vec2 np, float beyond) {
 			color *= 0.78;
 		} else if (h < 0.0015 + meadow * 0.004) {
 			color = PAL[FLOWER + int(hash12(np * 0.53 + 3.0) * 3.99)];
-		} else if (h > 0.996) {
+		} else if (h > 0.996 - max(rocky, 0.0) * 0.03) {
 			color = PAL[STONE + int(hash12(np * 0.7) * 1.99)];
 		}
-		vec4 tree = upland_tree(pixel, np, grove);
+		if (scree) {
+			color = h < 0.5 ? ramp(SCREE, 3, hash12(np * 3.1) * 0.8, pixel) : ramp(GRASS, 5, 0.08, pixel);
+		}
+		vec4 tree = scree ? vec4(0.0)
+			: upland_tree(pixel, np, grove, mix(0.3, 0.9, smoothstep(0.15, 0.4, rocky)), max(rocky, 0.0));
 		if (tree.a >= 1.0) {
 			color = tree.rgb;
 		} else if (tree.a > 0.0) {
@@ -304,12 +358,6 @@ vec3 uplands(vec2 pixel, vec2 np, float beyond) {
 		if (shaded) {
 			color *= 0.8;
 		}
-	}
-	if (beyond < 7.0) {
-		color = h < 0.55 ? ramp(SCREE, 3, hash12(np * 3.1), pixel) : ramp(GRASS, 5, 0.12, pixel);
-	}
-	if (beyond < 1.0) {
-		color = PAL[FOOT_LINE];
 	}
 	// Paler past the foot, and paler still with distance from the valley.
 	return mix(color, UPLAND_HAZE, UPLAND_FADE * smoothstep(0.0, 40.0, beyond)
@@ -352,17 +400,19 @@ void fragment() {
 	vec2 np = pixel + noise_offset;
 	float inside = valley_depth(world) / texel_size;
 	vec3 color;
+	vec2 mountains = mountains_at(pixel);
 	if (inside < 0.0) {
-		color = uplands(pixel, np, -inside);
+		color = uplands(pixel, np, -inside, mountains.x);
 	} else {
 		vec4 field = field_at(pixel);
 		float pond = pond_depth(field);
 		float trail = floor(field.g * 255.0 + 0.5) / 64.0;
 		float shade = field.b;
 		float meadow = smoothstep(0.56, 0.74, value_noise(np / 70.0 + 13.7)) * (1.0 - shade);
-		float level = 0.58 + (fbm(np * vec2(0.022, 0.034)) - 0.5) * 0.7
-			+ (value_noise(np * 0.11) - 0.5) * 0.16 + meadow * 0.08 - shade * 0.42
-			- (1.0 - smoothstep(0.0, 26.0, inside)) * 0.3;
+		// The range's shade reaches a little way into the valley, as dark at the foot as
+		// on the uplands' side of it.
+		float level = valley_grass(np, meadow) - shade * 0.42
+			- clamp(rocky_at(np, mountains.x), 0.0, 1.0) * 0.22 * (1.0 - smoothstep(0.0, 16.0, inside));
 		if (trail < 1.35) {
 			level -= 0.1;
 		}
@@ -380,17 +430,15 @@ void fragment() {
 				color = mix(PAL[FLOWER + int(hash12((np + vec2(0.0, 1.0)) * 0.53 + 3.0) * 3.99)], vec3(1.0), 0.35);
 			}
 		}
-		if (trail > 1.4 && pond < -3.0 && inside > 4.0) {
-			// Tufts gather in patches; between them the grass is short.
+		if (trail > 1.4 && pond < -3.0) {
+			// Tufts gather in patches; between them the grass is short. They thin out
+			// towards the foot, where the uplands' short grass begins.
 			float patches = smoothstep(0.3, 0.7, value_noise(np / 23.0 + 71.0));
-			vec4 blade = tuft(pixel, (0.06 + patches * 0.36 + meadow * 0.3) * (1.0 - shade * 0.7));
+			vec4 blade = tuft(pixel, (0.06 + patches * 0.36 + meadow * 0.3) * (1.0 - shade * 0.7)
+				* smoothstep(0.0, 10.0, inside));
 			if (blade.a > 0.0) {
 				color = blade.rgb;
 			}
-		}
-		// Pebbles at the mountain foot.
-		if (inside < 5.0 && hash12(np * 2.3) < (1.0 - inside / 5.0) * 0.5) {
-			color = ramp(SCREE, 3, hash12(np * 3.1), pixel);
 		}
 		if (trail < 1.0) {
 			float t = 0.6 - trail * 0.35 + (value_noise(np * 0.4) - 0.5) * 0.5;
@@ -431,6 +479,10 @@ void fragment() {
 		} else if (pond > -4.0 && bayer(pixel) < 8.0) {
 			color *= 0.84;
 		}
+	}
+	// The peaks' shadows, their soft edge dithered.
+	if (mountains.y * 16.0 > bayer(pixel) + 0.5) {
+		color *= MOUNTAIN_SHADE;
 	}
 	COLOR = vec4(color, 1.0);
 }

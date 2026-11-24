@@ -12,6 +12,9 @@ var sway := 0
 var eye := Vector2.INF
 ## Peaks: carries a waterfall, animated by waterfall.gdshader.
 var waterfall := false
+## Peaks: the highest ground of each column of the image, art pixels (column 0 at the
+## left edge of local_rect). NelvarMountainField casts the peak's shadow from it.
+var relief := PackedFloat32Array()
 
 
 static func from_canvas(canvas: NelvarEarthCanvas) -> NelvarEarthArt:

@@ -119,18 +119,26 @@ stand between the camera and the plain). Peaks differ in look
 (`NelvarEarthData.Peak`): summits with shoulders, broad massifs of several tops,
 clusters of rocky needles, flat-topped peaks with a cap of layered rock, and
 behind the nearest row rare giants with glaciers down their gullies; the rock
-takes one of three tints (grey-blue, warm grey-brown, slate). Peaks rise out of
-the ground: lighter towards the top, darker at the base, grass and firs climbing
-their gullies from the foot. Some peaks of the nearest row carry a waterfall,
+takes one of three tints (grey-blue, warm grey-brown, slate). Each peak is a
+height field over a round base drawn in the map's oblique view, so its tops,
+ridges, saddles and snowfields face the camera and its base is a curve sinking
+into the ground; the slopes are lit by the same upper-right sun as everything
+else (tops and eastern slopes bright, western ones in shade), snow lies on the
+high gentle ground, grass and firs climb the low slopes, the gullies and the
+saddles. Under the range lies its foot — darker ground, scree and stands of
+firs — and the peaks cast slanted shadows down and to the left over the uplands
+and the valley (`NelvarMountainField`, drawn by the floor shader). The valley's
+grass runs on past the mountain foot without a seam. Some peaks of the nearest row carry a waterfall,
 animated by `waterfall.gdshader` (the painter keys its water, foam and mist by
 alpha). The outer row breaks up, and beyond it lie the uplands drawn by the floor
 shader: the valley again, duller and with less detail — meadows on uneven grassy
 terraces, groves and lone trees, now and then a lake — with rocky crags and
 boulders standing on them.
 
-Everything in the valley is painted on all cores while the scene loads
-(`NelvarEarthPainter`, `NelvarEarthCanvas`); the peaks (`NelvarMountainPainter`)
-are out of view at first and are painted in the background. The floor is a
+Everything in the valley and the peaks round it is painted on several cores while
+the scene loads (`NelvarEarthPainter`, `NelvarEarthCanvas`, `NelvarMountainPainter`),
+so the map opens complete; past about half the cores script threads mostly wait
+for each other, so the painting uses no more than that. The floor is a
 shader (`scripts/earth/earth_ground.gdshader`, run through `NelvarCloudSea` with
 parallax 1) fed by a ground map (`NelvarEarthField`): grass patches, tufts that
 bend as gusts run across the meadow, flowers, trails with pebbles, ponds with a
