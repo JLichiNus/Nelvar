@@ -1,7 +1,8 @@
 class_name NelvarSmoke
 extends Node2D
 ## Smoke over the fire forge, drawn over everything that stands. Thin wisps rise from
-## the vents and the smouldering trunks; a heavy plume climbs from each molten crater;
+## the vents and the smouldering trunks (and the volcano's geysers, which also throw up
+## a cloud as they burst: puff()); a heavy plume climbs from each molten crater;
 ## over the fumarole fields lie banks of smoke thick enough to hide whoever walks in
 ## them. The player's wind (NelvarEmbers.gusts_in) blows puffs away and thins them out;
 ## a dispersed bank grows back from its vents in a few seconds.
@@ -144,6 +145,21 @@ func _process(delta: float) -> void:
 			keep.append(puff)
 	_puffs = keep
 	queue_redraw()
+
+
+## A cloud of `count` puffs thrown up at `at` (a geyser bursting).
+func puff(at: Vector2, count: int) -> void:
+	for i in count:
+		var cloud := Puff.new()
+		cloud.source = Source.WISP
+		cloud.position = at + Vector2(_rng.randf_range(-14.0, 14.0), _rng.randf_range(-8.0, 4.0))
+		cloud.phase = _rng.randf() * TAU
+		cloud.radius = _rng.randf_range(4.0, 7.0)
+		cloud.grow = _rng.randf_range(1.0, 1.8)
+		cloud.velocity = Vector2(_rng.randf_range(-24.0, 24.0), _rng.randf_range(-70.0, -36.0))
+		cloud.alpha = 0.7
+		cloud.life = _rng.randf_range(2.6, 4.2)
+		_puffs.append(cloud)
 
 
 func _emit(at: Vector2, plume: bool) -> void:

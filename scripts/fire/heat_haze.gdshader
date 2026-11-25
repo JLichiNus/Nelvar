@@ -17,6 +17,9 @@ uniform float view_scale = 1.0;
 uniform float time = 0.0;
 uniform vec4 flares[8];
 uniform int flare_count = 0;
+// The volcano: the air shimmers only where the light map's B channel says (over the
+// vent, the boiling patches, the smoke banks), not over all the lava it lights.
+uniform bool use_haze_mask = false;
 
 float hash12(vec2 p) {
 	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -33,8 +36,9 @@ void fragment() {
 		// The hot air rises: what shimmers is a little north of the heat.
 		vec2 uv = (pixel + vec2(0.5, 6.5) - glow_origin) / (glow_size * glow_scale);
 		if (uv.x > 0.0 && uv.y > 0.0 && uv.x < 1.0 && uv.y < 1.0) {
-			vec2 g = texture(glow_tex, uv).rg;
-			heat = max(smoothstep(0.55, 1.0, g.r), smoothstep(0.5, 0.9, g.g) * 0.6);
+			vec3 g = texture(glow_tex, uv).rgb;
+			heat = use_haze_mask ? smoothstep(0.1, 0.85, g.b)
+				: max(smoothstep(0.55, 1.0, g.r), smoothstep(0.5, 0.9, g.g) * 0.6);
 		}
 	}
 	for (int i = 0; i < 8; i++) {

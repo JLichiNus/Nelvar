@@ -42,6 +42,8 @@ const ATTACK_PRIORITY := {
 # Покачивание корпуса над смерчем: на сколько текселей и с каким периодом.
 @export var hover_bob_texels: float = 1.0
 @export var hover_bob_period: float = 1.3
+## Share of the usual steering left while thrown through the air (launch()).
+@export var launch_control: float = 0.35
 
 @export_category("Attacks")
 @export var projectile_scene: PackedScene
@@ -119,6 +121,11 @@ var _hover_time := 0.0
 var _landing_pending := false
 # Пустота: тело проваливается в пропасть, управление отключено.
 var _is_falling := false
+# Бросок (гейзер вулкана): тело летит по дуге, управление ослаблено.
+var _launch_time := 0.0
+var _launch_duration := 0.0
+var _launch_push := Vector2.ZERO
+var _launch_height := 0.0
 
 @onready var aim_pivot: Node2D = $AimPivot
 @onready var projectile_spawn: Marker2D = $AimPivot/ProjectileSpawn
@@ -209,6 +216,9 @@ func _physics_process(delta: float) -> void:
 		"move_up",
 		"move_down"
 	)
+	if is_launched():
+		_update_launch(direction, delta)
+		return
 	# Бег возможен только в движении: остановка его сбрасывает.
 	if direction == Vector2.ZERO:
 		_is_running = false
@@ -348,7 +358,48 @@ func _damage(percent: float) -> float:
 
 
 func is_airborne() -> bool:
-	return _speed_boost_state == SpeedBoostState.ACTIVE
+	return _speed_boost_state == SpeedBoostState.ACTIVE or is_launched()
+
+
+## True while thrown through the air (launch()).
+func is_launched() -> bool:
+	return _launch_time < _launch_duration
+
+
+## Throws the player up and along `push` (world units per second) for `duration`
+## seconds, the body rising `height` above the ground and coming down again. In the air
+## the player is airborne (lava, enemies and low stones do not touch them) and steers
+## only a little (launch_control). The flight's cooldown is not touched.
+func launch(push: Vector2, height: float, duration: float) -> void:
+	if _is_dead or _is_falling or duration <= 0.0:
+		return
+	_launch_push = push
+	_launch_height = height
+	_launch_duration = duration
+	_launch_time = 0.0
+	_landing_pending = false
+	velocity = push
+	set_collision_mask_value(LOW_OBSTACLE_LAYER_NUMBER, false)
+	if _flight_tween != null:
+		_flight_tween.kill()
+
+
+func _update_launch(direction: Vector2, delta: float) -> void:
+	_launch_time += delta
+	var progress := clampf(_launch_time / _launch_duration, 0.0, 1.0)
+	velocity = _launch_push + direction * speed * move_scale * launch_control
+	move_and_slide()
+	var lift := flight_height if _speed_boost_state == SpeedBoostState.ACTIVE else 0.0
+	body_visual.position.y = _body_rest_position.y - lift - sin(PI * progress) * _launch_height
+	if progress >= 1.0:
+		_launch_duration = 0.0
+		_launch_time = 0.0
+		# The landing takes most of the speed: no sliding on along the rock.
+		velocity *= 0.3
+		body_visual.position.y = _body_rest_position.y - lift
+		if _speed_boost_state != SpeedBoostState.ACTIVE:
+			set_collision_mask_value(LOW_OBSTACLE_LAYER_NUMBER, true)
+	_update_animation(direction)
 
 
 func is_falling() -> bool:
@@ -363,6 +414,8 @@ func fall_into_abyss(duration: float, tint := Color(0.45, 0.25, 0.85, 0.0)) -> v
 		return
 	_is_falling = true
 	_is_running = false
+	_launch_duration = 0.0
+	_launch_time = 0.0
 	velocity = Vector2.ZERO
 	wind_trail.emitting = false
 	aim_pivot.visible = false
@@ -479,7 +532,9 @@ func _try_speed_boost() -> void:
 	# В полёте мелкие валуны остаются внизу.
 	set_collision_mask_value(LOW_OBSTACLE_LAYER_NUMBER, false)
 	boost_duration_timer.start(speed_boost_duration)
-	_play_lift_off()
+	# Thrown by a geyser the body is already in the air; the throw places it.
+	if not is_launched():
+		_play_lift_off()
 
 
 func _try_compression() -> void:
@@ -571,8 +626,11 @@ func _on_boost_duration_timeout() -> void:
 func _land() -> void:
 	_landing_pending = false
 	_speed_boost_state = SpeedBoostState.COOLDOWN
-	set_collision_mask_value(LOW_OBSTACLE_LAYER_NUMBER, true)
 	boost_cooldown_timer.start(speed_boost_cooldown)
+	# Still thrown by a geyser: the throw ends the landing itself.
+	if is_launched():
+		return
+	set_collision_mask_value(LOW_OBSTACLE_LAYER_NUMBER, true)
 	if not _is_dead:
 		_play_landing()
 

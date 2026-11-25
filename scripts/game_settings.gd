@@ -8,6 +8,7 @@ signal start_in_void_changed(enabled: bool)
 signal start_on_earth_changed(enabled: bool)
 signal start_in_fire_changed(enabled: bool)
 signal start_on_ice_changed(enabled: bool)
+signal start_in_fire2_changed(enabled: bool)
 signal damage_vignette_changed()
 
 const PATH := "user://settings.cfg"
@@ -28,9 +29,11 @@ var start_in_void := false
 var start_on_earth := false
 ## Developer menu: "Играть" opens the fire forge (scenes/fire.tscn).
 var start_in_fire := false
-## Developer menu: "Играть" opens the ice valley (scenes/ice.tscn). Only one of the
-## start options is on at a time.
+## Developer menu: "Играть" opens the ice valley (scenes/ice.tscn).
 var start_on_ice := false
+## Developer menu: "Играть" opens the volcano (scenes/fire2.tscn). Only one of the start
+## options is on at a time.
+var start_in_fire2 := false
 
 
 func _ready() -> void:
@@ -44,6 +47,8 @@ func _ready() -> void:
 			and not start_in_void and not start_on_earth
 		start_on_ice = config.get_value("dev", "start_on_ice", start_on_ice) \
 			and not start_in_void and not start_on_earth and not start_in_fire
+		start_in_fire2 = config.get_value("dev", "start_in_fire2", start_in_fire2) \
+			and not start_in_void and not start_on_earth and not start_in_fire and not start_on_ice
 		damage_vignette_level = clampi(config.get_value("hud", "damage_vignette_level",
 			damage_vignette_level), 0, VIGNETTE_LEVELS.size() - 1)
 		damage_vignette_directional = config.get_value("hud", "damage_vignette_directional",
@@ -104,6 +109,16 @@ func set_start_on_ice(enabled: bool) -> void:
 	start_on_ice_changed.emit(enabled)
 
 
+func set_start_in_fire2(enabled: bool) -> void:
+	if enabled == start_in_fire2:
+		return
+	start_in_fire2 = enabled
+	if enabled:
+		_turn_off_other_starts(&"fire2")
+	_save()
+	start_in_fire2_changed.emit(enabled)
+
+
 ## The start options exclude each other: turning one on turns the others off.
 func _turn_off_other_starts(kept: StringName) -> void:
 	if kept != &"void" and start_in_void:
@@ -118,6 +133,9 @@ func _turn_off_other_starts(kept: StringName) -> void:
 	if kept != &"ice" and start_on_ice:
 		start_on_ice = false
 		start_on_ice_changed.emit(false)
+	if kept != &"fire2" and start_in_fire2:
+		start_in_fire2 = false
+		start_in_fire2_changed.emit(false)
 
 
 func damage_vignette_strength() -> float:
@@ -149,6 +167,7 @@ func _save() -> void:
 	config.set_value("dev", "start_on_earth", start_on_earth)
 	config.set_value("dev", "start_in_fire", start_in_fire)
 	config.set_value("dev", "start_on_ice", start_on_ice)
+	config.set_value("dev", "start_in_fire2", start_in_fire2)
 	config.set_value("hud", "damage_vignette_level", damage_vignette_level)
 	config.set_value("hud", "damage_vignette_directional", damage_vignette_directional)
 	var error := config.save(PATH)

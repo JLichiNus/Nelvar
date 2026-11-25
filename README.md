@@ -257,6 +257,81 @@ height fields painted by `NelvarFrostPainter`: grey-blue rock, deep snow, glacie
 pines on a snowy foot. Snow falls over everything. F3 shows the mountain foot, the lakes
 and their thin ice, the crevasses with their bridges and the holes.
 
+### The volcano, Fire 2 (developer menu)
+
+Settings → «Меню разработчика» → «Запускать игру в Огне 2» makes «Играть» open
+`scenes/fire2.tscn`: the top of one huge volcano. A narrow rim of basalt and ash runs
+right round the crater; the crater is a lake of lava filled almost to the brim, with
+islands afloat on it; past the rim's outer edge there is nothing but a drop into clouds
+of ash far below. The camera looks down from the south, so under the southern edge the
+mountain's front slope runs down the screen until the clouds swallow it. The forge
+(«Огонь») stays as it is; both maps live side by side.
+
+`NelvarCraterGenerator` lays it out from the seed (parameters in
+`resources/fire_crater_config.tres`):
+
+- **The lake and the rim.** The lake is about 1640×1540; the rim round it is kept narrow
+  (210–280, never under 170) and bulges out at 2–4 **terraces**, broad places to fight
+  on. The spawn is on the southern one, looking north over the lava. A ring road of cooled
+  lava runs all the way round the rim (solid things keep off it, so the way round is never
+  blocked), with spurs to the capes and out onto the terraces.
+- **The vent** churns white-hot in the middle of the lake under a heavy plume, spitting
+  fountains of lava; 3–5 **boiling patches** bubble brighter. The air shimmers only over
+  these and over the smoke banks (`heat_haze.gdshader`'s `use_haze_mask`), not over the
+  whole lake.
+- **Islands** (`NelvarCraterData.Isle`): 2–3 **anchors** stand round the vent and never
+  sink (things stand on them, hoppers may appear there); **plates** and **rafts** ride
+  three rings of current round the vent — big plates, rafts, smaller plates — turning
+  once in 90–160 s, neighbouring rings the opposite ways. Where an island is depends on
+  the time only (`position_at`), so every layout is reproducible. Each ring keeps to its
+  own band of distance from the vent, 18 from the next, the anchors inside the first and
+  the tips of 3–5 **capes** (tongues of rock from the shore) outside the last; every
+  island spans its band, so it comes within a short run of each island of the
+  neighbouring rings as they pass, of the anchors or of the capes. The generator samples
+  every pair over a full turn: nothing ever touches, and every island comes within a run
+  of something (`RUN_GAP`).
+- **Geysers** (6–9, at least two on the capes as springboards): every 10–16 s the mouth
+  glows and trembles for 1.5 s, then a column of steam with a core of fire bursts for
+  0.9 s. Whoever stands in the mouth takes 6 HP and is thrown (`NelvarPlayer.launch`) up
+  and along their run-up ×1.25 for 1.1 s, steering at 35%; airborne, lava and hoppers do
+  not touch them, and landing in the lava burns. Hoppers in the mouth take 20 and are
+  thrown back.
+- Stones, crystals, snags (a charred tree or two at most), vents over sulfur under smoke
+  banks, ember grass by the lava, ash flowers and shrubs.
+
+Nothing is a wall here: **the lava and the edge are falls**. A step over either holds for
+0.12 s (sparks hiss under the player over the lava), then the player goes down — burnt in
+the lava (20 HP) or dropped into the clouds (15 HP) — and comes back where they last
+stood safely: on the rim or an anchor, clear of the lava, the edge, the geysers and any
+splash. A floating island carries whoever stands on it (hoppers too). Plates sink by
+themselves every 45–80 s for 7–10 s (3 s of warning: the seams flare, lava bubbles along
+the edge), come up red-hot and cool in 2 s; under weight they settle and go down too —
+a raft after about 1 s of standing, a plate after 3.5–5 s (the bigger, the longer); the
+weight eases off half as fast once the player leaves. Sinking eats an island from the
+edge in, the same way on screen and for the logic. After the first fall the game says
+what to do («Остров не выдержит…», «Слишком далеко…»). Every 7–12 s **lava splashes**
+over a shore or a plate's edge 250–800 from the player (`NelvarLavaSplashes`): it bulges
+and bubbles for 1.3 s, then a tongue of lava sloshes over (10 HP and a shove away from
+the lake); the fresh lava burns (4 HP every 0.5 s) and slows to 0.6 for 3 s, sets into a
+safe crust for 8 s and fades. Hoppers burn in the lava, die off the edge and on a sinking
+island, and never land in a geyser or fresh lava.
+
+The floor (`scripts/crater/crater_ground.gdshader`) computes the lake, the capes, the
+anchors and the summit's edge exactly as `NelvarCraterData` does (the edge from a table of
+radii), and reads roads and sulfur from `NelvarCraterField`. It shares the forge's palette
+and surfaces through `scripts/fire/fire_common.gdshaderinc`. The lake's crust drifts with
+its ring of current; the crater's inner wall shows under the north shore, only a few art
+pixels high; the front slope (its top row per column baked into a 1D texture) has ribs
+and gullies spreading like a cone, short ledges, ash drifts and lava trickling down a few
+gullies, and darkens into the clouds. Past the edge the floor is transparent and the
+clouds of ash show through from the layer below (`crater_below.gdshader` on
+`NelvarCloudSea`, parallax 0.6), with dark land and rivers of lava in their gaps. Islands
+are sprites (`NelvarCraterIsland`, a baked mask and `crater_island.gdshader`) on whole art
+pixels; geyser columns and the vent's fountains are `NelvarGeysers`; tongues of flame
+lick up along the shores, over the boils and the splashes (`NelvarEmbers.flame`), ash falls
+thicker than in the forge. F3 shows the edge, the shore and the capes, the islands as they
+are now, the rings, the geysers and the splashes.
+
 The earth map contains 2–3 large floating islands and 6–7 small ones, connected
 by narrow wooden bridges. Shorelines and bridge sides block movement; falling
 and height differences are not implemented yet.
@@ -337,6 +412,7 @@ godot --headless --path . --script tests/test_void.gd -- --seeds=50 --walks=6
 godot --headless --path . --script tests/test_earth.gd -- --seeds=30
 godot --headless --path . --script tests/test_fire.gd -- --seeds=30
 godot --headless --path . --script tests/test_ice.gd -- --seeds=30
+godot --headless --path . --script tests/test_crater.gd -- --seeds=30
 ```
 
 Here `godot` means the path to your Godot 4.7.2 executable. The checks cover
@@ -371,3 +447,14 @@ back hurt, the flight crosses it and a run crosses a narrow one, thin ice breaks
 standing player and not under a running one, a hole freezes over, hoppers blown into a
 crevasse or a hole die, a blizzard slows the player and lets go, walking leaves marks in
 the snow and a frozen creature opens its eye.
+Volcano checks cover the layout (the rim never narrower than its minimum, capes reaching
+the outer ring, geysers and things on rock, passages, the ring road on rock all the way
+round, the front slope's table on the summit's edge), that over a full turn no island
+touches another, a cape, an anchor or the shore and every one comes within a run of
+something, determinism, the light and haze maps, the islands' masks, the five start
+options, and in the real scene: a step into the lava and off the edge are falls that throw
+the player back hurt while a moment over the lava is not, an island carries the player
+exactly as far as it moves, a run gets across a cape's gap to a passing plate, a raft
+sinks under a standing player, a geyser hurts and throws (and a throw into the lava
+burns), a splash hurts and shoves, its fresh lava burns and slows and its crust does not,
+and hoppers die in the lava, off the edge and on a sinking plate.
