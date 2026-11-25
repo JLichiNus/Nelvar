@@ -194,6 +194,10 @@ func _check_hud() -> void:
 	director.set_seed(5)
 	director.add_adaptation(director.threshold)
 	_check(director.has_pending(), "HUD test: nothing ripened")
+	var toasts: Node = hud.get_node("Toasts")
+	_check(toasts.get_child_count() == 1, "No notice when the mutation ripened")
+	_check(player.get_children().any(func(c: Node) -> bool: return c is NelvarMutationBurst),
+		"No burst around the player when the mutation ripened")
 	_press_action(&"mutate")
 	await process_frame
 	var choice: Control = hud.get_node("Choice")
@@ -202,8 +206,9 @@ func _check_hud() -> void:
 	await process_frame
 	_check(not choice.visible and not paused, "Choosing did not close the panel and unpause")
 	_check(director.mutation_count == 1 and not director.has_pending(), "Key 2 did not choose")
-	var toasts: Node = hud.get_node("Toasts")
-	_check(toasts.get_child_count() == 1, "No notice after the mutation")
+	# The "ripened" notice gives way to the one about the chosen mutation.
+	_check(toasts.get_child_count() == 1, "No notice after the mutation, or the ripened one stays")
+	_check(hud.get_node("Flash").visible, "The screen edges do not flare on a mutation")
 	await process_frame
 	var strip: Node = hud.get_node("Strip")
 	var icons := strip.get_children().filter(func(c: Node) -> bool: return c is NelvarMutationIcon)

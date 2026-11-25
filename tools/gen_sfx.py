@@ -284,8 +284,207 @@ def flight_land(variant: int) -> np.ndarray:
     return finish(highpass(sound, 60.0), -3.0)
 
 
+def reed_tone(t: np.ndarray, frequency: np.ndarray) -> np.ndarray:
+    """Breathy pipe tone with a quiet woody second harmonic."""
+    phase = 2.0 * np.pi * np.cumsum(frequency) / RATE
+    return np.sin(phase) + 0.16 * np.sin(2.0 * phase)
+
+
+def soft_edges(signal: np.ndarray, attack: float, release: float) -> np.ndarray:
+    """Fade the finished sound to exact silence at both edges."""
+    n = signal.size
+    a, b = int(attack * RATE), int(release * RATE)
+    signal[:a] *= np.sin(np.linspace(0.0, np.pi / 2, a)) ** 2
+    signal[n-b:] *= np.cos(np.linspace(0.0, np.pi / 2, b)) ** 2
+    return signal
+
+
+def whistler_inhale(variant: int) -> np.ndarray:
+    """A rising hiss and strained pipe whistle warn of the incoming breath."""
+    rng = np.random.default_rng(15000 + variant)
+    t = seconds(0.9)
+    freq = glide(t, [(0, 700), (0.9, 1000)]) * (1 + 0.012 * (t / 0.9) * np.sin(2 * np.pi * 6 * t))
+    air = bandpass(pink_noise(t.size, rng), glide(t, [(0, 1000), (0.9, 2800)]), 1.1)
+    air /= np.max(np.abs(air))
+    sound = (0.55 * air + 0.48 * reed_tone(t, freq)) * (0.12 + 0.88 * (t / 0.9) ** 1.4)
+    return soft_edges(finish(sound, -4.0), 0.02, 0.04)
+
+
+def whistler_blow(variant: int) -> np.ndarray:
+    """A breathy falling pipe note with tiny bubbles forming in the puff."""
+    rng = np.random.default_rng(16000 + variant)
+    t = seconds(0.45)
+    air = bandpass(pink_noise(t.size, rng), 1500, 0.8)
+    air /= np.max(np.abs(air))
+    freq = glide(t, [(0, 900 + 25 * (variant - 2)), (0.45, 600)])
+    sound = (0.7 * air + 0.5 * reed_tone(t, freq)) * whoosh_envelope(t, 0.01)
+    for start in (0.09, 0.15, 0.22):
+        x = np.maximum(t - start - 0.005 * variant, 0)
+        sound += 0.13 * np.sin(2 * np.pi * (1800 * x - 9000 * x * x)) * np.exp(-x / 0.012) * (t >= start + 0.005 * variant)
+    return soft_edges(finish(sound, -4.0), 0.003, 0.025)
+
+
+def whistler_toot(variant: int) -> np.ndarray:
+    """One breathy reed note; three pitches make a little sequential trill."""
+    rng = np.random.default_rng(17000 + variant)
+    t = seconds(0.2)
+    air = bandpass(pink_noise(t.size, rng), 1500, 1.0)
+    air /= np.max(np.abs(air))
+    freq = np.full_like(t, [760, 850, 960][variant - 1])
+    sound = (0.3 * air + reed_tone(t, freq)) * whoosh_envelope(t, 0.025)
+    return soft_edges(finish(sound, -5.0), 0.005, 0.02)
+
+
+def whistler_hurt(variant: int) -> np.ndarray:
+    """A small hollow reed knock and a fleeting upward squeak."""
+    rng = np.random.default_rng(18000 + variant)
+    t = seconds(0.14)
+    knock = bandpass(pink_noise(t.size, rng), 450 + 45 * variant, 5.0)
+    knock /= np.max(np.abs(knock))
+    squeak = reed_tone(t, glide(t, [(0, 800), (0.1, 1200)]))
+    sound = knock * np.exp(-t / 0.06) + 0.2 * squeak * np.exp(-t / 0.035)
+    return soft_edges(finish(sound, -6.0), 0.006, 0.025)
+
+
+def whistler_death(variant: int) -> np.ndarray:
+    """The bag deflates with a wavering falling whistle and a dark last puff."""
+    rng = np.random.default_rng(19000 + variant)
+    t = seconds(0.8)
+    air = bandpass(pink_noise(t.size, rng), glide(t, [(0, 2200), (0.8, 400)]), 0.8)
+    air /= np.max(np.abs(air))
+    freq = glide(t, [(0, 800), (0.8, 250)]) * (1 + 0.035 * wander(t, rng, 9))
+    sound = (0.75 * air + 0.48 * reed_tone(t, freq)) * whoosh_envelope(t, 0.035)
+    puff = svf(pink_noise(t.size, rng), 450, 0.7, "low")
+    puff /= np.max(np.abs(puff))
+    x = np.maximum(t - 0.62, 0)
+    sound += 0.3 * puff * np.sin(np.pi * np.minimum(x / 0.18, 1)) ** 2
+    return soft_edges(finish(sound, -4.0), 0.01, 0.03)
+
+
+def bubble_pop(variant: int) -> np.ndarray:
+    """A soft descending bubble plop followed by little droplets."""
+    rng = np.random.default_rng(20000 + variant)
+    t = seconds(0.12)
+    freq = glide(t, [(0, 2500), (0.025, 1200), (0.12, 1100)])
+    sound = reed_tone(t, freq) * np.exp(-t / 0.012)
+    for start in (0.038, 0.058, 0.078):
+        x = np.maximum(t - start - rng.uniform(0, 0.004), 0)
+        sound += 0.17 * np.sin(2 * np.pi * (2000 + 300 * rng.random()) * x) * np.exp(-x / 0.004) * (x > 0)
+    sound = soft_edges(finish(sound, -6.0), 0.002, 0.015)
+    return sound * (10 ** (-6.0 / 20.0) / np.max(np.abs(sound)))
+
+
+def bubble_deflect(variant: int) -> np.ndarray:
+    """A buoyant upward rubbery chirp with a light breath of air."""
+    rng = np.random.default_rng(21000 + variant)
+    t = seconds(0.25)
+    freq = glide(t, [(0, 500), (0.18, 1400 + 40 * variant), (0.25, 1300)])
+    air = bandpass(pink_noise(t.size, rng), 1800, 1.0)
+    air /= np.max(np.abs(air))
+    sound = (reed_tone(t, freq) + 0.2 * air) * whoosh_envelope(t, 0.04)
+    return soft_edges(finish(sound, -4.0), 0.005, 0.025)
+
+
+def runner_step(variant: int) -> np.ndarray:
+    """A tiny dry footfall on earth and grass."""
+    rng = np.random.default_rng(22000 + variant)
+    t = seconds(0.07)
+    noise = bandpass(rng.standard_normal(t.size), 2600 + 200 * variant, 1.2)
+    sound = noise * np.exp(-t / 0.012) + 0.07 * np.sin(2 * np.pi * 200 * t) * np.exp(-t / 0.014)
+    sound = soft_edges(finish(sound, -6.0), 0.002, 0.01)
+    return sound * (10 ** (-6.0 / 20.0) / np.max(np.abs(sound)))
+
+
+def runner_chirp(variant: int) -> np.ndarray:
+    """Two quick chirps lead into a rising, trilling warning."""
+    t = seconds(0.6)
+    sound = np.zeros_like(t)
+    for start in (0.015, 0.095):
+        x = t - start
+        u = np.clip(x / 0.038, 0, 1)
+        sound += 0.55 * np.sin(2 * np.pi * (2500 * x + 1500 * x * u / 2)) * np.sin(np.pi * u) ** 2 * ((x >= 0) & (x < 0.038))
+    x = np.maximum(t - 0.18, 0)
+    freq = 2700 + 1100 * x / 0.42 + 100 * np.sin(2 * np.pi * 25 * x) + 65 * (variant - 1)
+    env = np.clip(x / 0.035, 0, 1) * (0.35 + 0.65 * x / 0.42)
+    sound += np.sin(2 * np.pi * np.cumsum(freq) / RATE) * env * (t >= 0.18)
+    return soft_edges(finish(sound, -4.0), 0.003, 0.03)
+
+
+def runner_dash(variant: int) -> np.ndarray:
+    """A short airy burst carries a fading flutter of wings."""
+    rng = np.random.default_rng(23000 + variant)
+    t = seconds(0.45)
+    noise = rng.standard_normal(t.size)
+    air = bandpass(noise, glide(t, [(0, 500), (0.04, 4200), (0.45, 1000)]), 0.8)
+    flutter = bandpass(rng.standard_normal(t.size), 1100 + 100 * variant, 0.9)
+    pulses = np.maximum(0, np.sin(2 * np.pi * 20 * t)) ** 2 * np.exp(-t / 0.16)
+    sound = 0.6 * air * whoosh_envelope(t, 0.018) + flutter * pulses
+    return soft_edges(finish(sound, -4.5), 0.003, 0.025)
+
+
+def runner_skid(variant: int) -> np.ndarray:
+    """Rough little claws scrape the ground as their pitch falls."""
+    rng = np.random.default_rng(24000 + variant)
+    t = seconds(0.35)
+    noise = bandpass(rng.standard_normal(t.size), glide(t, [(0, 3000 + 100 * variant), (0.35, 1500)]), 1.4)
+    rough = 0.55 + 0.45 * np.sin(2 * np.pi * (45 + 3 * variant) * t)
+    sound = noise * rough * (1 - t / 0.35) ** 0.7
+    return soft_edges(finish(sound, -5.0), 0.004, 0.025)
+
+
+def runner_bonk(variant: int) -> np.ndarray:
+    """A hollow wooden bump gives way to three dizzy descending tweets."""
+    rng = np.random.default_rng(25000 + variant)
+    t = seconds(1.0)
+    sound = np.sin(2 * np.pi * (165 + 20 * variant) * t) * np.exp(-t / 0.055)
+    sound += 0.4 * bandpass(rng.standard_normal(t.size), 850, 3.0) * np.exp(-t / 0.025)
+    for start in (0.22, 0.45, 0.68):
+        x = t - start
+        u = np.clip(x / 0.15, 0, 1)
+        freq = 2800 - 900 * u + 70 * np.sin(2 * np.pi * 9 * x) + 70 * variant
+        sound += 0.22 * np.sin(2 * np.pi * np.cumsum(freq) / RATE) * np.sin(np.pi * u) ** 2 * ((x >= 0) & (x < 0.15))
+    return soft_edges(finish(sound, -4.5), 0.003, 0.025)
+
+
+def runner_hurt(variant: int) -> np.ndarray:
+    """A brief, quiet upward and downward bird squeak."""
+    rng = np.random.default_rng(26000 + variant)
+    t = seconds(0.12)
+    freq = glide(t, [(0, 2100 + 80 * variant), (0.045, 3200), (0.12, 2300)])
+    sound = (np.sin(2 * np.pi * np.cumsum(freq) / RATE) + 0.07 * rng.standard_normal(t.size)) * whoosh_envelope(t, 0.012)
+    return soft_edges(finish(sound, -6.0), 0.003, 0.02)
+
+
+def runner_death(variant: int) -> np.ndarray:
+    """A falling comic squeal dissolves into a soft feather puff."""
+    rng = np.random.default_rng(27000 + variant)
+    t = seconds(0.6)
+    freq = glide(t, [(0, 3800 + 100 * variant), (0.12, 1800), (0.6, 1800)])
+    squeal = np.sin(2 * np.pi * np.cumsum(freq) / RATE) * np.sin(np.pi * np.clip(t / 0.12, 0, 1)) ** 2
+    x = np.maximum(t - 0.08, 0)
+    puff = bandpass(pink_noise(t.size, rng), glide(t, [(0, 2600), (0.6, 700)]), 0.8)
+    sound = squeal + 0.7 * puff * np.clip(x / 0.04, 0, 1) * np.exp(-x / 0.18) * (t >= 0.08)
+    return soft_edges(finish(sound, -4.5), 0.003, 0.04)
+
+
 # name -> (builder, variants); 0 variants = a single file <name>.wav.
 SOUNDS = {
+    "runner_step": (runner_step, 4),
+    "runner_chirp": (runner_chirp, 2),
+    "runner_dash": (runner_dash, 2),
+    "runner_skid": (runner_skid, 2),
+    "runner_bonk": (runner_bonk, 2),
+    "runner_hurt": (runner_hurt, 3),
+    "runner_death": (runner_death, 2),
+
+    "whistler_inhale": (whistler_inhale, 2),
+    "whistler_blow": (whistler_blow, 3),
+    "whistler_toot": (whistler_toot, 3),
+    "whistler_hurt": (whistler_hurt, 3),
+    "whistler_death": (whistler_death, 2),
+    "bubble_pop": (bubble_pop, 3),
+    "bubble_deflect": (bubble_deflect, 2),
+
     "wind": (wind, 0),
     "wind_wave": (wind_wave, 3),
     "compression_start": (compression_start, 2),

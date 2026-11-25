@@ -15,6 +15,7 @@ script = ExtResource("1_script")
 [node name="Sprite" type="Sprite2D" parent="Axis/WaveA"]
 texture_filter = 1
 texture = ExtResource("2_sheet")
+hframes = 8
 vframes = 17
 
 [node name="WaveB" type="Node2D" parent="Axis"]
@@ -23,6 +24,7 @@ rotation = 3.14159
 [node name="Sprite" type="Sprite2D" parent="Axis/WaveB"]
 texture_filter = 1
 texture = ExtResource("2_sheet")
+hframes = 8
 vframes = 17
 
 [node name="StartSound" type="AudioStreamPlayer" parent="."]

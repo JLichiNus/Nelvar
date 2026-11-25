@@ -59,6 +59,16 @@ var _sky_material: ShaderMaterial
 var _monolith_task := -1
 var _monolith_result: NelvarDebrisPainter.Art
 var _chip_tween: Tween
+var _refill_tween: Tween
+var _boss_pips: NelvarVoidBossPips
+## A bright sliver riding the end of the bar while it fills up for a new phase.
+var _boss_glint: ColorRect
+## A soft highlight gliding along the boss bar, and how the bar shakes when hit.
+var _boss_sheen: ColorRect
+var _boss_shake := 0.0
+var _boss_bar_home := Vector2.INF
+var _boss_last_health := -1.0
+var _boss_time := 0.0
 var _title_tween: Tween
 ## A Void whose boss fight was lost comes back with the same seed, the player at
 ## the arena's door: the climb is not repeated. -1 = no checkpoint.
@@ -171,7 +181,8 @@ func _paint_monolith() -> void:
 	_monolith_result = NelvarDebrisPainter.new().paint_images(data.monolith)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_animate_boss_bar(delta)
 	if _monolith_task >= 0 and WorkerThreadPool.is_task_completed(_monolith_task):
 		WorkerThreadPool.wait_for_task_completion(_monolith_task)
 		_monolith_task = -1
@@ -298,7 +309,7 @@ func _on_fight_started() -> void:
 	boss.health_changed.connect(_on_boss_health)
 	boss.phase_changed.connect(_on_boss_phase)
 	boss_phase.text = boss.phase_title()
-	_add_phase_notches()
+	_add_phase_pips()
 	_show_title(NelvarTheOne.DISPLAY_NAME.to_upper(), "Пустота обрела форму", 1.4)
 	boss_bar.modulate.a = 0.0
 	boss_bar.show()
@@ -310,10 +321,14 @@ func _on_fight_started() -> void:
 
 
 func _on_boss_health(current: float, maximum: float) -> void:
+	if current < _boss_last_health:
+		_on_boss_hit(_boss_last_health - current)
+	_boss_last_health = current
+	# While the bar fills up for a new phase it runs on its own.
+	if _refill_tween != null and _refill_tween.is_running():
+		return
 	# Whole pixels of the bar, not a smooth slide; the pale chip catches up later.
-	var share := current / maxf(maximum, 1.0)
-	var width := boss_fill.get_parent_control().size.x - 6.0
-	var right := -3.0 - roundf(width * (1.0 - share) / 3.0) * 3.0
+	var right := _bar_right(current / maxf(maximum, 1.0))
 	boss_fill.offset_right = right
 	if _chip_tween != null:
 		_chip_tween.kill()
@@ -322,19 +337,91 @@ func _on_boss_health(current: float, maximum: float) -> void:
 	_chip_tween.tween_property(boss_chip, "offset_right", right, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
-## Marks on the bar where the next phases begin.
-func _add_phase_notches() -> void:
+## A hit: the bar jolts and its frame flashes pale, more for bigger hits.
+func _on_boss_hit(amount: float) -> void:
+	_boss_shake = clampf(0.08 + amount / 400.0, 0.08, 0.3)
+	var edge := boss_fill.get_parent_control().get_node_or_null("Edge") as ReferenceRect
+	if edge == null:
+		return
+	edge.border_color = Color(0.95, 0.9, 1.0)
+	var tween := edge.create_tween()
+	tween.tween_property(edge, "border_color", Color(0.5, 0.34, 0.82), 0.25)
+
+
+## Shake and sheen of the boss bar, every frame while it is shown.
+func _animate_boss_bar(delta: float) -> void:
+	if not boss_bar.visible or _boss_sheen == null:
+		return
+	_boss_time += delta
+	if _boss_bar_home == Vector2.INF:
+		_boss_bar_home = boss_bar.position
+	_boss_shake = maxf(_boss_shake - delta, 0.0)
+	var jolt := Vector2.ZERO
+	if _boss_shake > 0.0:
+		jolt = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).round() * 3.0 * ceilf(_boss_shake * 10.0)
+	boss_bar.position = _boss_bar_home + jolt
+	var width := boss_fill.size.x
+	var run := fmod(_boss_time * 420.0, width + 500.0) - 60.0
+	_boss_sheen.position = Vector2(roundf(run / 3.0) * 3.0, 0.0)
+	_boss_sheen.size = Vector2(36.0, boss_fill.size.y)
+
+
+## The fill's right offset for `share` of the bar, snapped to whole art pixels.
+func _bar_right(share: float) -> float:
+	var width := boss_fill.get_parent_control().size.x - 6.0
+	return -3.0 - roundf(width * (1.0 - clampf(share, 0.0, 1.0)) / 3.0) * 3.0
+
+
+## One diamond per phase under the bar, and the glint for refilling.
+func _add_phase_pips() -> void:
 	var bar := boss_fill.get_parent_control()
-	for share in NelvarTheOne.PHASE_AT:
-		var notch := ColorRect.new()
-		notch.color = Color(0.9, 0.84, 1.0, 0.9)
-		notch.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		notch.anchor_left = share
-		notch.anchor_right = share
-		notch.anchor_bottom = 1.0
-		notch.offset_left = -1.5
-		notch.offset_right = 1.5
-		bar.add_child(notch)
+	if _boss_pips == null:
+		_boss_pips = NelvarVoidBossPips.new()
+		_boss_pips.name = "Phases"
+		_boss_pips.count = NelvarTheOne.PHASE_COUNT
+		boss_bar.add_child(_boss_pips)
+		boss_bar.move_child(_boss_pips, bar.get_index() + 1)
+		_boss_glint = ColorRect.new()
+		_boss_glint.color = Color(1.0, 0.97, 1.0)
+		_boss_glint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_boss_glint.anchor_bottom = 1.0
+		_boss_glint.offset_top = -3.0
+		_boss_glint.offset_bottom = 3.0
+		_boss_glint.hide()
+		bar.add_child(_boss_glint)
+		boss_fill.clip_contents = true
+		_boss_sheen = ColorRect.new()
+		_boss_sheen.color = Color(1.0, 0.95, 1.0, 0.22)
+		_boss_sheen.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		boss_fill.add_child(_boss_sheen)
+	_boss_pips.set_phase(0)
+
+
+## The bar of the broken phase is empty; it fills again in the new phase's colour,
+## the pale chip racing ahead and a glint riding the end of the fill.
+func _refill_boss_bar(color: Color) -> void:
+	if _chip_tween != null:
+		_chip_tween.kill()
+	if _refill_tween != null:
+		_refill_tween.kill()
+	boss_fill.color = color
+	boss_fill.offset_right = _bar_right(0.0)
+	boss_chip.offset_right = _bar_right(0.0)
+	_refill_tween = create_tween()
+	_refill_tween.tween_interval(0.25)
+	_refill_tween.tween_callback(_boss_glint.show)
+	_refill_tween.tween_method(_set_refill, 0.0, 1.0, 0.95).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_refill_tween.tween_callback(_boss_glint.hide)
+
+
+func _set_refill(share: float) -> void:
+	boss_fill.offset_right = _bar_right(share)
+	boss_chip.offset_right = _bar_right(minf(share * 1.25, 1.0))
+	var width := boss_fill.get_parent_control().size.x
+	var at := width + boss_fill.offset_right
+	_boss_glint.offset_left = at - 3.0
+	_boss_glint.offset_right = at + 3.0
+	_boss_glint.modulate.a = 0.6 + 0.4 * sin(share * 40.0)
 
 
 ## A big title in the middle of the screen: letters appear, hold, fade.
@@ -358,7 +445,8 @@ func _show_title(title: String, subtitle: String, hold: float) -> void:
 func _on_boss_phase(phase: int) -> void:
 	boss_phase.text = arena.boss.phase_title()
 	_show_title(NelvarTheOne.PHASE_TITLES[phase].to_upper(), NelvarTheOne.PHASE_NUMERALS[phase], 0.9)
-	boss_fill.color = PHASE_COLORS[phase]
+	_refill_boss_bar(PHASE_COLORS[phase])
+	_boss_pips.set_phase(phase)
 	_shake(0.9, 9.0)
 	# The Void flinches with it.
 	var tween := create_tween()

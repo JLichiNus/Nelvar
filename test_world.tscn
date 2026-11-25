@@ -8,6 +8,26 @@
 [ext_resource type="Script" path="res://ui/level_line.gd" id="level_line"]
 [ext_resource type="Script" path="res://ui/damage_vignette.gd" id="damage_vignette"]
 [ext_resource type="PackedScene" path="res://ui/mutations/mutation_hud.tscn" id="mutation_hud"]
+[ext_resource type="PackedScene" path="res://enemies/whistler/whistler.tscn" id="whistler"]
+[ext_resource type="Script" path="res://enemies/enemy_kind.gd" id="enemy_kind"]
+[ext_resource type="PackedScene" path="res://enemies/runner/runner.tscn" id="runner"]
+
+[sub_resource type="Resource" id="Resource_kind_hopper"]
+script = ExtResource("enemy_kind")
+scene = ExtResource("2_hopper")
+weight = 3.0
+
+[sub_resource type="Resource" id="Resource_kind_runner"]
+script = ExtResource("enemy_kind")
+scene = ExtResource("runner")
+weight = 2.0
+max_alive = 4
+
+[sub_resource type="Resource" id="Resource_kind_whistler"]
+script = ExtResource("enemy_kind")
+scene = ExtResource("whistler")
+weight = 1.0
+max_alive = 3
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_horizontal_boundary"]
 size = Vector2(3520, 32)
@@ -104,6 +124,7 @@ shape = SubResource("RectangleShape2D_vertical_boundary")
 [node name="EnemySpawner" type="Node2D" parent="." node_paths=PackedStringArray("player")]
 script = ExtResource("3_spawner")
 enemy_scene = ExtResource("2_hopper")
+enemy_kinds = Array[ExtResource("enemy_kind")]([SubResource("Resource_kind_hopper"), SubResource("Resource_kind_whistler"), SubResource("Resource_kind_runner")])
 player = NodePath("../Player")
 
 [node name="Player" parent="." instance=ExtResource("1_player")]

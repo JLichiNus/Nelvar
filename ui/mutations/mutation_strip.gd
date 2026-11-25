@@ -10,6 +10,8 @@ extends HBoxContainer
 const GAP := 9
 ## Space between a tile and its hint, and the hint's distance from screen edges.
 const HINT_OFFSET := 9.0
+## A tile that just got its mutation (or a new stage) pops and glows this long.
+const HIGHLIGHT_TIME := 0.9
 
 var _director: NelvarMutationDirector
 var _hint: PanelContainer
@@ -28,7 +30,9 @@ func bind(director: NelvarMutationDirector) -> void:
 	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hint.add_theme_stylebox_override("panel", get_theme_stylebox("panel", "TooltipPanel"))
 	add_child(_hint)
-	director.mutation_applied.connect(func(_m, _s, _o, _i) -> void: _rebuild())
+	director.mutation_applied.connect(func(mutation: NelvarMutation, _s, _o, _i) -> void:
+		_rebuild()
+		_highlight(mutation.id))
 	_rebuild()
 
 
@@ -51,6 +55,22 @@ func _rebuild() -> void:
 		add_child(icon)
 	# The hint stays drawn above the tiles.
 	move_child(_hint, -1)
+
+
+func _highlight(id: StringName) -> void:
+	for child in get_children():
+		var icon := child as NelvarMutationIcon
+		if icon == null or icon.mutation == null or icon.mutation.id != id:
+			continue
+		# Its place in the row is set on the next sort, so the pivot follows it.
+		icon.pivot_offset = icon.custom_minimum_size / 2.0
+		icon.scale = Vector2.ONE * 1.6
+		icon.modulate = Color(2.2, 2.2, 2.2)
+		var tween := icon.create_tween().set_parallel()
+		tween.tween_property(icon, "scale", Vector2.ONE, HIGHLIGHT_TIME * 0.5) \
+			.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tween.tween_property(icon, "modulate", Color.WHITE, HIGHLIGHT_TIME) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 
 
 func _show_hint(icon: NelvarMutationIcon) -> void:
