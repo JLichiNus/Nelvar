@@ -143,17 +143,30 @@ the edge is sealed, the Void opens its eyes and the Only One (Единствен
 `scripts/void/boss/`) forms out of the sigil. It is one body that the fight bends
 out of shape, its contours always lagging a moment behind it:
 
+Each phase has its own 3200 HP: the bar at the top shows only the current phase,
+empties, and fills up again in the next phase's colour; diamonds under it count
+the phases. The attacks follow three rules: the difficulty is in their geometry,
+they get in the way of hitting the boss, and every one can be avoided at plain
+walking or running speed.
+
 - **I · Единственный** — a hunched figure with an empty face and a huge left arm.
-  Dash (leaves a short trail of the Void), pull around itself that bursts after
-  2 s, a rift dragged along the floor towards the player.
-- **II · Искажение** (70% HP) — the limbs come loose from the body. Double dash
-  aimed anew, a pull next to the player, three rifts in a fan.
-- **III · Отторжение** (42%) — it stretches, squashes and blinks part by part.
-  Three dashes (the last trail lingers), two pulls tearing both ways, rifts crossing
-  the arena one after another, and the collapse: rotating sectors from the centre.
-- **IV · Поглощённый** (14%) — only a crawling silhouette hovering in the centre.
-  Rings of shards that fly out and come back, and a closing ring of the Void with a
-  single gap.
+  A dash that leads the player (the aim follows them, then locks just before it
+  goes) and leaves a tear in space that bursts out to both sides a second later;
+  a gravity well that pulls harder and grows its burst circle as it charges; a
+  rift whose energy runs along it as a wave and stays open for 2 s.
+- **II · Искажение** — the limbs come loose from the body. Two leading dashes, a
+  well that creeps after the player and stops before it bursts, three parallel
+  rifts that cut the floor into narrow corridors.
+- **III · Отторжение** — it stretches, squashes and blinks part by part. Three
+  dashes whose tears all stay open and divide the arena; twin wells circling one
+  point, pulling in turn and bursting one after the other; a maze of crossing
+  rifts that closes one corridor after another, always leaving a way out; the
+  collapse: 42° sectors turning around the boss with 18° lanes between them, no
+  safe spot at its feet, and a warned reversal.
+- **IV · Поглощённый** — only a crawling silhouette hovering in the centre. Two
+  rings of shards on spiral paths that curl back the other way, the second ring
+  crossing the first; and the squeeze: an accelerating ring of the Void whose one
+  gap sweeps around the boss.
 
 Every hazard shows itself before it hurts (a dash even draws its path); flight
 (Shift) passes through all of them. The fight is lit by the boss and its attacks

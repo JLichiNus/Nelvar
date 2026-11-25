@@ -201,35 +201,94 @@ func _check_hazards() -> void:
 			return pull, Vector2(0.0, 120.0), true],
 		"collapse sector": [func() -> Node2D:
 			var sectors := NelvarVoidHazards.Sectors.new()
-			sectors.start = 0.0
-			sectors.telegraph = 0.3
 			sectors.cycles = 1
-			return sectors, Vector2(300.0, 0.0), true],
+			sectors.start = -sectors.turn * (sectors.telegraph + sectors.fire_time * 0.5)
+			return sectors, Vector2.from_angle(deg_to_rad(18.0)) * 300.0, true],
 		"between sectors": [func() -> Node2D:
 			var sectors := NelvarVoidHazards.Sectors.new()
-			sectors.start = 0.0
-			sectors.count = 6
-			sectors.telegraph = 0.3
 			sectors.cycles = 1
+			sectors.start = -sectors.turn * (sectors.telegraph + sectors.fire_time * 0.5)
 			return sectors, Vector2.from_angle(PI / 6.0) * 300.0, false],
+		"collapse sector at the boss's feet": [func() -> Node2D:
+			var sectors := NelvarVoidHazards.Sectors.new()
+			sectors.cycles = 1
+			return sectors, Vector2(20.0, 0.0), true],
+		"between sectors next to the boss": [func() -> Node2D:
+			var sectors := NelvarVoidHazards.Sectors.new()
+			sectors.cycles = 1
+			sectors.start = -sectors.turn * (sectors.telegraph + sectors.fire_time * 0.5)
+			return sectors, Vector2.from_angle(PI / 6.0 + 0.25) * 50.0, false],
+		"collapse sector after the reversal": [func() -> Node2D:
+			var sectors := NelvarVoidHazards.Sectors.new()
+			var third := 2.0 * (sectors.telegraph + sectors.fire_time)
+			var a := sectors.rotation_at(third)
+			var b := sectors.rotation_at(third + 0.6)
+			var c := sectors.rotation_at(third + 1.0)
+			_check(a < b and sectors.rotation_at(third + 1.1) < c,
+				"Collapse did not keep turning for the warning, then reverse")
+			_check(absf(sectors.rotation_at(third + 0.001) - a) < 0.001,
+				"Collapse rotation jumped at the wave boundary")
+			sectors.age = sectors.duration() - sectors.fire_time - 0.1
+			return sectors, Vector2.from_angle(0.54) * 500.0, true],
 		"squeeze ring": [func() -> Node2D:
 			var squeeze := NelvarVoidHazards.Squeeze.new()
-			squeeze.start_radius = 500.0
-			squeeze.duration = 2.0
-			squeeze.gap = PI
-			return squeeze, Vector2(300.0, 0.0), true],
+			squeeze.age = 4.5
+			return squeeze, Vector2(480.0, 0.0), true],
 		"squeeze gap": [func() -> Node2D:
 			var squeeze := NelvarVoidHazards.Squeeze.new()
-			squeeze.start_radius = 500.0
-			squeeze.duration = 1.9
-			squeeze.gap = 0.0
-			squeeze.collapse_radius = 100.0
-			return squeeze, Vector2(300.0, 0.0), false],
+			var step := 1.0 / 60.0
+			var fastest := 0.0
+			for i in roundi(squeeze.duration / step):
+				var time := i * step
+				var speed := (squeeze.gap_at(time + step) - squeeze.gap_at(time)) / step
+				fastest = maxf(fastest, speed * (squeeze.radius_at(time) + squeeze.band))
+			_check(fastest <= NelvarVoidData.WALK_SPEED * 0.6, "Squeeze gap moved too fast to follow")
+			_check(squeeze.radius_at(2.0) - squeeze.radius_at(3.0)
+				< squeeze.radius_at(4.0) - squeeze.radius_at(5.0), "Squeeze did not accelerate")
+			squeeze.age = 4.5
+			return squeeze, Vector2.from_angle(0.88) * 480.0, false],
+		"squeeze ring final burst": [func() -> Node2D:
+			var squeeze := NelvarVoidHazards.Squeeze.new()
+			squeeze.age = squeeze.duration - 0.1
+			return squeeze, Vector2.ZERO, true],
+		"squeeze gap beyond the final burst": [func() -> Node2D:
+			var squeeze := NelvarVoidHazards.Squeeze.new()
+			squeeze.age = squeeze.duration - 0.1
+			return squeeze, Vector2(181.0, 0.0), false],
 		"shard": [func() -> Node2D:
 			var shard := NelvarVoidHazards.Shard.new()
-			shard.boss = layer
-			shard.position = Vector2(-200.0, -14.0)
-			return shard, Vector2.ZERO, true],
+			return shard, Vector2.from_angle(0.56) * 318.5, true],
+		"shard launch warning": [func() -> Node2D:
+			var shard := NelvarVoidHazards.Shard.new()
+			shard.telegraph = 4.0
+			return shard, Vector2(110.0, 0.0), false],
+		"shard return curl": [func() -> Node2D:
+			var shard := NelvarVoidHazards.Shard.new()
+			shard.age = shard.telegraph + NelvarVoidHazards.Shard.OUT_TIME + NelvarVoidHazards.Shard.HOLD
+			return shard, Vector2.from_angle(1.0) * 595.0, true],
+		"shard return spares the outward path": [func() -> Node2D:
+			var shard := NelvarVoidHazards.Shard.new()
+			shard.age = shard.telegraph + NelvarVoidHazards.Shard.OUT_TIME + NelvarVoidHazards.Shard.HOLD
+			return shard, Vector2.from_angle(0.88) * 595.0, false],
+		"shard spacing at the crossing": [func() -> Node2D:
+			var shard := NelvarVoidHazards.Shard.new()
+			var second := NelvarVoidHazards.Shard.new()
+			var spacing := NelvarVoidHazards.Shard.LAUNCH_SPACING
+			second.heading = NelvarVoidHazards.Shard.crossing_offset(spacing)
+			var travel := NelvarVoidHazards.Shard.OUT_TIME + NelvarVoidHazards.Shard.BACK_TIME
+			var fraction := (NelvarVoidHazards.Shard.FLIGHT_TIME - spacing) / travel
+			var crossing := fraction * NelvarVoidHazards.Shard.OUT_TIME
+			var at := second._point_at(crossing)
+			_check(at.distance_to(shard._point_at(crossing + spacing)) < 0.01,
+				"The second shard ring did not cross the first on its return")
+			second.free()
+			var chord := 2.0 * NelvarVoidHazards.Shard.INNER * sin(TAU / NelvarVoidHazards.Shard.COUNT)
+			var back_speed := (NelvarVoidHazards.Shard.OUTER - NelvarVoidHazards.Shard.INNER) / NelvarVoidHazards.Shard.BACK_TIME
+			var stagger := back_speed * NelvarVoidHazards.Shard.SPOKE_STAGGER
+			_check(minf(chord, stagger) > 2.0 * (NelvarVoidHazards.Shard.HIT_RADIUS + NelvarPlayer.BODY_RADIUS),
+				"The minimum shard gap was too small for the player")
+			shard.age = shard.telegraph + crossing + spacing - 0.1
+			return shard, Vector2.from_angle(1.26) * 797.0, false],
 		"dash trail": [func() -> Node2D:
 			var trail := NelvarVoidHazards.Trail.new()
 			trail.from = Vector2(-100.0, 0.0)
@@ -283,9 +342,11 @@ func _check_boss() -> void:
 	_check(boss.active, "The boss never started fighting")
 	var phases: Array[int] = []
 	boss.phase_changed.connect(func(phase: int) -> void: phases.append(phase))
-	for i in NelvarTheOne.PHASE_AT.size():
-		boss.take_damage(boss.health - boss.max_health * NelvarTheOne.PHASE_AT[i] + 1.0)
+	_check(boss.max_health == NelvarTheOne.PHASE_HEALTH, "A phase does not have its own health")
+	for i in NelvarTheOne.PHASE_COUNT - 1:
+		boss.take_damage(boss.health + 1.0)
 		var during := boss.health
+		_check(during == 0.0, "The bar did not empty at the end of phase %d" % (i + 1))
 		boss.take_damage(50.0)
 		_check(boss.health == during, "The boss took damage while changing phase")
 		# The change runs partly in slow motion: wait until it fights again.
@@ -294,6 +355,7 @@ func _check_boss() -> void:
 			if boss.active:
 				break
 		_check(boss.active, "The boss did not come back after phase %d" % (i + 2))
+		_check(boss.health == boss.max_health, "The bar did not fill again for phase %d" % (i + 2))
 	_check(phases == [1, 2, 3], "Phases went %s instead of I -> IV" % [phases])
 	_check(boss.body.phase == 3, "The body did not follow the phases")
 	await _wait_frames(60 * 4)
