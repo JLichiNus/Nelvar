@@ -65,6 +65,16 @@ class Hazard:
 	func player_point() -> Vector2:
 		return player.global_position if is_instance_valid(player) else Vector2.INF
 
+	## True on the one frame whose step [age - delta, age) holds `time`
+	## (so a time of 0 is caught on the first frame).
+	func passed(time: float, delta: float) -> bool:
+		return time >= age - delta and time < age
+
+	## A one-shot sound at `at` (local), left in the hazard layer so it outlives
+	## this hazard.
+	func sound(name: StringName, at := Vector2.ZERO, volume := 0.0, pitch := 1.0) -> void:
+		NelvarBossSound.play(name, get_parent(), to_global(at), volume, pitch)
+
 	## Stops a continuous emitter after `delay` (its last sparks still finish).
 	func _stop_later(particles: CPUParticles2D, delay: float) -> void:
 		await get_tree().create_timer(delay, false).timeout
@@ -189,12 +199,14 @@ class Trail:
 	var _jag := PackedFloat32Array()
 	var _lights: Array[PointLight2D] = []
 	var _seed := 0
+	var _crackle: AudioStreamPlayer2D
 
 	func _setup() -> void:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = hash(from) ^ hash(to)
 		_seed = rng.randi()
 		var length := from.distance_to(to)
+		sound(&"trail_charge", from.lerp(to, 0.5), 0.0, charge_pitch())
 		for i in int(length / 12.0) + 2:
 			_jag.append(rng.randf_range(-1.0, 1.0))
 		var sparks := sparks_along(from, to, int(length / 8.0), VIOLET, 60.0, 0.9, false)
@@ -207,6 +219,10 @@ class Trail:
 
 	func _fade() -> float:
 		return clampf((life - age) / 0.35, 0.0, 1.0)
+
+	## The charge sound is 1 s long; a shorter charge plays it faster.
+	func charge_pitch() -> float:
+		return clampf(1.0 / maxf(charge, 0.1), 0.8, 1.5)
 
 	func _charge_k() -> float:
 		return clampf(age / charge, 0.0, 1.0)
@@ -252,6 +268,8 @@ class Trail:
 		if not _erupted and age >= charge:
 			_erupted = true
 			_erupt()
+		if _erupted:
+			NelvarBossSound.set_level(_crackle, _fade() * minf((age - charge) / 0.15, 1.0))
 		var point := player_point()
 		if point == Vector2.INF:
 			return
@@ -283,6 +301,8 @@ class Trail:
 			sparks.damping_max = 500.0
 		sparks_along(from, to, int(length / 10.0), DEEP, 200.0, 0.8)
 		NelvarVoidFx.shock(self, global_position + from.lerp(to, 0.5), 0.45)
+		sound(&"trail_burst", from.lerp(to, 0.5))
+		_crackle = NelvarBossSound.hold(&"trail_crackle", self, from.lerp(to, 0.5), randf_range(0.92, 1.08))
 
 	func _draw() -> void:
 		var fade := _fade()
@@ -408,7 +428,12 @@ class Pull:
 	var pulse_offset := 0.0
 	## A twin circling the same point: this one draws the orbit and the bond.
 	var twin: Node2D
+	## Pitch of its sounds: twins are told apart by ear.
+	var voice := 1.0
 	var _burst := false
+	var _charge_sound: AudioStreamPlayer2D
+	var _charge_started := false
+	var _lock_heard := false
 	var _light: PointLight2D
 	var _motes: CPUParticles2D
 
@@ -431,6 +456,24 @@ class Pull:
 		_motes.emitting = true
 		if orbit_center != Vector2.INF:
 			position = orbit_center + Vector2.from_angle(orbit_angle) * orbit_radius
+		sound(&"pull_spawn", Vector2.ZERO, 0.0, voice)
+
+	## The charge sound is 2.4 s long and ends on the burst: slowed a little for
+	## a long charge (and started late), sped up a little for a short one.
+	func _charge_pitch() -> float:
+		return clampf(2.4 / duration, 0.88, 1.12) * voice
+
+	func _sound_step(delta: float) -> void:
+		var pitch := _charge_pitch()
+		if not _charge_started and age >= duration - 2.4 / pitch:
+			_charge_started = true
+			_charge_sound = NelvarBossSound.play(&"pull_charge", self, global_position, 0.0, pitch)
+		if locked() and not _lock_heard:
+			_lock_heard = true
+			NelvarBossSound.fade_out(_charge_sound, 0.06)
+			sound(&"pull_lock", Vector2.ZERO, 0.0, voice)
+		if age >= duration and age - delta < duration:
+			sound(&"pull_burst", Vector2.ZERO, 0.0, voice)
 
 	func charge() -> float:
 		return clampf(age / duration, 0.0, 1.0)
@@ -452,6 +495,7 @@ class Pull:
 		return lerpf(start_strength, strength, k * k) * weight()
 
 	func _step(delta: float) -> void:
+		_sound_step(delta)
 		var k := charge()
 		if age < duration and not locked():
 			if orbit_center != Vector2.INF:
@@ -602,6 +646,7 @@ class Rift:
 	var _seed := 0
 	var _head: PointLight2D
 	var _head_sparks: CPUParticles2D
+	var _hum: AudioStreamPlayer2D
 
 	func _setup() -> void:
 		var rng := RandomNumberGenerator.new()
@@ -616,6 +661,7 @@ class Rift:
 		# Dust trickling up out of the crack while it waits.
 		var dust := sparks_along(Vector2.ZERO, direction * length, int(length / 40.0), VIOLET, 30.0, 0.8, false)
 		_stop_later(dust, telegraph)
+		sound(&"rift_crack", direction * minf(length * 0.3, 200.0), 0.0, randf_range(0.94, 1.06))
 
 	## How far the opening has run, and how far the closing.
 	func _front() -> float:
@@ -642,6 +688,8 @@ class Rift:
 			_erupt()
 		if _opened:
 			_move_head()
+			var open := maxf(open_at(0.0), maxf(open_at(length * 0.5), open_at(length)))
+			NelvarBossSound.set_level(_hum, open)
 		var local := player_point() - global_position
 		var along := clampf(local.dot(direction), 0.0, length)
 		if local.distance_to(direction * along) < width * 0.5 + 6.0 and open_at(along) > 0.5:
@@ -669,6 +717,9 @@ class Rift:
 		embers.initial_velocity_min = 20.0
 		_stop_later(embers, hold + length / wave_speed * 0.5)
 		NelvarVoidFx.shock(self, global_position, 0.35)
+		# The opening sound rides on the head of light as it tears along.
+		NelvarBossSound.play(&"rift_open", _head, global_position)
+		_hum = NelvarBossSound.hold(&"rift_hum", self, direction * length * 0.5, randf_range(0.95, 1.05))
 
 	func _move_head() -> void:
 		var front := _front()
@@ -759,6 +810,8 @@ class Sectors:
 	extends Hazard
 	const REVERSE_LEAD := 0.65
 	const REVERSE_BLEND := 0.3
+	## When the warning ticks, as shares of the telegraph: closer and closer.
+	const TICKS: Array[float] = [0.0, 0.42, 0.68, 0.84, 0.94]
 
 	var count := 6
 	var arc := deg_to_rad(42.0)
@@ -787,10 +840,21 @@ class Sectors:
 		var half_step := PI / count
 		return clampf(half_step - asin(minf(min_gap * 0.5 / maxf(radius, 1.0), 1.0)), 0.0, arc * 0.5)
 
-	func _step(_delta: float) -> void:
+	func _sounds(delta: float) -> void:
+		var period := telegraph + fire_time
+		var cycle := int(age / period)
+		for i in TICKS.size():
+			if passed(cycle * period + TICKS[i] * telegraph, delta):
+				sound(&"collapse_tick", Vector2.ZERO, 0.0, 1.0 + 0.05 * i)
+		# The reversal sound rises for REVERSE_LEAD and turns with the wedges.
+		if passed(2.0 * period, delta):
+			sound(&"collapse_reverse")
+
+	func _step(delta: float) -> void:
 		if age >= duration():
 			queue_free()
 			return
+		_sounds(delta)
 		var period := telegraph + fire_time
 		if fmod(age, period) < telegraph:
 			return
@@ -818,6 +882,7 @@ class Sectors:
 				sparks.finished.connect(sparks.queue_free)
 		NelvarVoidFx.flash_light(self, Vector2.ZERO, VIOLET, 1.4, 760.0, 0.45)
 		NelvarVoidFx.shock(self, global_position, 0.42)
+		sound(&"collapse_strike")
 
 	func _shape(center: float) -> PackedVector2Array:
 		var shape := PackedVector2Array()
@@ -950,6 +1015,7 @@ class Shard:
 		position = _origin + _point_at(flight)
 		if player_point().distance_squared_to(global_position) < HIT_RADIUS * HIT_RADIUS:
 			hurt()
+			sound(&"shard_hit", Vector2.ZERO, 0.0, randf_range(0.93, 1.07))
 			NelvarVoidFx.burst(get_parent(), global_position + LIFT, 8, PALE, 145.0, 0.32)
 			queue_free()
 
@@ -1015,10 +1081,17 @@ class Squeeze:
 	var collapse_damage := 30.0
 	var _gap_light: PointLight2D
 	var _heart_light: PointLight2D
+	var _beacon: AudioStreamPlayer2D
+	## The final sound draws breath for this long before the collapse.
+	const FINAL_LEAD := 0.5
 
 	func _setup() -> void:
 		_gap_light = NelvarVoidFx.make_light(PALE, 0.0, 185.0)
 		add_child(_gap_light)
+		sound(&"squeeze_start")
+		# 6.8 s, rising with the ring; stretched if the squeeze is set longer.
+		sound(&"squeeze_rise", Vector2.ZERO, 0.0, clampf(6.8 / duration, 0.8, 1.25))
+		_beacon = NelvarBossSound.hold(&"squeeze_beacon", self)
 		_heart_light = NelvarVoidFx.make_light(VIOLET, 0.0, collapse_radius * 1.7)
 		add_child(_heart_light)
 
@@ -1048,6 +1121,12 @@ class Squeeze:
 		_gap_light.position = Vector2.from_angle(center) * (r + band * 0.5)
 		_gap_light.energy = (1.0 + 0.25 * sin(age * 8.0)) * clampf(age / warn, 0.0, 1.0)
 		_heart_light.energy = _heart_charge() * 1.6
+		# The way out calls from the gap, fading as the heart takes over.
+		if is_instance_valid(_beacon):
+			_beacon.position = _gap_light.position
+			NelvarBossSound.set_level(_beacon, clampf(age / warn, 0.0, 1.0) * clampf((duration - age) / 0.6, 0.0, 1.0))
+		if passed(duration - FINAL_LEAD, delta):
+			sound(&"squeeze_final")
 		if age >= duration:
 			if distance < collapse_radius:
 				damage = collapse_damage

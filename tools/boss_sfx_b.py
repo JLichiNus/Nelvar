@@ -226,33 +226,35 @@ def shard_charge(variant):
 
 def shard_launch(variant):
     rng = np.random.default_rng(21800 + variant)
-    note = seconds(0.25)
-    layers = []
-    for i in range(18):
-        if variant == 1:
-            # A rising minor-arpeggio fan.
-            steps = (0, 3, 7, 10, 12, 15, 19, 22, 24)
-            freq = 347 * 2 ** (steps[i // 2] / 12) * (1.006 if i % 2 else 1)
-            start = 0.40 * (i / 17) ** 0.82
-            glass = bell(note, freq, 0.087, ((1, 1), (2.51, 0.32), (3.83, 0.1)))
-        elif variant == 2:
-            # Three rakes of descending, bending needles.
-            sweep, step = divmod(i, 6)
-            start = 0.136 * sweep + 0.016 * step
-            freq = (1190 - 106 * step) * (1 - 0.14 * sweep)
-            glass = fm(note, freq * (0.73 + 0.27 * decay(note, 0.036)), 1.62, 0.72 * decay(note, 0.06))
-            glass *= attack_decay(note, 0.0025, 0.061)
-        else:
-            # Granular fragments tumble outward in an expanding rhythm.
-            start = 0.012 + 0.445 * (i / 17) ** 1.55 + rng.uniform(-0.003, 0.003)
-            freq = rng.uniform(460, 1120)
-            glass = bell(note, freq, 0.046, ((1, 0.85), (1.38, 0.43), (2.91, 0.22)))
-            glass = crush(glass, bits=7, hold=4) * tremolo(note, 58, 0.55)
-        layers.append((start, glass, rng.uniform(0.76, 1.0)))
-    fan = place(0.7, *layers)
-    if variant == 3:
-        fan = lowpass(fan, 4100)
-    return _shot(fan, 0.068)
+    t = seconds(0.75)
+    if variant == 1:
+        # A pressure hit followed by a rapidly rotating, falling air band.
+        hit = _air(t, rng, 650, 0.8) * attack_decay(t, 0.001, 0.025)
+        sweep = _air(t, rng, 400 + 1900 * decay(t, 0.16), 0.85)
+        spin = tremolo(t, 35 - 22 * ramp(t, 0, 0.6), 0.65)
+        sound = 2.4 * hit + 0.55 * sub_thump(t, 105, 42, 0.10)
+        sound += 0.7 * sweep * spin * attack_decay(t, 0.012, 0.20)
+    elif variant == 2:
+        # A blunt fracture scatters many irregular, short noise fragments.
+        hit = _air(t, rng, 1250, 0.8) * attack_decay(t, 0.001, 0.018)
+        layers = []
+        fragment_t = seconds(0.09)
+        for i in range(24):
+            start = 0.012 + 0.32 * (i / 23) ** 1.3 + rng.uniform(0, 0.008)
+            centre = rng.uniform(700, 2200) * (0.55 + 0.45 * decay(fragment_t, 0.035))
+            fragment = _air(fragment_t, rng, centre, 0.8)
+            fragment *= attack_decay(fragment_t, 0.001, rng.uniform(0.012, 0.035))
+            layers.append((start, fragment, rng.uniform(0.25, 0.55)))
+        sound = 2.8 * hit + 0.65 * sub_thump(t, 125, 45, 0.09)
+        sound += place(0.75, *layers)
+    else:
+        # A dry, heavy snap gives way to a wide, fluttering hiss.
+        snap = _air(t, rng, 950, 0.7) * attack_decay(t, 0.001, 0.012)
+        hiss = _air(t, rng, 650 + 1000 * decay(t, 0.25), 0.7)
+        fan = tremolo(t, 22 - 13 * ramp(t, 0, 0.65), 0.75)
+        sound = 2.5 * snap + 1.0 * sub_thump(t, 145, 38, 0.12)
+        sound += 0.75 * hiss * fan * attack_decay(t, 0.018, 0.23)
+    return _shot(lowpass(sound, 2600), 0.07)
 
 
 def shard_turn(variant):
@@ -431,7 +433,7 @@ SOUNDS = {
     "shard_charge": _sound("Осколки", "Зарядка осколков", shard_charge,
                            ["Учащающиеся хрустальные удары", "Растущий звон с биениями", "Обратный звон со стеклянной пылью"]),
     "shard_launch": _sound("Осколки", "Запуск кольца", shard_launch,
-                           ["Восходящее минорное арпеджио", "Три нисходящих веера", "Неровный каскад дроблёного стекла"]),
+                           ["Удар воздуха и вращающийся убывающий вихрь", "Треск массы и разлёт шумных осколков", "Тяжёлый щелчок с низким ударом и веером шипения"]),
     "shard_turn": _sound("Осколки", "Разворот осколков", shard_turn,
                          ["Биения стекла и чистый свист", "Металлическое дрожание и шумный свист", "Цифровое мерцание и обратный писк"]),
     "shard_hit": _sound("Осколки", "Попадание осколка", shard_hit,

@@ -90,6 +90,13 @@ var _aim_total := 1.0
 var _afterimage_left := 0.0
 var _spark_left := 0.0
 var _ambience: NelvarVoidHazards.Ambience
+## Its low presence, heard near it all fight long (NelvarBossSound).
+var _presence: AudioStreamPlayer2D
+var _presence_level := 0.0
+## Where the sounds of its body come from: its chest.
+const HEART := Vector2(0.0, -70.0)
+## Its presence sinks lower with every phase.
+const PRESENCE_PITCH: Array[float] = [1.0, 0.96, 0.92, 0.87]
 
 
 func _ready() -> void:
@@ -137,6 +144,7 @@ func begin(target: NelvarPlayer, center: Vector2, hazards: Node2D) -> void:
 	var pillar := NelvarVoidHazards.Pillar.new()
 	pillar.life = INTRO_TIME
 	_spawn(pillar, global_position, 0.0)
+	NelvarBossSound.play(&"boss_intro", hazard_layer, global_position + HEART)
 	NelvarVoidFx.glitch(self, 0.4, 0.4)
 	body.glitch(INTRO_TIME * 0.6)
 	var tween := create_tween()
@@ -151,6 +159,7 @@ func begin(target: NelvarPlayer, center: Vector2, hazards: Node2D) -> void:
 	NelvarVoidFx.flash(self, NelvarVoidFx.PALE, 0.35, 0.5)
 	NelvarVoidFx.glitch(self, 0.35, 0.8)
 	body.flare(1.5)
+	_presence = NelvarBossSound.hold(&"boss_presence", self, HEART)
 	_invulnerable = false
 	active = true
 	_brain(_token)
@@ -166,6 +175,7 @@ func take_damage(amount: float) -> void:
 		_spark_left = 0.07
 		var at := global_position + Vector2(_rng.randf_range(-18.0, 18.0), _rng.randf_range(-130.0, -30.0))
 		NelvarVoidFx.burst(hazard_layer if hazard_layer != null else self, at, 7, NelvarVoidFx.PALE, 170.0, 0.3)
+	NelvarBossSound.play(&"boss_hit", self, global_position + HEART, 0.0, _rng.randf_range(0.92, 1.08))
 	health_changed.emit(health, max_health)
 	if health > 0.0:
 		return
@@ -195,6 +205,8 @@ func _physics_process(delta: float) -> void:
 		return
 	body.aim = global_position.direction_to(player.global_position)
 	_spark_left -= delta
+	_presence_level = move_toward(_presence_level, 1.0, delta * 0.5)
+	NelvarBossSound.set_level(_presence, _presence_level)
 	if is_instance_valid(_aim):
 		_aim_age += delta
 		var left := _aim_total - _aim_age
@@ -203,6 +215,7 @@ func _physics_process(delta: float) -> void:
 		elif not _aim.locked:
 			_aim.locked = true
 			body.flare(0.8)
+			NelvarBossSound.play(&"dash_lock", self, global_position + HEART)
 		_aim.from = global_position
 		_aim.to = global_position + _locked_reach
 		_aim.charge = clampf(_aim_age / _aim_total, 0.0, 1.0)
@@ -238,6 +251,8 @@ func _start_dash(direction: Vector2, distance: float) -> void:
 	_afterimage_left = 0.0
 	NelvarVoidFx.shock(self, global_position, 0.3)
 	NelvarVoidFx.burst(hazard_layer, global_position + Vector2(0.0, -40.0), 16, NelvarVoidFx.VIOLET, 240.0, 0.4)
+	# Rides with the body as it tears across the arena.
+	NelvarBossSound.play(&"dash_rush", self, global_position + HEART)
 
 
 func _step_dash(delta: float) -> void:
@@ -293,6 +308,7 @@ func _blink_to(point: Vector2, token: int) -> bool:
 	if token != _token or dead:
 		body.presence = 1.0
 		return false
+	NelvarBossSound.play(&"blink", hazard_layer, global_position + HEART)
 	_burst(80.0, 0.0)
 	global_position = point
 	_burst(110.0, 0.4)
@@ -431,6 +447,8 @@ func _wind_up(time: float, token: int) -> bool:
 	_aim_total = time
 	_locked_reach = _dash_target(time)
 	_spawn(_aim, Vector2.ZERO, 0.0)
+	# The aim sound is 0.75 s long up to the lock; a quicker wind-up plays it faster.
+	NelvarBossSound.play(&"dash_aim", self, global_position + HEART, 0.0, clampf(0.75 / time, 0.9, 1.4))
 	var alive := await _wait(time, token)
 	_drop_aim()
 	return alive
@@ -489,6 +507,7 @@ func _attack_pull(token: int, mode: int) -> void:
 				pull.lock_time = 0.55
 				pull.pulse_period = 1.5
 				pull.pulse_offset = i * PI
+				pull.voice = 1.0 if i == 0 else 0.84
 				twins.append(pull)
 			twins[0].twin = twins[1]
 			for pull in twins:
@@ -656,15 +675,13 @@ func _attack_shards(token: int) -> void:
 	_spawn_shard_ring(0.0)
 	if not await _wait(tell, token):
 		return
-	body.flare(1.2)
-	_burst(120.0, 0.35)
+	_launch_shards(token)
 	if not await _wait(spacing - tell, token):
 		return
 	_spawn_shard_ring(NelvarVoidHazards.Shard.crossing_offset(spacing))
 	if not await _wait(tell, token):
 		return
-	body.flare(1.2)
-	_burst(120.0, 0.35)
+	_launch_shards(token, 0.9)
 	await _wait(NelvarVoidHazards.Shard.FLIGHT_TIME + NelvarVoidHazards.Shard.SPOKE_STAGGER + 0.3, token)
 
 
@@ -689,6 +706,18 @@ func _spawn_shard_ring(heading: float) -> void:
 		shard.heading = heading + TAU * i / count
 		shard.telegraph += NelvarVoidHazards.Shard.SPOKE_STAGGER * (i % 2)
 		_spawn(shard, global_position, DAMAGE["shard"])
+	NelvarBossSound.play(&"shard_charge", hazard_layer, global_position + HEART)
+
+
+## The ring flies: one sound for all of it (the second ring a little lower), and
+## one more as it turns back at the edge.
+func _launch_shards(token: int, pitch := 1.0) -> void:
+	body.flare(1.2)
+	_burst(120.0, 0.35)
+	var at := global_position
+	NelvarBossSound.play(&"shard_launch", hazard_layer, at + HEART, 0.0, pitch)
+	if await _wait(NelvarVoidHazards.Shard.OUT_TIME, token):
+		NelvarBossSound.play(&"shard_turn", hazard_layer, at, 0.0, pitch)
 
 
 # --- Phases and death ----------------------------------------------------------
@@ -707,6 +736,11 @@ func _shift_phase() -> void:
 	body.glitch(SHIFT_TIME)
 	body.pose = &"spread"
 	phase_changed.emit(phase)
+	NelvarBossSound.play(&"phase_shift", hazard_layer, global_position + HEART, 0.0, 1.0 - 0.03 * phase)
+	if is_instance_valid(_presence):
+		_presence.pitch_scale = PRESENCE_PITCH[phase]
+		_presence.set_meta(&"full_db", NelvarBossSound.VOLUME[&"boss_presence"] + 1.5 * phase)
+	_presence_level = 0.2
 	# The world stutters with it: slow motion, the picture tears, a flash, a wave;
 	# the floor cracks open around it and beams of light break out of its body.
 	NelvarVoidFx.slow_motion(self, 0.35, 0.55)
@@ -762,6 +796,8 @@ func _die() -> void:
 	_drop_aim()
 	for hazard in get_tree().get_nodes_in_group("void_hazards"):
 		hazard.queue_free()
+	NelvarBossSound.fade_out(_presence, 0.8)
+	NelvarBossSound.play(&"death", hazard_layer, global_position + HEART)
 	body.pose = &"spread"
 	body.glitch(DEATH_TIME)
 	body.flare(2.5)

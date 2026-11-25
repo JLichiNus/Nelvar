@@ -199,9 +199,9 @@ def pull_lock(variant: int) -> np.ndarray:
         # Sudden silence pierced by a thin, trembling tone.
         sound = sine(1975.0 * (1.0 + 0.004 * np.sin(phase(np.full(t.size, 7.0))))) * attack_decay(t, 0.01, 0.4)
     elif variant == 2:
-        # A tape-stop: everything slows down and dies, then a soft ping.
+        # A tape-stop: everything slows down and dies into silence.
         stop = saw(140.0 * 0.05 ** ramp(t, 0.0, 0.35)) * (1.0 - ramp(t, 0.0, 0.35))
-        sound = lowpass(stop, 1500.0) + 0.5 * bell(t, 2093.0, 0.3) * ramp(t, 0.35, 0.351)
+        sound = lowpass(stop, 1500.0)
     else:
         # A tightening wire: high FM squeal rising slightly, choked off.
         sound = fm(t, 900.0 * 1.2 ** ramp(t, 0.0, 0.7), 2.01, 1.2) * ramp(t, 0.0, 0.05) * (1.0 - ramp(t, 0.6, 0.75)) * 0.3 \
@@ -368,7 +368,7 @@ SOUNDS = {
     "pull_charge": _entry("Притяжение", "Зарядка вихря (2,4 с)", pull_charge,
                           ["Гул, пульс ускоряется и растёт", "Воздушная воронка раскручивается", "Бесконечный подъём (Шепард)"]),
     "pull_lock": _entry("Притяжение", "Остановка перед взрывом", pull_lock,
-                        ["Тишина и тонкий дрожащий тон", "Остановка плёнки и тихий пинг", "Натянутая струна, обрыв"]),
+                        ["Тишина и тонкий дрожащий тон", "Остановка плёнки, затухание в тишину", "Натянутая струна, обрыв"]),
     "pull_burst": _entry("Притяжение", "Взрыв вихря", pull_burst,
                          ["Имплозия: втягивание и глубокий бум", "Разбитое стекло пространства", "Цифровой взрыв, ломается картинка"]),
     "boss_presence": _entry("Сам босс", "Присутствие (фон рядом с боссом)", boss_presence,

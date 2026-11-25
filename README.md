@@ -113,6 +113,24 @@ both fade out instead of cutting off. Flight (Shift) takes off with a soft upwar
 faster the player flies (`flight_air.wav`, `FlightAir`) and settles with a
 soft low puff on landing (`flight_land_*`).
 
+The final boss has its own sounds in `assets/audio/sfx/boss/`, synthesised by
+`tools/gen_boss_sfx.py` (`boss_sfx_a.py`, `boss_sfx_b.py`, shared tools in
+`boss_sfx_common.py`). Every sound has three candidate variants:
+`--preview DIR` writes them all for listening, `--pick name=k ...` writes the
+chosen ones into the game. They are played by `NelvarBossSound`
+(`scripts/void/boss/boss_sound.gd`) as positional sounds where the attack
+happens: the aim, lock and rush of a dash, a tear charging and erupting and then
+crackling, a gravity well appearing, charging (timed to end on its burst), stopping
+still and bursting (twins differ in pitch), a rift cracking and opening (the sound
+rides the light along it) and then humming, the collapse's quickening ticks, strike
+and reversal, the shard rings' charge, launch and turn, a shard hitting, and the
+squeeze's groan, rising spiral, the beacon of the way out at the gap and the final
+blast. Around the boss: its intro, a low presence that sinks with every phase, hits,
+phase shifts and death. Hits, cracks and many rifts at once have a shortest gap and
+a voice limit, so a burst of them is heard as one event. Loops
+(`boss_presence`, `trail_crackle`, `rift_hum`, `squeeze_beacon`) are imported
+with loop mode Forward.
+
 `test_world.tscn` is a flat arena for tuning combat without the generator (F6).
 
 ### The Void (developer menu)
