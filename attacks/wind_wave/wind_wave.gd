@@ -167,6 +167,11 @@ func _hit(target: Node) -> void:
 	if _hit_targets.has(target_id):
 		return
 	_hit_targets[target_id] = true
+	# Enemy projectiles that can be turned back (a Whistler's bubble) are sent
+	# the way the wave goes instead of being hit.
+	if target.has_method("deflect"):
+		target.call("deflect", direction)
+		return
 	if target.has_method("take_damage"):
 		target.call("take_damage", damage)
 	if target.has_method("apply_knockback"):

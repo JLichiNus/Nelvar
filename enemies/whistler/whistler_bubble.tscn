@@ -1,0 +1,25 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://enemies/whistler/whistler_bubble.gd" id="1_script"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/bubble_pop.tres" id="2_pop"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/bubble_deflect.tres" id="3_deflect"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_bubble"]
+radius = 9.0
+
+[node name="WhistlerBubble" type="Area2D"]
+collision_layer = 8
+collision_mask = 3
+texture_filter = 1
+script = ExtResource("1_script")
+pop_stream = ExtResource("2_pop")
+deflect_stream = ExtResource("3_deflect")
+
+[node name="Shadow" type="Sprite2D" parent="."]
+
+[node name="Visual" type="Node2D" parent="."]
+
+[node name="Sprite" type="Sprite2D" parent="Visual"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_bubble")

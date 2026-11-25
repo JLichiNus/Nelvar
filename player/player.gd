@@ -559,7 +559,9 @@ func _check_enemy_contact() -> void:
 	if _invulnerability_left > 0.0:
 		return
 	for body in hurtbox.get_overlapping_bodies():
-		if body.is_in_group("enemies") and "contact_damage" in body:
+		# A harmless enemy (a dazed Runner has 0) must not hide a harmful one.
+		if body.is_in_group("enemies") and "contact_damage" in body \
+				and float(body.get("contact_damage")) > 0.0:
 			take_damage(body.get("contact_damage"), body.global_position)
 			return
 

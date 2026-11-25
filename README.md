@@ -46,6 +46,42 @@ and attacks start from the body center (`AimPivot`). Hopper enemies spawn on
 walkable ground around the player, away from trunks. At zero HP the scene
 restarts with a new seed.
 
+### Enemies
+
+The spawner (`enemies/enemy_spawner.gd`) brings several kinds: each spawn picks
+an `NelvarEnemyKind` (scene, weight, own cap) among those below their cap. On the
+air map: hoppers (weight 3), Runners (weight 2, at most 4 alive) and Whistlers
+(weight 1, at most 3 alive).
+
+- **Прыгун** (`enemies/hopper/`) — a ball that hops about at random; hurts on touch.
+- **Свистун** (`enemies/whistler/`) — a hollow sack of dry reed rooted in the
+  ground, with a tube for a mouth that turns after the player. Within 640 of the
+  player it draws breath for 0.9 s — swells, quivers, air streams into the tube and
+  it whistles higher; the tube stops following 0.25 s before the blow — and blows
+  slow pink soap bubbles: a fan of 3–5, or (30%) a trill of three aimed one by one.
+  A bubble floats above its shadow, which is its collider; it hurts a walking player
+  (10) and passes a flying one, bursts on trunks and rocks but drifts over shores
+  and rails. The LMB shot bursts it; the RMB wave turns it back (`deflect`): it
+  takes the colours of the wind, flies twice as fast toward an enemy near the
+  wave's direction and hits it for 30. R compression breaks off a breath. 45 HP,
+  light contact damage; a wave only rocks it.
+
+- **Бегунок** (`enemies/runner/`) — a tiny fluffy bird on long legs. It chases
+  the player at 250 (slower than a walk), curving round to come from the side, and
+  Runners keep a little apart. When the player is 160–390 away and nothing stands
+  between them it winds up for 0.6 s — crouches, scratches the ground, chirps, and a
+  dashed orange arrow grows along the ground, following the player until it turns
+  light and locks 0.18 s before the dash — then dashes 760 for 0.42 s, hurting 14
+  instead of 8, with a wind trail behind. A miss ends in a skid and a moment out of
+  breath. A dash into a trunk or rock bounces it off stunned for 1.4 s (stars over its
+  head, harmless to touch); an RMB wave that catches it winding up or dashing knocks
+  it over for 0.9 s; R compression cancels the dash. 35 HP; it dies in a puff of
+  feathers.
+
+Enemy sounds are positional (`AudioStreamPlayer2D`); those that must outlive
+their source (a popped bubble, a dead Whistler) are played by
+`NelvarOneShotSound`, which also skips the same sound repeated within 40 ms.
+
 ### Mutations
 
 Every mutation gives something and takes something (`mutations/`). The
@@ -112,6 +148,17 @@ both fade out instead of cutting off. Flight (Shift) takes off with a soft upwar
 (`flight_lift_*`), keeps a looped rush of air while airborne that is louder the
 faster the player flies (`flight_air.wav`, `FlightAir`) and settles with a
 soft low puff on landing (`flight_land_*`).
+The Whistler draws breath with a rising whistle (`whistler_inhale_*`, 0.9 s, as
+long as the breath), blows a fan with a falling "pfoo" (`whistler_blow_*`) or a
+trill of three notes (`whistler_toot_1..3`, played in order), knocks hollow when
+hit (`whistler_hurt_*`) and wheezes as it deflates (`whistler_death_*`). Its
+bubbles pop (`bubble_pop_*`) and, turned back by the wave, bounce off with a
+springy "bwip" (`bubble_deflect_*`).
+The Runner patters with every footfall (`runner_step_*`, quiet), chirps through
+its windup (`runner_chirp_*`, 0.6 s), takes off with a flutter and a rush of air
+(`runner_dash_*`), scrapes into a skid (`runner_skid_*`), bonks into trunks and
+tweets dizzily (`runner_bonk_*`), peeps when hit (`runner_hurt_*`) and dies with a
+squawk and a puff of feathers (`runner_death_*`).
 
 The final boss has its own sounds in `assets/audio/sfx/boss/`, synthesised by
 `tools/gen_boss_sfx.py` (`boss_sfx_a.py`, `boss_sfx_b.py`, shared tools in
@@ -267,6 +314,8 @@ godot --headless --path . --script tests/test_forest.gd -- --seed=20261120
 godot --headless --path . --script tests/test_props.gd
 godot --headless --path . --script tests/test_void.gd -- --seeds=50 --walks=6
 godot --headless --path . --script tests/test_mutations.gd
+godot --headless --path . --script tests/test_whistler.gd
+godot --headless --path . --script tests/test_runner.gd
 ```
 
 Here `godot` means the path to your Godot 4.7.2 executable. The checks cover

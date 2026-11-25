@@ -1,0 +1,60 @@
+[gd_scene load_steps=11 format=3]
+
+[ext_resource type="Script" path="res://enemies/runner/runner.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/fx/occlusion_outline.gd" id="2_outline"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/runner_step.tres" id="3_step"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/runner_chirp.tres" id="4_chirp"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/runner_dash.tres" id="5_dash"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/runner_skid.tres" id="6_skid"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/runner_bonk.tres" id="7_bonk"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/runner_hurt.tres" id="8_hurt"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/runner_death.tres" id="9_death"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_runner"]
+radius = 13.0
+
+[node name="Runner" type="CharacterBody2D" groups=["enemies"]]
+collision_layer = 8
+collision_mask = 1
+motion_mode = 1
+texture_filter = 1
+script = ExtResource("1_script")
+step_stream = ExtResource("3_step")
+chirp_stream = ExtResource("4_chirp")
+dash_stream = ExtResource("5_dash")
+skid_stream = ExtResource("6_skid")
+bonk_stream = ExtResource("7_bonk")
+hurt_stream = ExtResource("8_hurt")
+death_stream = ExtResource("9_death")
+
+[node name="Shadow" type="Node2D" parent="."]
+
+[node name="Sprite" type="Sprite2D" parent="Shadow"]
+
+[node name="Visual" type="Node2D" parent="."]
+
+[node name="Legs" type="Sprite2D" parent="Visual"]
+
+[node name="Body" type="Sprite2D" parent="Visual"]
+
+[node name="Stars" type="Node2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_runner")
+
+[node name="OcclusionOutline" type="CanvasGroup" parent="." node_paths=PackedStringArray("sources")]
+script = ExtResource("2_outline")
+sources = [NodePath("../Visual/Legs"), NodePath("../Visual/Body")]
+outline_color = Color(0.86, 0.8, 1, 0.95)
+fill_color = Color(0.86, 0.84, 0.94, 0.2)
+
+[node name="ChirpSound" type="AudioStreamPlayer2D" parent="."]
+max_distance = 1600.0
+panning_strength = 0.5
+bus = &"SFX"
+
+[node name="HurtSound" type="AudioStreamPlayer2D" parent="."]
+volume_db = -4.0
+max_distance = 1600.0
+panning_strength = 0.5
+bus = &"SFX"

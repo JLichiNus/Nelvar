@@ -16,6 +16,26 @@
 [ext_resource type="Script" path="res://ui/level_line.gd" id="level_line"]
 [ext_resource type="Script" path="res://ui/damage_vignette.gd" id="damage_vignette"]
 [ext_resource type="PackedScene" path="res://ui/mutations/mutation_hud.tscn" id="mutation_hud"]
+[ext_resource type="PackedScene" path="res://enemies/whistler/whistler.tscn" id="whistler"]
+[ext_resource type="Script" path="res://enemies/enemy_kind.gd" id="enemy_kind"]
+[ext_resource type="PackedScene" path="res://enemies/runner/runner.tscn" id="runner"]
+
+[sub_resource type="Resource" id="Resource_kind_hopper"]
+script = ExtResource("enemy_kind")
+scene = ExtResource("5")
+weight = 3.0
+
+[sub_resource type="Resource" id="Resource_kind_runner"]
+script = ExtResource("enemy_kind")
+scene = ExtResource("runner")
+weight = 2.0
+max_alive = 4
+
+[sub_resource type="Resource" id="Resource_kind_whistler"]
+script = ExtResource("enemy_kind")
+scene = ExtResource("whistler")
+weight = 1.0
+max_alive = 3
 
 [node name="Nelvar" type="Node2D"]
 script = ExtResource("1")
@@ -38,6 +58,7 @@ y_sort_enabled = true
 y_sort_enabled = true
 script = ExtResource("6")
 enemy_scene = ExtResource("5")
+enemy_kinds = Array[ExtResource("enemy_kind")]([SubResource("Resource_kind_hopper"), SubResource("Resource_kind_whistler"), SubResource("Resource_kind_runner")])
 player = NodePath("../Player")
 auto_start = false
 
