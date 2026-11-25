@@ -10,6 +10,7 @@ signal start_in_fire_changed(enabled: bool)
 signal start_on_ice_changed(enabled: bool)
 signal start_in_fire2_changed(enabled: bool)
 signal damage_vignette_changed()
+signal volume_changed(bus: StringName, value: float)
 
 const PATH := "user://settings.cfg"
 
@@ -34,6 +35,11 @@ var start_on_ice := false
 ## Developer menu: "Играть" opens the volcano (scenes/fire2.tscn). Only one of the start
 ## options is on at a time.
 var start_in_fire2 := false
+## Volume per audio bus, 0..1 (default_bus_layout.tres): everything, music,
+## sound effects.
+const VOLUME_BUSES: Array[StringName] = [&"Master", &"Music", &"SFX"]
+const VOLUME_NAMES: Array[String] = ["Общая громкость", "Музыка", "Звуки"]
+var volumes := {&"Master": 1.0, &"Music": 1.0, &"SFX": 1.0}
 
 
 func _ready() -> void:
@@ -53,6 +59,11 @@ func _ready() -> void:
 			damage_vignette_level), 0, VIGNETTE_LEVELS.size() - 1)
 		damage_vignette_directional = config.get_value("hud", "damage_vignette_directional",
 			damage_vignette_directional)
+		for bus in VOLUME_BUSES:
+			volumes[bus] = clampf(float(config.get_value("audio", String(bus).to_lower(),
+				volumes[bus])), 0.0, 1.0)
+	for bus in VOLUME_BUSES:
+		_apply_volume(bus)
 
 
 func _input(event: InputEvent) -> void:
@@ -159,6 +170,33 @@ func set_damage_vignette_directional(enabled: bool) -> void:
 	damage_vignette_changed.emit()
 
 
+func volume(bus: StringName) -> float:
+	return volumes.get(bus, 1.0)
+
+
+## `value` 0..1 as on the slider.
+func set_volume(bus: StringName, value: float) -> void:
+	value = clampf(value, 0.0, 1.0)
+	if not volumes.has(bus) or is_equal_approx(value, volumes[bus]):
+		return
+	volumes[bus] = value
+	_apply_volume(bus)
+	_save()
+	volume_changed.emit(bus, value)
+
+
+# The slider is squared on the way to loudness, so its middle sounds like
+# the middle (half is -12 dB) rather than barely quieter than full. Zero mutes.
+func _apply_volume(bus: StringName) -> void:
+	var index := AudioServer.get_bus_index(bus)
+	if index < 0:
+		push_warning("Нет аудиошины %s." % bus)
+		return
+	var value: float = volumes[bus]
+	AudioServer.set_bus_mute(index, value <= 0.0)
+	AudioServer.set_bus_volume_db(index, linear_to_db(value * value) if value > 0.0 else -80.0)
+
+
 func _save() -> void:
 	var config := ConfigFile.new()
 	config.load(PATH)  # keep any other sections already saved
@@ -170,6 +208,8 @@ func _save() -> void:
 	config.set_value("dev", "start_in_fire2", start_in_fire2)
 	config.set_value("hud", "damage_vignette_level", damage_vignette_level)
 	config.set_value("hud", "damage_vignette_directional", damage_vignette_directional)
+	for bus in VOLUME_BUSES:
+		config.set_value("audio", String(bus).to_lower(), volumes[bus])
 	var error := config.save(PATH)
 	if error != OK:
 		push_warning("Не удалось сохранить настройки: %s" % error_string(error))

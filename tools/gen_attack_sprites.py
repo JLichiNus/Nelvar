@@ -4,12 +4,15 @@
 5-тоновая палитра неба, тёмный контур по 4 соседям, простые
 крупные формы без мелких деталей.
 
-  * ЛКМ — attacks/wind_projectile: сгусток ветра-«капля» с коротким
-    хвостом, 2 кадра (хвост мерцает);
-  * ПКМ — attacks/wind_wave: серп ветра «)», растёт по кадрам
-    и в конце распадается на куски;
-  * R   — attacks/wind_compression: крупный серп того же вида,
-    одна дуга на кадр (две волны — это два спрайта).
+  * ЛКМ — attacks/wind_projectile: шарик сжатого воздуха, 4 кадра
+    (внутри проворачивается завиток); шлейф частиц — не спрайт, его
+    рисует attacks/wind_projectile/wind_projectile_trail.gd;
+  * ПКМ — attacks/wind_wave: порыв ветра — толстый серп «)» с бегущими
+    волокнами, завитками на кончиках и пунктирными «эхо»-дугами позади;
+    растёт по кадрам и в конце рвётся на клочья;
+  * R   — attacks/wind_compression: крупный серп того же вида, цикл
+    кадров: блики сбегаются к оси, кончики загибаются вперёд и обхватывают
+    цель (две волны — это два спрайта).
 
 Почему так:
   * размер тексела постоянный и равен пикселю игрока (TEXEL world-единиц),
@@ -62,11 +65,13 @@ WAVE_CELL = 136        # дизайн-единицы; в листе — WAVE_CEL
 
 # --- R, синхронно с wind_compression.gd (ARC_RADIUS)
 COMPRESSION_RADIUS = 46  # дизайн-единицы: 46 * 1.5 = 69 world-единиц
-COMPRESSION_CELL = 100
+COMPRESSION_CELL = 124
+COMPRESSION_FRAMES = 8
 
 # --- ЛКМ
-PROJECTILE_FRAMES = 2
+PROJECTILE_FRAMES = 4
 PROJECTILE_CELL = 24
+PROJECTILE_RADIUS = 4.2  # дизайн-единицы: 4 пикселя тела, как голова старой капли
 
 
 def ease_out_quad(t: float) -> float:
@@ -128,80 +133,192 @@ def compose(body: np.ndarray, tone: np.ndarray, wisp: np.ndarray, wisp_tone: np.
 # ------------------------------------------------------------------ серп
 
 
-def crescent(cell, theta, R, W, A, gap=0.0, wisp=True):
-    """Серп «)» с центром дуги в центре кадра.
+def stroke(lx, ly, pts, half_width):
+    """Маска пикселей ближе half_width к ломаной из точек pts (N x 2)."""
+    mask = np.zeros(lx.shape, bool)
+    for px, py in pts:
+        mask |= (lx - px) ** 2 + (ly - py) ** 2 <= half_width * half_width
+    return mask
 
-    R — внешний радиус, W — толщина в середине, A — полуугол.
-    gap > 0 рвёт серп на три куска (распад волны).
-    """
-    lx, ly = local_grid(cell, theta)
-    r = np.hypot(lx, ly)
-    aa = np.abs(np.arctan2(ly, lx))
-    u = np.clip(aa / A, 0.0, 1.0)
 
-    # толщина сужается к кончикам
-    w = W * (1.0 - u * u) ** 0.6
-    d = (R - r) / np.maximum(w, 1e-3)    # 0 — передний край, 1 — задний
-    body = (aa < A) & (w > 0.8) & (d >= 0.0) & (d <= 1.0)
-    if gap > 0.0:
-        body &= np.abs(u - 0.42) > gap
-
-    # передний край светлый, задний темнее, кончики холоднее
-    tone = np.where(d < 0.34, 3, np.where(d < 0.7, 2, 1))
-    tone = np.where((d < 0.34) & (u < 0.45), 4, tone)
-    tone = np.where(u > 0.8, tone - 1, tone)
-
-    # одна внутренняя дуга-порыв, как штрихи ветра у игрока
-    ww = np.zeros_like(body)
-    if wisp:
-        gr = R - W - 3.0
-        ww = (aa < A * 0.55) & (np.abs(r - gr) < 0.6)
-        if gap > 0.0:
-            ww &= np.abs(u - 0.25) > gap
-    wtone = np.full(body.shape, 2)
-    return compose(body, tone, ww, wtone)
+def tip_curl(R, A, rc, turns, forward=False):
+    """Завиток на кончике серпа (верхнем, ly > 0): продолжает дугу прочь от
+    оси и закручивается внутрь, к центру дуги, а при forward — наружу,
+    вперёд по ходу серпа. turns — сколько оборотов уже свито."""
+    tip = np.array([R * math.cos(A), R * math.sin(A)])
+    n = tip / np.linalg.norm(tip)              # наружу от центра дуги
+    m = -n if forward else n                   # от центра завитка к кончику
+    c = tip - m * rc
+    phi = np.linspace(0.0, turns * 2.0 * math.pi, max(int(turns * 60), 2))
+    rho = rc * (1.0 - 0.6 * phi / (2.0 * math.pi * 0.85))
+    rho = np.maximum(rho, 0.6)
+    # поворот m на ±phi: первое движение — по касательной, прочь от оси
+    sign = -1.0 if forward else 1.0
+    cos, sin = np.cos(phi), np.sin(phi) * sign
+    dx = m[0] * cos - m[1] * sin
+    dy = m[0] * sin + m[1] * cos
+    return np.stack([c[0] + rho * dx, c[1] + rho * dy], axis=1), phi
 
 
 def wave_frame(theta: float, frame: int) -> Image.Image:
+    """Порыв ветра: толстый серп с волокнами, завитки на кончиках,
+    пунктирные «эхо»-дуги позади; под конец рвётся на клочья.
+
+    Всё симметрично оси полёта (|ly|), чтобы flip_h / flip_v не ломали вид.
+    """
     t = (frame + 0.5) / WAVE_FRAMES              # середина кадра по времени
     scale = 1.0 + (WAVE_END_SIZE / WAVE_START_SIZE - 1.0) * ease_out_quad(t)
     R = WAVE_ARC_RADIUS * scale / DESIGN_TEXEL    # внешний край, дизайн-единицы
-    birth = smooth(0.0, 0.2, t)                   # серп «наливается»
-    decay = smooth(0.55, 1.0, t)                  # распад на куски
-    W = (3.0 + 0.09 * R) * (0.7 + 0.3 * birth) * (1.0 - 0.45 * decay)
-    A = math.radians(72.0) * (1.0 - 0.2 * decay)
-    return crescent(WAVE_CELL, theta, R, W, A, gap=0.16 * decay, wisp=decay < 0.6)
+    birth = smooth(0.0, 0.25, t)                  # серп «наливается»
+    decay = smooth(0.55, 1.0, t)                  # распад на клочья
+    W = (4.0 + 0.14 * R) * (0.6 + 0.4 * birth) * (1.0 - 0.5 * decay)
+    A = math.radians(70.0) * (0.85 + 0.15 * birth)
+
+    lx, ly = local_grid(WAVE_CELL, theta)
+    ay = np.abs(ly)
+    r = np.hypot(lx, ly)
+    ang = np.arctan2(ay, lx)
+    u = np.clip(ang / A, 0.0, 1.0)
+    arc_s = ang * R                               # длина дуги от оси
+
+    # --- тело: передний край выпуклый, толщина сужается к кончикам
+    w = W * (1.0 - u ** 2.2) ** 0.55
+    d = (R - r) / np.maximum(w, 1e-3)             # 0 — передний край, 1 — задний
+    body = (ang < A) & (w > 0.9) & (d >= 0.0) & (d <= 1.0)
+    # распад: тело тает от кончиков к середине и рвётся в двух местах,
+    # а отслоившийся передний край уходит штрихами (ниже, «клочья»)
+    erode = 1.0 - 0.45 * decay
+    if decay > 0.0:
+        body &= u < erode
+        for at, size in ((0.3, 0.05), (0.62, 0.07)):
+            body &= np.abs(u - at) > size * smooth(0.0, 0.5, decay) + 0.06 * decay * decay
+
+    tone = np.where(d < 0.28, 4, np.where(d < 0.55, 3, np.where(d < 0.8, 2, 1)))
+    tone = np.where((u > 0.75) & (tone > 1), tone - 1, tone)
+    # волокна: пунктир тёмнее тела бежит от середины к кончикам
+    flow = np.modf((arc_s - frame * 2.6) / 11.0 + 10.0)[0]
+    fiber = (np.abs(d - 0.5) < 0.12) & (flow < 0.55) & (u < 0.85)
+    tone = np.where(fiber & (W > 6.0), np.minimum(tone, 2), tone)
+    glint = (d < 0.18) & (np.modf((arc_s - frame * 2.6) / 15.0 + 10.0)[0] < 0.3) & (u < 0.6)
+    tone = np.where(glint, 4, tone)
+
+    # --- штрихи без контура
+    wisp = np.zeros(lx.shape, bool)
+    wtone = np.full(lx.shape, 3)
+
+    # «эхо»-дуги позади тела: пунктир, бегущий к кончикам
+    echo_fade = 1.0 - decay
+    for k, (gap, span, tn) in enumerate(((3.5, 0.75, 3), (8.0, 0.5, 2))):
+        if echo_fade < 0.3 + 0.3 * k:
+            continue
+        er = R - W - gap - 1.5 * k
+        dash = np.modf((arc_s - frame * (3.5 + k)) / (8.0 + 3.0 * k) + 10.0)[0] < 0.6
+        line = (np.abs(r - er) < 0.55) & (ang < A * span * (0.6 + 0.4 * birth)) & dash
+        wisp |= line
+        wtone = np.where(line, tn, wtone)
+
+    # завитки на кончиках: сворачиваются по ходу волны, при распаде
+    # рвутся и уносятся назад
+    rc = 2.0 + 0.11 * R
+    turns = 0.25 + 0.75 * smooth(0.05, 0.6, t)
+    pts, phi = tip_curl(R - W * 0.15, A, rc, turns)
+    if decay > 0.0:
+        keep = np.modf(phi / 1.3)[0] > decay * 0.8
+        pts = pts[keep] - np.array([decay * 6.0, 0.0])
+    if len(pts):
+        curl = stroke(lx, ay, pts, 0.6)
+        wisp |= curl
+        wtone = np.where(curl, np.where(r > R - rc, 4, 3), wtone)
+
+    # клочья распада: где тело растаяло, передний край ещё летит
+    # рваными штрихами и отстаёт назад
+    if decay > 0.05:
+        lag = decay * 5.0
+        peel = (ang < A) & (u >= erode - 0.05) & (u < erode + 0.35 * (1.0 - decay) + 0.1)
+        dash = np.modf((arc_s - frame * 2.6) / 7.0 + 10.0)[0] < 0.55 - 0.25 * decay
+        seg = peel & dash & (np.abs(r - (R - 1.5 - lag * (0.5 + u))) < 0.6)
+        wisp |= seg
+        wtone = np.where(seg, np.where(u < erode + 0.15, 3, 2), wtone)
+
+    return compose(body, tone, wisp, wtone)
 
 
-def compression_frame(theta: float) -> Image.Image:
-    return crescent(COMPRESSION_CELL, theta, COMPRESSION_RADIUS, 8.0, math.radians(70.0))
+def compression_frame(theta: float, frame: int) -> Image.Image:
+    """Серп сжатия: тот же порыв, что у ПКМ, но давит на цель. Блики бегут
+    от кончиков к оси (воздух сходится в точку), кончики загибаются вперёд
+    завитками-«пальцами» и обхватывают цель. Кадры — цикл.
+    """
+    phase = frame / COMPRESSION_FRAMES          # 0..1 по циклу
+    R = float(COMPRESSION_RADIUS)
+    W = 9.5
+    A = math.radians(64.0)
+
+    lx, ly = local_grid(COMPRESSION_CELL, theta)
+    ay = np.abs(ly)
+    r = np.hypot(lx, ly)
+    ang = np.arctan2(ay, lx)
+    u = np.clip(ang / A, 0.0, 1.0)
+    arc_s = ang * R
+
+    w = W * (1.0 - u ** 2.4) ** 0.5
+    d = (R - r) / np.maximum(w, 1e-3)
+    body = (ang < A) & (w > 0.9) & (d >= 0.0) & (d <= 1.0)
+    tone = np.where(d < 0.28, 4, np.where(d < 0.55, 3, np.where(d < 0.8, 2, 1)))
+    tone = np.where((u > 0.75) & (tone > 1), tone - 1, tone)
+    # поток к оси: длина дуги + сдвиг по фазе (цикл ровно на период)
+    flow = lambda period: np.modf(arc_s / period + phase * 2.0 + 10.0)[0]
+    fiber = (np.abs(d - 0.5) < 0.12) & (flow(11.0) < 0.5) & (u < 0.85)
+    tone = np.where(fiber, np.minimum(tone, 2), tone)
+    glint = (d < 0.2) & (flow(16.0) < 0.3) & (u < 0.75)
+    tone = np.where(glint, 4, tone)
+
+    wisp = np.zeros(lx.shape, bool)
+    wtone = np.full(lx.shape, 3)
+    # «эхо»-дуги позади: воздух, который серп гонит перед собой
+    for k, (gap, span, tn) in enumerate(((3.5, 0.75, 3), (8.0, 0.5, 2))):
+        er = R - W - gap - 1.5 * k
+        dash = np.modf(arc_s / (8.0 + 3.0 * k) + phase * (2.0 + k) + 10.0)[0] < 0.6
+        line = (np.abs(r - er) < 0.55) & (ang < A * span) & dash
+        wisp |= line
+        wtone = np.where(line, tn, wtone)
+
+    # завитки-«пальцы» обхватывают цель; чуть дышат по циклу
+    rc = 8.0 + 0.8 * math.sin(phase * 2.0 * math.pi)
+    pts, _phi = tip_curl(R - W * 0.15, A, rc, 0.9, forward=True)
+    curl = stroke(lx, ay, pts, 0.6)
+    wisp |= curl
+    wtone = np.where(curl, np.where(lx > R * math.cos(A) + rc * 0.6, 4, 3), wtone)
+
+    return compose(body, tone, wisp, wtone)
 
 
 # ------------------------------------------------------------------ капля
 
 
 def projectile_frame(theta: float, frame: int) -> Image.Image:
-    lx, ly = local_grid(PROJECTILE_CELL, theta)
-    # «капля»: круглая голова впереди, хвост сужается назад
-    head_x, head_r = 2.5, 3.2
-    tail_x, tail_r = -5.0, 1.0
-    k = np.clip((lx - tail_x) / (head_x - tail_x), 0.0, 1.0)
-    rad = tail_r + (head_r - tail_r) * k
-    body = ((lx - head_x) ** 2 + ly ** 2 <= head_r ** 2) | (
-        (lx >= tail_x) & (lx <= head_x) & (np.abs(ly) <= rad)
-    )
-    edge = np.abs(ly) / np.maximum(rad, 1e-3)
-    tone = np.where(lx > 0.0, 3, np.where(lx > -3.0, 2, 1))
-    tone = np.where((lx > -1.0) & (edge < 0.45), 4, tone)
+    """Шарик сжатого воздуха; шлейф частиц рисует wind_projectile_trail.gd.
 
-    # хвост ветра мерцает: прямой штрих / два боковых
-    # Границы полуоткрытые: при 0° центры пикселей лежат на ±0.5, ±1.5…
-    if frame == 0:
-        wisp = (np.abs(ly) <= 0.5) & (lx > -9.5) & (lx < -6.0)
-    else:
-        wisp = (np.abs(ly) >= 2.0) & (np.abs(ly) < 3.0) & (lx > -8.5) & (lx < -5.5)
-    wtone = np.where(lx > -7.5, 2, 1)
-    return compose(body, tone, wisp, wtone)
+    Свет — спереди по ходу полёта (симметрично оси, flip его не ломает),
+    задняя кромка холодная. Внутри по кадрам проворачивается завиток ветра.
+    """
+    lx, ly = local_grid(PROJECTILE_CELL, theta)
+    r = np.hypot(lx, ly)
+    ball_r = PROJECTILE_RADIUS
+    k = ball_r / 6.3  # внутренние размеры подобраны для радиуса 6.3
+    body = r <= ball_r
+    # тон по положению вдоль оси: передняя полусфера светлее
+    tone = np.where(lx > 1.0 * k, 4, np.where(lx > -2.0 * k, 3, np.where(lx > -4.2 * k, 2, 1)))
+    tone = np.where((r > ball_r - 1.8 * k) & (lx < 0.5 * k), np.minimum(tone, 2), tone)
+
+    # завиток: дуга тона 2 внутри шарика, поворачивается на 90° за кадр
+    a = np.arctan2(ly, lx) - frame * math.pi * 0.5
+    a = (a + math.pi) % (2.0 * math.pi) - math.pi
+    curl = (np.abs(r - 3.0 * k) < 1.1 * k) & (a > -0.2) & (a < 2.0)
+    tone = np.where(body & curl, np.minimum(tone, 2), tone)
+    tone = np.where(body & (r < 1.0 * k), 4, tone)
+
+    wisp = np.zeros_like(body)
+    return compose(body, tone, wisp, np.full(body.shape, 2))
 
 
 # ------------------------------------------------------------------ вывод
@@ -253,7 +370,7 @@ def main() -> None:
     assert all(c % (2 * K) == 0 for c in (PROJECTILE_CELL, WAVE_CELL, COMPRESSION_CELL))
     projectile = build_sheet(PROJECTILE_CELL, PROJECTILE_FRAMES, projectile_frame)
     wave = build_sheet(WAVE_CELL, WAVE_FRAMES, wave_frame)
-    compression = build_sheet(COMPRESSION_CELL, 1, lambda th, _f: compression_frame(th))
+    compression = build_sheet(COMPRESSION_CELL, COMPRESSION_FRAMES, compression_frame)
     save(projectile, "attacks/wind_projectile/wind_projectile_sheet.png")
     save(wave, "attacks/wind_wave/wind_wave_sheet.png")
     save(compression, "attacks/wind_compression/wind_compression_sheet.png")

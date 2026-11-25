@@ -6,7 +6,10 @@ extends Node2D
 ## has_clearance(point, radius).
 
 
+## The only kind when enemy_kinds is empty.
 @export var enemy_scene: PackedScene
+## Several kinds: each spawn picks one by weight among those below their cap.
+@export var enemy_kinds: Array[NelvarEnemyKind] = []
 @export var player: Node2D
 # false — ждать вызова start(), например пока генерируется мир.
 @export var auto_start: bool = true
@@ -42,7 +45,7 @@ func _ready() -> void:
 
 func start(world: NelvarWorldData = null, forest: NelvarForestData = null,
 		props: NelvarPropData = null) -> void:
-	if enemy_scene == null:
+	if enemy_scene == null and enemy_kinds.is_empty():
 		push_warning("Не назначена сцена врага для спавнера.")
 		return
 	_world = world
@@ -70,10 +73,13 @@ func _process(delta: float) -> void:
 func _try_spawn() -> void:
 	if _alive_count() >= max_alive:
 		return
+	var scene := _pick_scene()
+	if scene == null:
+		return
 	var point: Variant = _pick_spawn_point()
 	if point == null:
 		return
-	var enemy := enemy_scene.instantiate() as Node2D
+	var enemy := scene.instantiate() as Node2D
 	if enemy == null:
 		push_warning("Сцена врага должна начинаться с Node2D.")
 		return
@@ -84,6 +90,30 @@ func _try_spawn() -> void:
 	add_child(enemy)
 	if enemy.has_method("play_spawn_animation"):
 		enemy.call("play_spawn_animation", appear_duration)
+
+
+func _pick_scene() -> PackedScene:
+	if enemy_kinds.is_empty():
+		return enemy_scene
+	var alive := {}
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		var path: String = enemy.scene_file_path
+		alive[path] = int(alive.get(path, 0)) + 1
+	var open: Array[NelvarEnemyKind] = []
+	var total := 0.0
+	for kind in enemy_kinds:
+		if kind == null or kind.scene == null or kind.weight <= 0.0:
+			continue
+		if kind.max_alive > 0 and int(alive.get(kind.scene.resource_path, 0)) >= kind.max_alive:
+			continue
+		open.append(kind)
+		total += kind.weight
+	var roll := randf() * total
+	for kind in open:
+		roll -= kind.weight
+		if roll <= 0.0:
+			return kind.scene
+	return open.back().scene if not open.is_empty() else null
 
 
 func _alive_count() -> int:

@@ -42,6 +42,7 @@ var _safe_position := Vector2.ZERO
 
 
 func _ready() -> void:
+	GameMusic.start()
 	# Seed, world stats and controls: hidden unless enabled in settings or with F12.
 	info_panel.visible = GameSettings.show_info_panel
 	GameSettings.info_panel_changed.connect(info_panel.set_visible)

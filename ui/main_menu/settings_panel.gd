@@ -1,5 +1,8 @@
 class_name NelvarSettingsPanel
 extends NelvarMenuPanel
+## Settings in tabs: «Экран», «Интерфейс», «Аудио» (one page shows at a
+## time; the panel keeps the size of the largest page so it does not jump).
+## The same panel serves the main menu and the pause menu.
 ## "Меню разработчика" opens the developer panel to the left of this one;
 ## it closes together with the settings. The screen that holds this panel
 ## makes room for it on `dev_panel_toggled`.
@@ -12,10 +15,15 @@ signal dev_panel_toggled(open: bool)
 @onready var vignette_direction_check: CheckButton = %VignetteDirection
 @onready var dev_menu_button: Button = %DevMenu
 @onready var dev_panel: NelvarDevPanel = %DevPanel
+@onready var tabs: HBoxContainer = %Tabs
+@onready var pages: VBoxContainer = %Pages
 
 
 func _ready() -> void:
 	super()
+	for i in tabs.get_child_count():
+		(tabs.get_child(i) as Button).toggled.connect(_on_tab_toggled.bind(i))
+	_fit_pages.call_deferred()
 	fullscreen_check.set_pressed_no_signal(FullscreenToggle.is_fullscreen())
 	fullscreen_check.toggled.connect(FullscreenToggle.set_fullscreen)
 	FullscreenToggle.fullscreen_changed.connect(fullscreen_check.set_pressed_no_signal)
@@ -37,9 +45,33 @@ func _ready() -> void:
 	item_rect_changed.connect(_place_dev_panel)
 
 
+## Always opens on the first tab: the screens that open this panel focus
+## its first control (fullscreen_check).
 func play_open() -> void:
 	_close_dev_panel()
+	show_tab(0)
 	super()
+
+
+func show_tab(index: int) -> void:
+	(tabs.get_child(index) as Button).button_pressed = true
+	_on_tab_toggled(true, index)
+
+
+func _on_tab_toggled(pressed: bool, index: int) -> void:
+	if not pressed:
+		return
+	for i in pages.get_child_count():
+		pages.get_child(i).visible = i == index
+
+
+# The pages area is as large as the largest page, so switching tabs never
+# resizes the panel.
+func _fit_pages() -> void:
+	var largest := Vector2.ZERO
+	for page: Control in pages.get_children():
+		largest = largest.max(page.get_combined_minimum_size())
+	pages.custom_minimum_size = largest
 
 
 func play_close() -> void:

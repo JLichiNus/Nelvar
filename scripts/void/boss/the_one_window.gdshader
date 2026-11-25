@@ -1,30 +1,29 @@
 shader_type canvas_item;
 render_mode unshaded;
 
-// The hole through the Only One's chest is a window into the Void: deep dark,
-// a slow violet pulse turning around its middle, a few stars that come and go.
-// Drawn over the hole's mask (white where the hole is), one texel per pixel.
-
+// The chest aperture holds a pale core. Its violet shell swells on wind-up
+// and when the body flares, changing one texel at a time.
 uniform float time = 0.0;
-uniform float intensity = 1.0;
-
-float hash12(vec2 p) {
-	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-	p3 += dot(p3, p3.yzx + 33.33);
-	return fract((p3.x + p3.y) * p3.z);
-}
+uniform float charge = 0.0;
+uniform float visibility = 1.0;
+uniform vec2 core_texel = vec2(8.0, 11.0);
+uniform vec4 violet : source_color = vec4(0.62, 0.4, 1.0, 1.0);
+uniform vec4 pale : source_color = vec4(0.9, 0.84, 1.0, 1.0);
+uniform vec4 deep : source_color = vec4(0.32, 0.12, 0.7, 1.0);
+uniform vec4 void_color : source_color = vec4(0.02, 0.0, 0.05, 1.0);
 
 void fragment() {
-	if (texture(TEXTURE, UV).a < 0.5) {
+	if (COLOR.a < 0.01 || visibility < 0.01) {
 		discard;
 	}
-	vec2 texel = floor(UV / TEXTURE_PIXEL_SIZE);
-	float swirl = 0.5 + 0.5 * sin(time * 2.2 - length(texel - vec2(8.5, 11.5)) * 1.7
-		+ atan(texel.y - 11.5, texel.x - 8.5) * 2.0);
-	vec3 color = mix(vec3(0.01, 0.0, 0.04), vec3(0.32, 0.12, 0.62), swirl * 0.55 * intensity);
-	float star = hash12(texel + floor(time * 1.3) * 17.0);
-	if (star > 0.82) {
-		color = mix(color, vec3(0.9, 0.86, 1.0), 0.85);
-	}
-	COLOR = vec4(color, 1.0);
+	vec2 p = abs(floor(UV / TEXTURE_PIXEL_SIZE) - core_texel);
+	float d = p.x + p.y * 0.72;
+	float beat = 0.5 + 0.5 * sin(time * (3.8 + charge * 2.5));
+	float radius = 0.47 + charge * 0.8 + beat * 0.31;
+	float shell = clamp(1.42 + charge * 0.93 - d, 0.0, 1.0);
+	float heart = 1.0 - smoothstep(radius, radius + 0.5, d);
+	vec3 ink = mix(void_color.rgb, deep.rgb, 0.38 + 0.27 * beat);
+	ink = mix(ink, violet.rgb, shell);
+	ink = mix(ink, pale.rgb, heart * (0.84 + 0.16 * charge));
+	COLOR = vec4(ink, COLOR.a * visibility);
 }

@@ -12,6 +12,8 @@ signal died
 signal damaged(amount: float, from: Vector2)
 ## Level or kills toward the next one changed.
 signal level_changed(level: int, kills: int, kills_needed: int)
+## An enemy died to the player (feeds the adaptation meter).
+signal enemy_killed
 
 enum SpeedBoostState { READY, ACTIVE, COOLDOWN }
 
@@ -20,6 +22,24 @@ const BODY_RADIUS := 14.0
 # Номер слоя мелких валунов (NelvarProp.LOW_OBSTACLE_LAYER) для set_collision_mask_value.
 const LOW_OBSTACLE_LAYER_NUMBER := 6
 const DEAD_COLOR := Color(0.45, 0.47, 0.5, 1.0)
+## "Low health" for mutations that wake up near death: below this share.
+const LOW_HEALTH_SHARE := 0.3
+## Extra projectiles of one shot spread in a fan this many degrees apart.
+const FAN_STEP_DEGREES := 9.0
+## Standing still for mutations: slower than this counts as not moving.
+const STILL_SPEED := 12.0
+## The shot wind holds its strength this long past the time the next shot is
+## due, so a held LMB never lets it dip between shots...
+const SHOT_WIND_HOLD_SLACK := 0.05
+## ...and never shorter than this, so even a single shot lets the wind swell
+## to (almost) its full volume: a tap sounds as loud as a held burst.
+const SHOT_WIND_MIN_HOLD := 0.25
+## Below this level (about -46 dB under full) the shot wind is cut off.
+const SHOT_WIND_SILENT := 0.005
+## Time constants (s) of the flight rush easing in after take-off and out on
+## landing.
+const FLIGHT_AIR_RISE := 0.15
+const FLIGHT_AIR_RELEASE := 0.12
 # Анимация атаки с большим приоритетом не прерывается меньшей.
 const ATTACK_PRIORITY := {
 	&"attack_primary": 1,
@@ -60,6 +80,21 @@ const ATTACK_PRIORITY := {
 # Сколько персонаж ещё смотрит на курсор после атаки — без этого при зажатой
 # ЛКМ спиной вперёд он дёргался бы между выстрелами.
 @export var attack_facing_hold: float = 0.25
+## LMB has no sound per shot: every shot keeps up a wind that dies down
+## without them, so a tap is a short breath of wind and held LMB one steady
+## wind (five separate sounds a second would wear the ear out). Every shot
+## brings it to the same volume — firing faster only makes it last:
+@export var shot_wind_volume_db: float = -24.0
+## Seconds for the wind to die down without shots.
+@export var shot_wind_fade: float = 0.12
+## Time constants (s) of the heard level easing towards the strength: it
+## swells in and drifts away instead of switching on and off.
+@export var shot_wind_rise: float = 0.12
+@export var shot_wind_release: float = 0.1
+## Flight (Shift): the air rushing past while airborne. Volume at full speed;
+## hovering in place it is this much quieter (dB).
+@export var flight_air_volume_db: float = -29.0
+@export var flight_air_still_db: float = 8.0
 
 @export_category("Damage")
 ## Base damage at level 1; every level adds base_damage_per_level. Attacks deal
@@ -77,7 +112,12 @@ const ATTACK_PRIORITY := {
 @export var compression_tick_percent: float = 300.0
 
 @export_category("Health")
-@export var max_health: float = 100.0
+## Before mutations; the current maximum is get_max_health().
+@export var max_health: float = 100.0:
+	set(value):
+		max_health = value
+		if stats != null:
+			stats.set_base(&"max_health", value)
 @export var invulnerability_duration: float = 1.0
 @export var death_restart_delay: float = 1.5
 
@@ -86,6 +126,9 @@ const ATTACK_PRIORITY := {
 @export var zoom_min: float = 0.575
 @export var zoom_max: float = 1.6
 
+## The exports above are the base values; mutations change them through
+## stats (see NelvarStats), and the code reads the current values from it.
+var stats := NelvarStats.new()
 var aim_direction := Vector2.RIGHT
 ## Grip on the ground: 1 — ordinary ground, less — slippery (the ice valley's lakes).
 ## The map sets it every physics frame; it scales how fast the player speeds up and
@@ -96,6 +139,14 @@ var traction := 1.0
 var move_scale := 1.0
 var attack_rate := 1.0
 var _primary_cooldown_left := 0.0
+# Shots in the current burst and time since the last one (for the sound).
+# Shot wind: strength the shots give (0..1), the heard level that follows it
+# and how long the strength holds before it starts to die down.
+var _wind_strength := 0.0
+var _wind_level := 0.0
+var _wind_hold := 0.0
+# Loudness of the flight rush, 0..1 (eased, see _update_flight_air).
+var _flight_air_level := 0.0
 var _wave_cooldown_left := 0.0
 var _compression_cooldown_left := 0.0
 var _speed_boost_state := SpeedBoostState.READY
@@ -126,6 +177,9 @@ var _launch_time := 0.0
 var _launch_duration := 0.0
 var _launch_push := Vector2.ZERO
 var _launch_height := 0.0
+var _max_health_now := 0.0
+# Health shown by the bar, so regeneration does not spam health_changed.
+var _shown_health := 0
 
 @onready var aim_pivot: Node2D = $AimPivot
 @onready var projectile_spawn: Marker2D = $AimPivot/ProjectileSpawn
@@ -138,10 +192,22 @@ var _launch_height := 0.0
 @onready var hurtbox: Area2D = $Hurtbox
 @onready var camera: Camera2D = $Camera2D
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
+## LMB: a looped wind (tools/gen_sfx.py) that the shots feed.
+@onready var shot_wind: AudioStreamPlayer = $ShotWind
+## RMB: one gust that rushes ahead with the wave (wind_wave.tres: three
+## variants, pitch nudged at random).
+@onready var wave_sound: AudioStreamPlayer = $WaveSound
+## Flight: a gust on take-off, a looped rush of air while airborne (louder
+## the faster the player flies) and a soft settle on landing.
+@onready var lift_sound: AudioStreamPlayer = $LiftSound
+@onready var flight_air: AudioStreamPlayer = $FlightAir
+@onready var land_sound: AudioStreamPlayer = $LandSound
 
 
 func _ready() -> void:
-	health = max_health
+	_init_stats()
+	health = get_max_health()
+	_max_health_now = health
 	# Enemies report kills to this group (register_kill).
 	add_to_group(&"player")
 	(collision_shape.shape as CircleShape2D).radius = BODY_RADIUS
@@ -153,6 +219,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_update_shot_wind(delta)
+	_update_flight_air(delta)
 	if _is_dead or _is_falling:
 		return
 	_update_hover(delta)
@@ -209,6 +277,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_invulnerability_left = maxf(_invulnerability_left - delta, 0.0)
 	_attack_facing_left = maxf(_attack_facing_left - delta, 0.0)
+	_regenerate(delta)
 
 	var direction := Input.get_vector(
 		"move_left",
@@ -228,16 +297,21 @@ func _physics_process(delta: float) -> void:
 	if _is_running:
 		speed_multiplier *= run_speed_multiplier
 	if _speed_boost_state == SpeedBoostState.ACTIVE:
-		speed_multiplier *= speed_boost_multiplier
-	var target_velocity := direction * speed * speed_multiplier * move_scale
+		speed_multiplier *= stats.value(&"flight_speed")
+	if is_low_health():
+		speed_multiplier *= 1.0 + stats.value(&"low_health_speed") / 100.0
+	var target_velocity := direction * stats.value(&"move_speed") * speed_multiplier * move_scale
+	# Mutations change acceleration and braking together.
+	var handling := stats.value(&"acceleration") / acceleration
 	var rate := (acceleration if direction != Vector2.ZERO else deceleration) * traction
+	rate *= handling
 	velocity = velocity.move_toward(target_velocity, rate * delta)
 	move_and_slide()
 	if _landing_pending and not _is_over_low_obstacle():
 		_land()
 	_update_animation(direction)
 	# В полёте игрок проходит над врагами и не получает контактного урона.
-	if not is_airborne():
+	if not is_flight_protected():
 		_check_enemy_contact()
 
 
@@ -346,6 +420,8 @@ func kills_to_next_level() -> int:
 func register_kill() -> void:
 	if _is_dead:
 		return
+	heal(stats.value(&"kill_heal"))
+	enemy_killed.emit()
 	level_kills += 1
 	while level_kills >= kills_to_next_level():
 		level_kills -= kills_to_next_level()
@@ -353,8 +429,14 @@ func register_kill() -> void:
 	level_changed.emit(level, level_kills, kills_to_next_level())
 
 
-func _damage(percent: float) -> float:
-	return base_damage() * percent / 100.0
+# `attack_stat`: the attack's own damage multiplier (primary_damage...).
+# Mutations multiply it with the common damage and the situational bonuses.
+func _damage(percent: float, attack_stat: StringName) -> float:
+	var situational := stats.value(&"air_damage") if is_airborne() else stats.value(&"ground_damage")
+	if is_low_health():
+		situational += stats.value(&"low_health_damage")
+	var multiplier := stats.value(&"damage") * stats.value(attack_stat) * maxf(1.0 + situational / 100.0, 0.1)
+	return base_damage() * percent / 100.0 * multiplier
 
 
 func is_airborne() -> bool:
@@ -387,7 +469,7 @@ func launch(push: Vector2, height: float, duration: float) -> void:
 func _update_launch(direction: Vector2, delta: float) -> void:
 	_launch_time += delta
 	var progress := clampf(_launch_time / _launch_duration, 0.0, 1.0)
-	velocity = _launch_push + direction * speed * move_scale * launch_control
+	velocity = _launch_push + direction * stats.value(&"move_speed") * move_scale * launch_control
 	move_and_slide()
 	var lift := flight_height if _speed_boost_state == SpeedBoostState.ACTIVE else 0.0
 	body_visual.position.y = _body_rest_position.y - lift - sin(PI * progress) * _launch_height
@@ -400,6 +482,35 @@ func _update_launch(direction: Vector2, delta: float) -> void:
 		if _speed_boost_state != SpeedBoostState.ACTIVE:
 			set_collision_mask_value(LOW_OBSTACLE_LAYER_NUMBER, true)
 	_update_animation(direction)
+
+
+## In flight the player passes over enemies and hazards unharmed, unless a
+## mutation (Полый вихрь) took that away.
+func is_flight_protected() -> bool:
+	return is_airborne() and not stats.flag(&"flight_unprotected")
+
+
+func is_dead() -> bool:
+	return _is_dead
+
+
+func get_max_health() -> float:
+	return stats.value(&"max_health")
+
+
+func is_low_health() -> bool:
+	return health < get_max_health() * LOW_HEALTH_SHARE
+
+
+func is_standing_still() -> bool:
+	return velocity.length() < STILL_SPEED and not _is_move_input_held()
+
+
+func heal(amount: float) -> void:
+	if _is_dead or amount <= 0.0 or health >= get_max_health():
+		return
+	health = minf(health + amount, get_max_health())
+	_emit_health()
 
 
 func is_falling() -> bool:
@@ -444,16 +555,71 @@ func recover_at(point: Vector2) -> void:
 
 ## `from`: world point the hit came from (for the damage vignette); INF if none.
 func take_damage(amount: float, from: Vector2 = Vector2.INF) -> void:
-	if _is_dead or is_airborne() or _invulnerability_left > 0.0 \
+	if _is_dead or is_flight_protected() or _invulnerability_left > 0.0 \
 			or amount <= 0.0:
 		return
+	amount *= _damage_taken_multiplier()
 	health = maxf(health - amount, 0.0)
-	health_changed.emit(health, max_health)
+	_emit_health()
 	damaged.emit(amount, from)
 	if health <= 0.0:
 		_die()
 		return
-	_invulnerability_left = invulnerability_duration
+	_invulnerability_left = stats.value(&"invulnerability")
+
+
+func _damage_taken_multiplier() -> float:
+	var situational := 0.0
+	if is_standing_still():
+		situational -= stats.value(&"still_armor")
+	else:
+		situational += stats.value(&"moving_vulnerability")
+	return stats.value(&"damage_taken") * maxf(1.0 + situational / 100.0, 0.1)
+
+
+func _regenerate(delta: float) -> void:
+	var regen := stats.value(&"regen")
+	if regen <= 0.0 or health >= get_max_health():
+		return
+	health = minf(health + regen * delta, get_max_health())
+	if ceili(health) != _shown_health:
+		_emit_health()
+
+
+func _emit_health() -> void:
+	_shown_health = ceili(health)
+	health_changed.emit(health, get_max_health())
+
+
+func _init_stats() -> void:
+	var bases := {
+		&"move_speed": speed,
+		&"acceleration": acceleration,
+		&"max_health": max_health,
+		&"invulnerability": invulnerability_duration,
+		&"primary_cooldown": primary_cooldown,
+		&"primary_spread": primary_spread_degrees,
+		&"wave_cooldown": wave_cooldown,
+		&"compression_cooldown": compression_cooldown,
+		&"flight_duration": speed_boost_duration,
+		&"flight_cooldown": speed_boost_cooldown,
+		&"flight_speed": speed_boost_multiplier,
+	}
+	for stat in bases:
+		stats.set_base(stat, bases[stat])
+	stats.changed.connect(_on_stats_changed)
+
+
+# A larger maximum adds the difference to health, a smaller one cuts it.
+func _on_stats_changed() -> void:
+	var new_max := get_max_health()
+	if is_equal_approx(new_max, _max_health_now):
+		return
+	if new_max > _max_health_now and not _is_dead:
+		health += new_max - _max_health_now
+	health = minf(health, new_max)
+	_max_health_now = new_max
+	_emit_health()
 
 
 func _check_enemy_contact() -> void:
@@ -462,7 +628,9 @@ func _check_enemy_contact() -> void:
 	if _invulnerability_left > 0.0:
 		return
 	for body in hurtbox.get_overlapping_bodies():
-		if body.is_in_group("enemies") and "contact_damage" in body:
+		# A harmless enemy (a dazed Runner has 0) must not hide a harmful one.
+		if body.is_in_group("enemies") and "contact_damage" in body \
+				and float(body.get("contact_damage")) > 0.0:
 			take_damage(body.get("contact_damage"), body.global_position)
 			return
 
@@ -496,17 +664,77 @@ func _restart_scene() -> void:
 func _try_primary_attack() -> void:
 	if _primary_cooldown_left > 0.0:
 		return
-	var projectile := _instantiate_attack(projectile_scene, "ЛКМ-снаряд")
-	if projectile == null:
-		return
-	_primary_cooldown_left = primary_cooldown
+	# Split shot: extra projectiles fan out evenly around the aim.
+	var count := maxi(roundi(stats.value(&"primary_projectiles")), 1)
+	var spread_degrees := stats.value(&"primary_spread")
+	var spread := deg_to_rad(randf_range(-spread_degrees, spread_degrees))
+	for i in count:
+		var projectile := _instantiate_attack(projectile_scene, "ЛКМ-снаряд")
+		if projectile == null:
+			return
+		var fan := deg_to_rad(FAN_STEP_DEGREES * (i - (count - 1) / 2.0))
+		projectile.set("damage", _damage(primary_damage_percent, &"primary_damage"))
+		projectile.set("speed", float(projectile.get("speed")) * stats.value(&"projectile_speed") * attack_rate)
+		projectile.set("pierce", roundi(stats.value(&"projectile_pierce")))
+		projectile.call("launch", projectile_spawn.global_position, aim_direction.rotated(spread + fan))
+	_primary_cooldown_left = stats.value(&"primary_cooldown")
 	_is_running = false
 	_play_attack_animation(&"attack_primary")
-	projectile.set("damage", _damage(primary_damage_percent))
-	if attack_rate != 1.0:
-		projectile.set("speed", float(projectile.get("speed")) * attack_rate)
-	var spread := deg_to_rad(randf_range(-primary_spread_degrees, primary_spread_degrees))
-	projectile.call("launch", projectile_spawn.global_position, aim_direction.rotated(spread))
+	_feed_shot_wind()
+
+
+# A shot brings the wind to full strength — never more, however often it
+# fires — and holds it until the next shot is due, so held LMB is an even
+# wind rather than one pulsing five times a second.
+func _feed_shot_wind() -> void:
+	_wind_strength = 1.0
+	_wind_hold = maxf(stats.value(&"primary_cooldown") + SHOT_WIND_HOLD_SLACK, SHOT_WIND_MIN_HOLD)
+
+
+# The heard level eases towards the strength the shots gave (exponentially,
+# so it has no corners): it swells in, and once no shot keeps the strength
+# up, it drifts away. A stronger wind is also a touch higher, like air
+# speeding up. Silent wind is stopped.
+func _update_shot_wind(delta: float) -> void:
+	if _is_dead or _is_falling:
+		_wind_strength = 0.0
+	_wind_hold -= delta
+	if _wind_hold <= 0.0:
+		_wind_strength = maxf(_wind_strength - delta / shot_wind_fade, 0.0)
+	var ease_time := shot_wind_rise if _wind_strength > _wind_level else shot_wind_release
+	_wind_level = lerpf(_wind_level, _wind_strength, 1.0 - exp(-delta / ease_time))
+	if _wind_strength <= 0.0 and _wind_level < SHOT_WIND_SILENT:
+		_wind_level = 0.0
+		if shot_wind.playing:
+			shot_wind.stop()
+		return
+	if not shot_wind.playing:
+		# A random point of the loop, so puffs do not all sound alike.
+		shot_wind.play(randf() * shot_wind.stream.get_length())
+	shot_wind.volume_db = shot_wind_volume_db + linear_to_db(_wind_level)
+	shot_wind.pitch_scale = lerpf(0.96, 1.04, _wind_level)
+
+
+# The flight rush eases in after take-off, follows the flying speed (quiet
+# when hovering, louder and a touch higher at full speed) and eases out on
+# landing or death. Silent, it is stopped.
+func _update_flight_air(delta: float) -> void:
+	var target := 0.0
+	if is_airborne() and not _is_dead and not _is_falling:
+		var top_speed := stats.value(&"move_speed") * stats.value(&"flight_speed") * run_speed_multiplier
+		var speed := clampf(velocity.length() / maxf(top_speed, 1.0), 0.0, 1.0)
+		target = db_to_linear(-flight_air_still_db * (1.0 - speed))
+	var ease_time := FLIGHT_AIR_RISE if target > _flight_air_level else FLIGHT_AIR_RELEASE
+	_flight_air_level = lerpf(_flight_air_level, target, 1.0 - exp(-delta / ease_time))
+	if target <= 0.0 and _flight_air_level < SHOT_WIND_SILENT:
+		_flight_air_level = 0.0
+		if flight_air.playing:
+			flight_air.stop()
+		return
+	if not flight_air.playing:
+		flight_air.play(randf() * flight_air.stream.get_length())
+	flight_air.volume_db = flight_air_volume_db + linear_to_db(_flight_air_level)
+	flight_air.pitch_scale = lerpf(0.95, 1.05, _flight_air_level)
 
 
 func _try_wave_attack() -> void:
@@ -515,10 +743,13 @@ func _try_wave_attack() -> void:
 	var wave := _instantiate_attack(wave_scene, "ПКМ-волна")
 	if wave == null:
 		return
-	_wave_cooldown_left = wave_cooldown
+	_wave_cooldown_left = stats.value(&"wave_cooldown")
 	_is_running = false
 	_play_attack_animation(&"attack_wave")
-	wave.set("damage", _damage(wave_damage_percent))
+	wave_sound.play()
+	wave.set("damage", _damage(wave_damage_percent, &"wave_damage"))
+	wave.set("travel_distance", float(wave.get("travel_distance")) * stats.value(&"wave_range"))
+	wave.set("size_multiplier", stats.value(&"wave_size"))
 	if attack_rate != 1.0:
 		wave.set("duration", float(wave.get("duration")) / maxf(attack_rate, 0.05))
 	var wave_origin := get_aim_origin() + aim_direction * wave_spawn_distance
@@ -531,10 +762,11 @@ func _try_speed_boost() -> void:
 	_speed_boost_state = SpeedBoostState.ACTIVE
 	# В полёте мелкие валуны остаются внизу.
 	set_collision_mask_value(LOW_OBSTACLE_LAYER_NUMBER, false)
-	boost_duration_timer.start(speed_boost_duration)
+	boost_duration_timer.start(stats.value(&"flight_duration"))
 	# Thrown by a geyser the body is already in the air; the throw places it.
 	if not is_launched():
 		_play_lift_off()
+	lift_sound.play()
 
 
 func _try_compression() -> void:
@@ -547,11 +779,11 @@ func _try_compression() -> void:
 	var compression := _instantiate_attack(compression_scene, "R-сжатие")
 	if compression == null:
 		return
-	_compression_cooldown_left = compression_cooldown
+	_compression_cooldown_left = stats.value(&"compression_cooldown")
 	_is_running = false
 	_play_attack_animation(&"attack_compression")
-	compression.set("impact_damage", _damage(compression_impact_percent))
-	compression.set("tick_damage", _damage(compression_tick_percent))
+	compression.set("impact_damage", _damage(compression_impact_percent, &"compression_damage"))
+	compression.set("tick_damage", _damage(compression_tick_percent, &"compression_damage"))
 	compression.call("start_compression", target, get_aim_origin())
 
 
@@ -559,7 +791,8 @@ func _try_compression() -> void:
 # и compression_max_range от игрока.
 func _find_compression_target() -> Node2D:
 	var cursor := get_global_mouse_position()
-	var max_range_sq := compression_max_range * compression_max_range
+	var max_range := compression_max_range * stats.value(&"compression_range")
+	var max_range_sq := max_range * max_range
 	var best_distance_sq := compression_target_radius * compression_target_radius
 	var best: Node2D = null
 	for node in get_tree().get_nodes_in_group("enemies"):
@@ -626,13 +859,14 @@ func _on_boost_duration_timeout() -> void:
 func _land() -> void:
 	_landing_pending = false
 	_speed_boost_state = SpeedBoostState.COOLDOWN
-	boost_cooldown_timer.start(speed_boost_cooldown)
+	boost_cooldown_timer.start(stats.value(&"flight_cooldown"))
 	# Still thrown by a geyser: the throw ends the landing itself.
 	if is_launched():
 		return
 	set_collision_mask_value(LOW_OBSTACLE_LAYER_NUMBER, true)
 	if not _is_dead:
 		_play_landing()
+		land_sound.play()
 
 
 # Перекрывает ли след смерча мелкий валун (слой, который в полёте не мешает).

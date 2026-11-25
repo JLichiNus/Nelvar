@@ -83,6 +83,8 @@ var _music_tween: Tween
 
 
 func _ready() -> void:
+	# The run's music fades out; the menu plays its own.
+	GameMusic.stop()
 	_material = background.material as ShaderMaterial
 	logo.custom_minimum_size = logo.texture.get_size() * LOGO_SCALE
 	_button_elements = {

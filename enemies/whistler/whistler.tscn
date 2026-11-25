@@ -1,0 +1,54 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://enemies/whistler/whistler.gd" id="1_script"]
+[ext_resource type="Script" path="res://scripts/fx/occlusion_outline.gd" id="2_outline"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/whistler_inhale.tres" id="3_inhale"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/whistler_blow.tres" id="4_blow"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/whistler_toot.tres" id="5_toot"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/whistler_hurt.tres" id="6_hurt"]
+[ext_resource type="AudioStream" path="res://assets/audio/sfx/whistler_death.tres" id="7_death"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_whistler"]
+radius = 16.0
+
+[node name="Whistler" type="CharacterBody2D" groups=["enemies"]]
+collision_layer = 8
+collision_mask = 1
+motion_mode = 1
+texture_filter = 1
+script = ExtResource("1_script")
+inhale_stream = ExtResource("3_inhale")
+blow_stream = ExtResource("4_blow")
+toot_stream = ExtResource("5_toot")
+hurt_stream = ExtResource("6_hurt")
+death_stream = ExtResource("7_death")
+
+[node name="Shadow" type="Node2D" parent="."]
+
+[node name="Sprite" type="Sprite2D" parent="Shadow"]
+
+[node name="Visual" type="Node2D" parent="."]
+
+[node name="Body" type="Sprite2D" parent="Visual"]
+
+[node name="Nozzle" type="Sprite2D" parent="Visual"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_whistler")
+
+[node name="OcclusionOutline" type="CanvasGroup" parent="." node_paths=PackedStringArray("sources")]
+script = ExtResource("2_outline")
+sources = [NodePath("../Visual/Body"), NodePath("../Visual/Nozzle")]
+outline_color = Color(1, 0.82, 0.48, 0.95)
+fill_color = Color(0.84, 0.62, 0.35, 0.2)
+
+[node name="InhaleSound" type="AudioStreamPlayer2D" parent="."]
+max_distance = 1600.0
+panning_strength = 0.5
+bus = &"SFX"
+
+[node name="HurtSound" type="AudioStreamPlayer2D" parent="."]
+volume_db = -4.0
+max_distance = 1600.0
+panning_strength = 0.5
+bus = &"SFX"

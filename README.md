@@ -34,7 +34,9 @@ in the upper-left corner and printed to Output.
 - **Ctrl:** toggle running.
 - **Shift:** short flight (speed boost); airborne the player ignores contact damage.
 - **LMB:** wind projectile. **RMB:** wind wave. **R:** compression on the enemy nearest to the cursor.
+- **E:** open the choice of a ripe mutation (see Mutations below).
 - **Mouse wheel:** zoom the camera attached to the player.
+- **F4** (debug builds): fill the adaptation meter at once.
 - **F3:** show occupied chunks, collision boundaries, trunk circles, rock footprints and island IDs.
 
 The player (`player/player.tscn`) is drawn from two animated layers: legs play
@@ -43,6 +45,138 @@ is at the feet, under a circular collider of `NelvarPlayer.BODY_RADIUS`; aiming
 and attacks start from the body center (`AimPivot`). Hopper enemies spawn on
 walkable ground around the player, away from trunks. At zero HP the scene
 restarts with a new seed.
+
+### Enemies
+
+The spawner (`enemies/enemy_spawner.gd`) brings several kinds: each spawn picks
+an `NelvarEnemyKind` (scene, weight, own cap) among those below their cap. On the
+air map: hoppers (weight 3), Runners (weight 2, at most 4 alive) and Whistlers
+(weight 1, at most 3 alive).
+
+- **Прыгун** (`enemies/hopper/`) — a ball that hops about at random; hurts on touch.
+- **Свистун** (`enemies/whistler/`) — a hollow sack of dry reed rooted in the
+  ground, with a tube for a mouth that turns after the player. Within 640 of the
+  player it draws breath for 0.9 s — swells, quivers, air streams into the tube and
+  it whistles higher; the tube stops following 0.25 s before the blow — and blows
+  slow pink soap bubbles: a fan of 3–5, or (30%) a trill of three aimed one by one.
+  A bubble floats above its shadow, which is its collider; it hurts a walking player
+  (10) and passes a flying one, bursts on trunks and rocks but drifts over shores
+  and rails. The LMB shot bursts it; the RMB wave turns it back (`deflect`): it
+  takes the colours of the wind, flies twice as fast toward an enemy near the
+  wave's direction and hits it for 30. R compression breaks off a breath. 45 HP,
+  light contact damage; a wave only rocks it.
+
+- **Бегунок** (`enemies/runner/`) — a tiny fluffy bird on long legs. It chases
+  the player at 250 (slower than a walk), curving round to come from the side, and
+  Runners keep a little apart. When the player is 160–390 away and nothing stands
+  between them it winds up for 0.6 s — crouches, scratches the ground, chirps, and a
+  dashed orange arrow grows along the ground, following the player until it turns
+  light and locks 0.18 s before the dash — then dashes 760 for 0.42 s, hurting 14
+  instead of 8, with a wind trail behind. A miss ends in a skid and a moment out of
+  breath. A dash into a trunk or rock bounces it off stunned for 1.4 s (stars over its
+  head, harmless to touch); an RMB wave that catches it winding up or dashing knocks
+  it over for 0.9 s; R compression cancels the dash. 35 HP; it dies in a puff of
+  feathers.
+
+Enemy sounds are positional (`AudioStreamPlayer2D`); those that must outlive
+their source (a popped bubble, a dead Whistler) are played by
+`NelvarOneShotSound`, which also skips the same sound repeated within 40 ms.
+
+### Mutations
+
+Every mutation gives something and takes something (`mutations/`). The
+player's body adapts to what it lives through: the **adaptation** meter
+above the level line fills from lost health (most), kills and, slowly, time.
+A full meter ripens a mutation, and each ripening belongs in advance to one of
+the four linked versions of the Wanderer — the player's own (Air), Earth, Fire,
+Ice — or to none (spontaneous). The next owners are shown as element sigils
+next to the meter, so the player can plan around them.
+
+- **The player's own** waits: the sigil pulses, the meter stops and **E**
+  opens three cards (the game pauses; 1/2/3 or a click picks, Esc/E puts it
+  off). Left waiting for 40 s, another version seizes it and picks from the
+  same cards for itself.
+- **Another version's** is picked by that version from three cards by what
+  its element values (`NelvarMutation.VERSION_WEIGHTS`: Air — speed and
+  flight, Earth — health and defence, Fire — damage, Ice — cooldowns and
+  control). Each card says which version would like it.
+- **Spontaneous** ones are random.
+
+Received mutations line up along the top of the screen as small tiles (first
+letter, frame in the colour of the version that picked it, a mark of its layer,
+one pip per stage); hovering one shows its short summary. **Esc → Инвентарь**
+lists them all with exact numbers, layer and who picked each stage.
+
+The player's share of ripenings falls from 70% to 25% over the first 12
+mutations. Taking a mutation again deepens it to stage II (both sides doubled).
+Mutations come in three layers: **body** (stat trades), **ability** (how a skill
+works: split shot, piercing wind, longer or broader wave, longer flight, ...)
+and **rule** (hollow vortex — flight no longer protects; rooting — armour when
+standing still; storm core; last breath). The catalog is
+`mutations/mutation_catalog.gd`; stats live in `NelvarStats`, which the player
+reads instead of its exports; the meter, the queue and the choice are
+`NelvarMutationDirector` under the player; the HUD is `ui/mutations/`.
+
+### Sound
+
+Three audio buses (`default_bus_layout.tres`): **Master**, **Music** and **SFX**.
+Every music player sends to Music and every sound to SFX; their volumes are
+set in Settings → «Аудио» (main menu and pause menu alike) and saved in
+`user://settings.cfg` (`GameSettings`). The settings panel is split into tabs:
+«Экран», «Интерфейс», «Аудио».
+
+Music during a run is the `GameMusic` autoload (`scripts/game_music.gd`): a
+track fades in, plays to its end, fades out, then 30 s of silence and the next
+track is picked at random from `PLAYLIST` (`assets/audio/music/game/`). It
+keeps playing through the pause menu and through a restart after death, and
+fades out when the main menu opens.
+
+Sound effects are synthesised by `tools/gen_sfx.py` (numpy only) into
+`assets/audio/sfx/`; run `python3 tools/gen_sfx.py` from the project root to
+rebuild them. The LMB shot has no sound of its own: each shot feeds a small,
+looped wind (`wind.wav`, `ShotWind` under the player) that holds while the
+next shot is due and dies down without shots. A tap is a short breath of wind,
+held LMB one even wind of the same volume — five separate sounds a second
+would wear the ear out. The wind eases in and drifts away rather than
+switching on and off; volume, fade and easing are exports on the player
+(`shot_wind_*`). The RMB wave is one gust that rushes ahead with it and sinks as
+it spreads (`wind_wave_1..3.wav` via `wind_wave.tres`, `WaveSound`). The R
+compression rushes air in and strikes softly on impact
+(`compression_start_*`), then holds a looped tight wind whose pitch rises over
+the squeeze (`compression_hold.wav`); when the compression ends, early or not,
+both fade out instead of cutting off. Flight (Shift) takes off with a soft upward gust
+(`flight_lift_*`), keeps a looped rush of air while airborne that is louder the
+faster the player flies (`flight_air.wav`, `FlightAir`) and settles with a
+soft low puff on landing (`flight_land_*`).
+The Whistler draws breath with a rising whistle (`whistler_inhale_*`, 0.9 s, as
+long as the breath), blows a fan with a falling "pfoo" (`whistler_blow_*`) or a
+trill of three notes (`whistler_toot_1..3`, played in order), knocks hollow when
+hit (`whistler_hurt_*`) and wheezes as it deflates (`whistler_death_*`). Its
+bubbles pop (`bubble_pop_*`) and, turned back by the wave, bounce off with a
+springy "bwip" (`bubble_deflect_*`).
+The Runner patters with every footfall (`runner_step_*`, quiet), chirps through
+its windup (`runner_chirp_*`, 0.6 s), takes off with a flutter and a rush of air
+(`runner_dash_*`), scrapes into a skid (`runner_skid_*`), bonks into trunks and
+tweets dizzily (`runner_bonk_*`), peeps when hit (`runner_hurt_*`) and dies with a
+squawk and a puff of feathers (`runner_death_*`).
+
+The final boss has its own sounds in `assets/audio/sfx/boss/`, synthesised by
+`tools/gen_boss_sfx.py` (`boss_sfx_a.py`, `boss_sfx_b.py`, shared tools in
+`boss_sfx_common.py`). Every sound has three candidate variants:
+`--preview DIR` writes them all for listening, `--pick name=k ...` writes the
+chosen ones into the game. They are played by `NelvarBossSound`
+(`scripts/void/boss/boss_sound.gd`) as positional sounds where the attack
+happens: the aim, lock and rush of a dash, a tear charging and erupting and then
+crackling, a gravity well appearing, charging (timed to end on its burst), stopping
+still and bursting (twins differ in pitch), a rift cracking and opening (the sound
+rides the light along it) and then humming, the collapse's quickening ticks, strike
+and reversal, the shard rings' charge, launch and turn, a shard hitting, and the
+squeeze's groan, rising spiral, the beacon of the way out at the gap and the final
+blast. Around the boss: its intro, a low presence that sinks with every phase, hits,
+phase shifts and death. Hits, cracks and many rifts at once have a shortest gap and
+a voice limit, so a burst of them is heard as one event. Loops
+(`boss_presence`, `trail_crackle`, `rift_hum`, `squeeze_beacon`) are imported
+with loop mode Forward.
 
 `test_world.tscn` is a flat arena for tuning combat without the generator (F6).
 
@@ -74,17 +208,30 @@ the edge is sealed, the Void opens its eyes and the Only One (Единствен
 `scripts/void/boss/`) forms out of the sigil. It is one body that the fight bends
 out of shape, its contours always lagging a moment behind it:
 
+Each phase has its own 3200 HP: the bar at the top shows only the current phase,
+empties, and fills up again in the next phase's colour; diamonds under it count
+the phases. The attacks follow three rules: the difficulty is in their geometry,
+they get in the way of hitting the boss, and every one can be avoided at plain
+walking or running speed.
+
 - **I · Единственный** — a hunched figure with an empty face and a huge left arm.
-  Dash (leaves a short trail of the Void), pull around itself that bursts after
-  2 s, a rift dragged along the floor towards the player.
-- **II · Искажение** (70% HP) — the limbs come loose from the body. Double dash
-  aimed anew, a pull next to the player, three rifts in a fan.
-- **III · Отторжение** (42%) — it stretches, squashes and blinks part by part.
-  Three dashes (the last trail lingers), two pulls tearing both ways, rifts crossing
-  the arena one after another, and the collapse: rotating sectors from the centre.
-- **IV · Поглощённый** (14%) — only a crawling silhouette hovering in the centre.
-  Rings of shards that fly out and come back, and a closing ring of the Void with a
-  single gap.
+  A dash that leads the player (the aim follows them, then locks just before it
+  goes) and leaves a tear in space that bursts out to both sides a second later;
+  a gravity well that pulls harder and grows its burst circle as it charges; a
+  rift whose energy runs along it as a wave and stays open for 2 s.
+- **II · Искажение** — the limbs come loose from the body. Two leading dashes, a
+  well that creeps after the player and stops before it bursts, three parallel
+  rifts that cut the floor into narrow corridors.
+- **III · Отторжение** — it stretches, squashes and blinks part by part. Three
+  dashes whose tears all stay open and divide the arena; twin wells circling one
+  point, pulling in turn and bursting one after the other; a maze of crossing
+  rifts that closes one corridor after another, always leaving a way out; the
+  collapse: 42° sectors turning around the boss with 18° lanes between them, no
+  safe spot at its feet, and a warned reversal.
+- **IV · Поглощённый** — only a crawling silhouette hovering in the centre. Two
+  rings of shards on spiral paths that curl back the other way, the second ring
+  crossing the first; and the squeeze: an accelerating ring of the Void whose one
+  gap sweeps around the boss.
 
 Every hazard shows itself before it hurts (a dash even draws its path); flight
 (Shift) passes through all of them. The fight is lit by the boss and its attacks
@@ -423,6 +570,9 @@ godot --headless --path . --script tests/test_earth.gd -- --seeds=30
 godot --headless --path . --script tests/test_fire.gd -- --seeds=30
 godot --headless --path . --script tests/test_ice.gd -- --seeds=30
 godot --headless --path . --script tests/test_crater.gd -- --seeds=30
+godot --headless --path . --script tests/test_mutations.gd
+godot --headless --path . --script tests/test_whistler.gd
+godot --headless --path . --script tests/test_runner.gd
 ```
 
 Here `godot` means the path to your Godot 4.7.2 executable. The checks cover
