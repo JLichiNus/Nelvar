@@ -6,6 +6,14 @@ extends Area2D
 # и не вращается вместе с узлом — пиксели остаются ровными и одного размера
 # с пикселями игрока. При смене duration/start_size/end_size — перегенерировать.
 const SHEET_TEXEL := 3.0
+## Радиус дуги в локальных координатах узла (CollisionPolygon2D) и полуугол
+## серпа — с его задней кромки срываются клочья воздуха.
+const ARC_RADIUS := 35.0
+const ARC_HALF_ANGLE := deg_to_rad(66.0)
+## Клочьев в секунду и до какой доли полёта они срываются (потом серп тает).
+const AIR_RATE := 190.0
+const AIR_UNTIL := 0.8
+const TRAIL_SCRIPT := preload("res://attacks/wind_projectile/wind_projectile_trail.gd")
 
 
 @export var travel_distance: float = 360.0
@@ -24,6 +32,10 @@ var direction := Vector2.RIGHT
 var _hit_targets: Dictionary = {}
 var _sheet_row := 0
 var _visual: Sprite2D
+## Клочья воздуха, сорванные волной; дотаивают и после неё.
+var _air: WindProjectileTrail
+var _air_carry := 0.0
+var _last_progress := 0.0
 
 
 func _ready() -> void:
@@ -45,6 +57,7 @@ func launch(
 	modulate.a = 1.0
 	_hit_targets.clear()
 	_setup_visual()
+	_setup_air()
 	monitoring = collision_enabled
 	monitorable = collision_enabled
 
@@ -69,7 +82,47 @@ func launch(
 	).set_delay(maxf(duration - fade_duration, 0.0))
 	# Последним в том же tween — чтобы спрайт брал уже обновлённый масштаб узла.
 	tween.tween_method(_update_visual, 0.0, 1.0, duration)
-	tween.chain().tween_callback(queue_free)
+	tween.chain().tween_callback(_finish)
+
+
+# Воздух — сосед волны, а не ребёнок: волна исчезает, а сорванные клочья
+# дотаивают сами. Добавлен перед волной, поэтому рисуется под ней.
+func _setup_air() -> void:
+	var parent := get_parent()
+	if parent == null or _air != null:
+		return
+	_air = TRAIL_SCRIPT.new()
+	_air.lifetime = Vector2(0.22, 0.45)
+	_air.curl_radius = 3.2
+	parent.add_child(_air)
+	parent.move_child(_air, get_index())
+
+
+# Клочья срываются с задней кромки серпа, чаще у кончиков, и уносятся
+# назад и прочь от оси — за волной остаётся рваное облачко завитков.
+func _emit_air(progress: float) -> void:
+	var step := progress - _last_progress
+	_last_progress = progress
+	if _air == null or not is_instance_valid(_air) or progress > AIR_UNTIL:
+		return
+	_air_carry += step * duration * AIR_RATE
+	while _air_carry >= 1.0:
+		_air_carry -= 1.0
+		var side := 1.0 if randf() < 0.5 else -1.0
+		var angle := ARC_HALF_ANGLE * sqrt(randf()) * side
+		var at := to_global(Vector2.from_angle(angle) * ARC_RADIUS * randf_range(0.8, 0.95))
+		var away := direction.orthogonal() * -side
+		var velocity := (
+			-direction * randf_range(40.0, 120.0)
+			+ away * randf_range(30.0, 110.0) * absf(angle) / ARC_HALF_ANGLE
+		)
+		_air.emit_puff(at, velocity, direction)
+
+
+func _finish() -> void:
+	if _air != null and is_instance_valid(_air):
+		_air.release(global_position, direction, 0)
+	queue_free()
 
 
 func _setup_visual() -> void:
@@ -91,6 +144,7 @@ func _update_visual(progress: float) -> void:
 	_visual.global_rotation = 0.0
 	var texel := SHEET_TEXEL * _snapped_size()
 	_visual.global_scale = Vector2(texel, texel)
+	_emit_air(progress)
 
 
 func _snapped_size() -> float:

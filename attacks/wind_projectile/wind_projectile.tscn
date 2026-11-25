@@ -16,7 +16,7 @@ script = ExtResource("1_script")
 [node name="Visual" type="Sprite2D" parent="."]
 texture_filter = 1
 texture = ExtResource("2_sheet")
-hframes = 2
+hframes = 4
 vframes = 17
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
