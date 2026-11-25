@@ -4,7 +4,7 @@ extends RefCounted
 ## part so the body can come apart in later phases: an elongated faceless head,
 ## a narrow torso with a hole through the chest, a normal right arm with overlong
 ## fingers, a huge left arm that reaches the ground, thin legs with wrong joints.
-## Dark grey-blue, almost black, with rare pale violet cracks.
+## Dark facets catch violet at their edges, and a fault runs down the long arm.
 ##
 ## Every part also gets a glow layer (the cracks, drawn additively) and a contour:
 ## only its outline, which the body draws where the part *was* a moment ago.
@@ -13,13 +13,23 @@ extends RefCounted
 const TEXEL := 3.0
 const MARGIN := 2
 
-const BODY: Array[Color] = [Color("0a0c13"), Color("111520"), Color("181d2b"), Color("212839"),
-	Color("2b3349")]
-const OUTLINE := Color("04050a")
-const HEAD_RIM := Color("1d2233")
-const CRACK := Color("5e4c9e")
-const CRACK_GLOW := Color(0.6, 0.45, 0.95)
-const HOLE_RIM := Color("47357e")
+const BODY: Array[Color] = [Color("0c0817"), Color("171025"), Color("231934"), Color("33264c"),
+	Color("4c3869")]
+const OUTLINE := Color(0.02, 0.0, 0.05)
+const HEAD_RIM := Color("32224d")
+const CRACK := Color("66469c")
+const CRACK_GLOW := Color(0.62, 0.4, 1.0)
+const PALE := Color(0.9, 0.84, 1.0)
+const HOLE_RIM := Color("4a2e77")
+const ARM_FAULT: Array[Vector2i] = [
+	Vector2i(5, 2), Vector2i(5, 3), Vector2i(6, 4), Vector2i(6, 5), Vector2i(7, 6),
+	Vector2i(6, 7), Vector2i(7, 8), Vector2i(7, 9), Vector2i(7, 10), Vector2i(8, 11),
+	Vector2i(8, 12), Vector2i(8, 13), Vector2i(7, 14), Vector2i(7, 15), Vector2i(8, 16),
+	Vector2i(8, 17), Vector2i(7, 18), Vector2i(7, 19), Vector2i(7, 21), Vector2i(6, 22),
+	Vector2i(7, 23), Vector2i(7, 24), Vector2i(7, 25), Vector2i(6, 26), Vector2i(7, 27),
+	Vector2i(7, 28), Vector2i(8, 29), Vector2i(9, 30), Vector2i(7, 30), Vector2i(6, 30),
+	Vector2i(6, 31), Vector2i(5, 32)
+]
 const CONTOUR := Color(0.78, 0.72, 1.0)
 
 static var _parts := {}
@@ -52,6 +62,8 @@ const HIP_L := Vector2(2.4, -0.5) * TEXEL
 const HIP_R := Vector2(-2.4, -0.5) * TEXEL
 ## Hips above the feet.
 const HIP_HEIGHT := 16.0 * TEXEL
+## Center of the chest aperture in the torso sprite's local texels.
+const CORE_FROM_HIP := Vector2(0.0, -12.5)
 
 
 func _paint_all() -> Dictionary:
@@ -83,7 +95,7 @@ func _paint_all() -> Dictionary:
 			if _near_polyline(p, [Vector2(3, 16), tip], 0.5):
 				return true
 		return false, false)
-	result["arm_l"] = _make(Vector2i(16, 37), Vector2(5, 1), rng, 4, func(p: Vector2) -> bool:
+	result["arm_l"] = _make(Vector2i(16, 37), Vector2(5, 1), rng, 2, func(p: Vector2) -> bool:
 		var width := lerpf(2.0, 1.45, clampf(p.y / 26.0, 0.0, 1.0))
 		if _near_polyline(p, [Vector2(5, 1), Vector2(8, 13), Vector2(7, 25)], width):
 			return true
@@ -92,7 +104,7 @@ func _paint_all() -> Dictionary:
 		for tip: Vector2 in [Vector2(3.0, 35), Vector2(7.0, 35.8), Vector2(11.2, 34)]:
 			if _near_polyline(p, [Vector2(7.2, 28), tip], 0.75):
 				return true
-		return false, false)
+		return false, false, false, false, ARM_FAULT)
 	var leg := func(p: Vector2) -> bool:
 		return _near_polyline(p, [Vector2(4, 0.5), Vector2(6.2, 5), Vector2(2.4, 9),
 			Vector2(5.2, 14), Vector2(7.6, 16)], 0.8)
@@ -105,7 +117,8 @@ func _paint_all() -> Dictionary:
 ## violet cracks run over it; a `void_fill` part is pure black inside its rim; a
 ## `hole` part gets the hole through the chest.
 func _make(size: Vector2i, pivot: Vector2, rng: RandomNumberGenerator, cracks: int,
-		inside: Callable, void_fill: bool, mirror := false, hole := false) -> Part:
+		inside: Callable, void_fill: bool, mirror := false, hole := false,
+		fault: Array[Vector2i] = []) -> Part:
 	var w := size.x + MARGIN * 2
 	var h := size.y + MARGIN * 2
 	var mask := PackedByteArray()
@@ -133,10 +146,11 @@ func _make(size: Vector2i, pivot: Vector2, rng: RandomNumberGenerator, cracks: i
 					contour.set_pixel(x, y, CONTOUR)
 				continue
 			if void_fill:
-				image.set_pixel(x, y, HEAD_RIM if edge > 0 else Color.BLACK)
-				# The empty face has a cold glowing rim.
+				image.set_pixel(x, y, HEAD_RIM if edge > 0 else OUTLINE)
+				# Light catches the facing edge of the empty mask.
 				if edge > 0:
-					glow.set_pixel(x, y, Color(CRACK_GLOW, 0.55))
+					var facing := _at(mask, w, h, x + 1, y) == 0
+					glow.set_pixel(x, y, Color(CRACK_GLOW, 0.78 if facing else 0.24))
 				continue
 			# Lit from the upper right: open space there brightens, below-left darkens.
 			var level := 0.35
@@ -151,9 +165,15 @@ func _make(size: Vector2i, pivot: Vector2, rng: RandomNumberGenerator, cracks: i
 	var hole_image: Image
 	if hole:
 		hole_image = Image.create(w, h, false, Image.FORMAT_RGBA8)
-		_cut_hole(image, mask, w, h, Vector2(6.5 + MARGIN, 9.5 + MARGIN), rng, hole_image)
+		_cut_hole(image, glow, mask, w, h, pivot + CORE_FROM_HIP + Vector2(MARGIN, MARGIN),
+			rng, hole_image)
 	for i in cracks:
 		_crack(image, glow, mask, w, h, rng)
+	for i in fault.size():
+		var p := fault[i] + Vector2i(MARGIN, MARGIN)
+		if _at(mask, w, h, p.x, p.y) != 0:
+			image.set_pixelv(p, Color("493363"))
+			glow.set_pixelv(p, Color(PALE if i % 5 == 0 else CRACK_GLOW, 0.86))
 	var part := Part.new()
 	part.texture = ImageTexture.create_from_image(image)
 	part.glow = ImageTexture.create_from_image(glow)
@@ -168,7 +188,7 @@ func _make(size: Vector2i, pivot: Vector2, rng: RandomNumberGenerator, cracks: i
 
 
 ## An irregular hole through the chest: the Void shows through it.
-func _cut_hole(image: Image, mask: PackedByteArray, w: int, h: int, center: Vector2,
+func _cut_hole(image: Image, glow: Image, mask: PackedByteArray, w: int, h: int, center: Vector2,
 		rng: RandomNumberGenerator, hole_image: Image) -> void:
 	var lobes := Vector3(rng.randf() * TAU, rng.randf() * TAU, rng.randf_range(1.7, 2.1))
 	for y in h:
@@ -176,12 +196,13 @@ func _cut_hole(image: Image, mask: PackedByteArray, w: int, h: int, center: Vect
 			var d := Vector2(x + 0.5, y + 0.5) - center
 			var reach := lobes.z + 0.5 * sin(d.angle() * 3.0 + lobes.x) + 0.3 * sin(d.angle() * 5.0 + lobes.y)
 			var r := d.length()
-			if r <= reach:
+			if r <= reach and mask[y * w + x] == 1:
 				image.set_pixel(x, y, Color.TRANSPARENT)
 				hole_image.set_pixel(x, y, Color.WHITE)
 				mask[y * w + x] = 0
 			elif r <= reach + 1.0 and mask[y * w + x] == 1:
 				image.set_pixel(x, y, HOLE_RIM)
+				glow.set_pixel(x, y, Color(CRACK_GLOW, 0.75 if d.y < 0.0 else 0.4))
 
 
 ## A short pale violet crack wandering over the part.

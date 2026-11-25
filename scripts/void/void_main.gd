@@ -63,6 +63,12 @@ var _refill_tween: Tween
 var _boss_pips: NelvarVoidBossPips
 ## A bright sliver riding the end of the bar while it fills up for a new phase.
 var _boss_glint: ColorRect
+## A soft highlight gliding along the boss bar, and how the bar shakes when hit.
+var _boss_sheen: ColorRect
+var _boss_shake := 0.0
+var _boss_bar_home := Vector2.INF
+var _boss_last_health := -1.0
+var _boss_time := 0.0
 var _title_tween: Tween
 ## A Void whose boss fight was lost comes back with the same seed, the player at
 ## the arena's door: the climb is not repeated. -1 = no checkpoint.
@@ -175,7 +181,8 @@ func _paint_monolith() -> void:
 	_monolith_result = NelvarDebrisPainter.new().paint_images(data.monolith)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_animate_boss_bar(delta)
 	if _monolith_task >= 0 and WorkerThreadPool.is_task_completed(_monolith_task):
 		WorkerThreadPool.wait_for_task_completion(_monolith_task)
 		_monolith_task = -1
@@ -314,6 +321,9 @@ func _on_fight_started() -> void:
 
 
 func _on_boss_health(current: float, maximum: float) -> void:
+	if current < _boss_last_health:
+		_on_boss_hit(_boss_last_health - current)
+	_boss_last_health = current
 	# While the bar fills up for a new phase it runs on its own.
 	if _refill_tween != null and _refill_tween.is_running():
 		return
@@ -325,6 +335,35 @@ func _on_boss_health(current: float, maximum: float) -> void:
 	_chip_tween = create_tween()
 	_chip_tween.tween_interval(0.35)
 	_chip_tween.tween_property(boss_chip, "offset_right", right, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+## A hit: the bar jolts and its frame flashes pale, more for bigger hits.
+func _on_boss_hit(amount: float) -> void:
+	_boss_shake = clampf(0.08 + amount / 400.0, 0.08, 0.3)
+	var edge := boss_fill.get_parent_control().get_node_or_null("Edge") as ReferenceRect
+	if edge == null:
+		return
+	edge.border_color = Color(0.95, 0.9, 1.0)
+	var tween := edge.create_tween()
+	tween.tween_property(edge, "border_color", Color(0.5, 0.34, 0.82), 0.25)
+
+
+## Shake and sheen of the boss bar, every frame while it is shown.
+func _animate_boss_bar(delta: float) -> void:
+	if not boss_bar.visible or _boss_sheen == null:
+		return
+	_boss_time += delta
+	if _boss_bar_home == Vector2.INF:
+		_boss_bar_home = boss_bar.position
+	_boss_shake = maxf(_boss_shake - delta, 0.0)
+	var jolt := Vector2.ZERO
+	if _boss_shake > 0.0:
+		jolt = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)).round() * 3.0 * ceilf(_boss_shake * 10.0)
+	boss_bar.position = _boss_bar_home + jolt
+	var width := boss_fill.size.x
+	var run := fmod(_boss_time * 420.0, width + 500.0) - 60.0
+	_boss_sheen.position = Vector2(roundf(run / 3.0) * 3.0, 0.0)
+	_boss_sheen.size = Vector2(36.0, boss_fill.size.y)
 
 
 ## The fill's right offset for `share` of the bar, snapped to whole art pixels.
@@ -350,6 +389,11 @@ func _add_phase_pips() -> void:
 		_boss_glint.offset_bottom = 3.0
 		_boss_glint.hide()
 		bar.add_child(_boss_glint)
+		boss_fill.clip_contents = true
+		_boss_sheen = ColorRect.new()
+		_boss_sheen.color = Color(1.0, 0.95, 1.0, 0.22)
+		_boss_sheen.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		boss_fill.add_child(_boss_sheen)
 	_boss_pips.set_phase(0)
 
 

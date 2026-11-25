@@ -89,6 +89,7 @@ var _aim_age := 0.0
 var _aim_total := 1.0
 var _afterimage_left := 0.0
 var _spark_left := 0.0
+var _ambience: NelvarVoidHazards.Ambience
 
 
 func _ready() -> void:
@@ -129,6 +130,9 @@ func begin(target: NelvarPlayer, center: Vector2, hazards: Node2D) -> void:
 	arena_center = center
 	hazard_layer = hazards
 	health_changed.emit(health, max_health)
+	_ambience = NelvarVoidHazards.Ambience.new()
+	_ambience.radius = NelvarVoidData.ARENA_REACH * 0.9
+	_spawn(_ambience, arena_center, 0.0)
 	# A pillar of light out of the sigil, the Void streaming into it, then a body.
 	var pillar := NelvarVoidHazards.Pillar.new()
 	pillar.life = INTRO_TIME
@@ -141,6 +145,9 @@ func begin(target: NelvarPlayer, center: Vector2, hazards: Node2D) -> void:
 	if dead:
 		return
 	_burst(260.0, 1.1)
+	var cracks := NelvarVoidHazards.Shatter.new()
+	cracks.radius = 520.0
+	_spawn(cracks, global_position, 0.0)
 	NelvarVoidFx.flash(self, NelvarVoidFx.PALE, 0.35, 0.5)
 	NelvarVoidFx.glitch(self, 0.35, 0.8)
 	body.flare(1.5)
@@ -700,12 +707,28 @@ func _shift_phase() -> void:
 	body.glitch(SHIFT_TIME)
 	body.pose = &"spread"
 	phase_changed.emit(phase)
-	# The world stutters with it: slow motion, the picture tears, a flash, a wave.
+	# The world stutters with it: slow motion, the picture tears, a flash, a wave;
+	# the floor cracks open around it and beams of light break out of its body.
 	NelvarVoidFx.slow_motion(self, 0.35, 0.55)
 	NelvarVoidFx.glitch(self, 0.7, 1.0)
 	NelvarVoidFx.flash(self, NelvarVoidFx.PALE, 0.35, 0.45)
 	body.flare(2.0)
 	_burst(300.0, 1.2)
+	var heart := global_position + Vector2(0.0, -70.0)
+	var rays := NelvarVoidHazards.Rays.new()
+	rays.count = 6 + phase * 2
+	rays.life = 1.5
+	rays.length = 900.0
+	_spawn(rays, heart, 0.0)
+	var cracks := NelvarVoidHazards.Shatter.new()
+	cracks.radius = 650.0 + phase * 120.0
+	cracks.cracks = 12 + phase * 4
+	cracks.life = 2.2
+	_spawn(cracks, global_position, 0.0)
+	NelvarVoidFx.burst(hazard_layer, heart, 60, NelvarVoidFx.PALE, -380.0, 0.6, 300.0)
+	if is_instance_valid(_ambience):
+		_ambience.set_level(phase)
+	_echo_burst(token)
 	if phase >= 3:
 		await _blink_to(arena_center, token)
 	await get_tree().create_timer(SHIFT_TIME, false).timeout
@@ -717,6 +740,13 @@ func _shift_phase() -> void:
 	_invulnerable = false
 	active = true
 	_brain(token)
+
+
+## A second, wider ring a moment after the phase breaks.
+func _echo_burst(token: int) -> void:
+	await get_tree().create_timer(0.45, false).timeout
+	if token == _token and not dead:
+		_burst(520.0, 0.7)
 
 
 func _die() -> void:
@@ -740,11 +770,29 @@ func _die() -> void:
 	NelvarVoidFx.glitch(self, 1.3, 0.9)
 	var heart := global_position + Vector2(0.0, -70.0)
 	NelvarVoidFx.burst(hazard_layer, heart, 70, NelvarVoidFx.PALE, -420.0, 1.0, 340.0)
-	await get_tree().create_timer(DEATH_TIME * 0.5, false).timeout
+	var rays := NelvarVoidHazards.Rays.new()
+	rays.count = 14
+	rays.life = DEATH_TIME * 1.3
+	rays.length = 1600.0
+	rays.spin = 0.18
+	_spawn(rays, heart, 0.0)
+	# Light bursting out of it here and there, faster and faster...
+	var flashes := 7
+	for i in flashes:
+		await get_tree().create_timer(DEATH_TIME * 0.5 / flashes * (1.0 - i * 0.08), false).timeout
+		var at := heart + Vector2(_rng.randf_range(-28.0, 28.0), _rng.randf_range(-60.0, 60.0))
+		_burst(50.0 + i * 12.0, 0.25 + i * 0.05, at)
+		body.flare(1.0 + i * 0.3)
 	# ...and it comes apart in light.
 	NelvarVoidFx.flash(self, NelvarVoidFx.PALE, 0.7, 1.2)
 	_burst(520.0, 1.5)
 	_burst(220.0, 0.0, heart)
+	var cracks := NelvarVoidHazards.Shatter.new()
+	cracks.radius = 1050.0
+	cracks.cracks = 26
+	cracks.life = 3.0
+	cracks.grow_time = 0.5
+	_spawn(cracks, global_position, 0.0)
 	NelvarVoidFx.burst(hazard_layer, heart, 90, NelvarVoidFx.PALE, 700.0, 1.2)
 	NelvarVoidFx.burst(hazard_layer, heart, 40, NelvarVoidFx.DARK, 420.0, 1.4, 0.0, false)
 	var tween := create_tween()

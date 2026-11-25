@@ -156,6 +156,9 @@ class Burst:
 		var inner := VIOLET
 		inner.a = 0.5 * (1.0 - k)
 		_glow.draw_arc(Vector2.ZERO, radius * (0.2 + 0.4 * k), 0.0, TAU, 48, inner, 4.0)
+		var echo := VIOLET
+		echo.a = 0.35 * (1.0 - k) * (1.0 - k)
+		_glow.draw_arc(Vector2.ZERO, radius * (0.6 + 0.9 * k), 0.0, TAU, 72, echo, 18.0 * (1.0 - k) + 2.0)
 		var crack := PALE
 		crack.a = 0.9 * (1.0 - k)
 		for ray in _rays:
@@ -530,6 +533,22 @@ class Pull:
 				_glow.draw_arc(Vector2.ZERO, radius * reach, angle, angle + TAU / 60.0, 3, outer, 2.0)
 		if orbit_center != Vector2.INF and is_instance_valid(twin):
 			_draw_orbit()
+		# Summoned: a ring of light snaps open from the heart to the reach.
+		if age < 0.45:
+			var open := age / 0.45
+			var snap := PALE
+			snap.a = 1.0 - open
+			_glow.draw_arc(Vector2.ZERO, radius * reach * (1.0 - pow(1.0 - open, 3.0)), 0.0, TAU, 72, snap, 6.0 * (1.0 - open) + 2.0)
+		# Runes turning on the edge of its reach, against the pull.
+		var rune := VIOLET.lerp(PALE, k * 0.5)
+		rune.a = 0.25 + 0.45 * k * w
+		for i in 8:
+			var angle := TAU * i / 8.0 - age * 0.5
+			var at := Vector2.from_angle(angle) * radius * reach
+			var tangent := Vector2.from_angle(angle + PI * 0.5)
+			var normal := Vector2.from_angle(angle)
+			_glow.draw_polyline(PackedVector2Array([at - tangent * 9.0 - normal * 6.0, at - tangent * 3.0 + normal * 6.0,
+				at + tangent * 3.0 - normal * 6.0, at + tangent * 9.0 + normal * 6.0]), rune, 2.0)
 		# The heart of it swells until it bursts.
 		var core := PALE
 		core.a = 0.35 + 0.5 * k
@@ -645,6 +664,10 @@ class Rift:
 		add_child(_head_sparks)
 		_head_sparks.emitting = true
 		sparks_along(Vector2.ZERO, direction * length, int(length / 14.0), DEEP, 180.0, 0.8)
+		var embers := sparks_along(Vector2.ZERO, direction * length, int(length / 12.0), VIOLET, 90.0, 1.0, false)
+		embers.gravity = Vector2(0.0, -40.0)
+		embers.initial_velocity_min = 20.0
+		_stop_later(embers, hold + length / wave_speed * 0.5)
 		NelvarVoidFx.shock(self, global_position, 0.35)
 
 	func _move_head() -> void:
@@ -1188,6 +1211,188 @@ class Aim:
 			var axis := Vector2.from_angle(PI / 4.0 + k * PI / 2.0)
 			_glow.draw_line(to + axis * size, to + axis * (size + 10.0), PALE, 3.0)
 		_glow.draw_arc(to, size, 0.0, TAU, 24, beam, 2.0)
+
+
+## Light tearing the floor apart: jagged cracks race out from a point, the Void
+## breathing up between them, sparks at their tips; then they fade. Purely visual.
+class Shatter:
+	extends Hazard
+	var radius := 700.0
+	var cracks := 14
+	var grow_time := 0.35
+	var life := 1.8
+	var color := PALE
+	var _paths: Array[PackedVector2Array] = []
+
+	func _setup() -> void:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash(global_position) ^ int(radius)
+		for i in cracks:
+			var angle := TAU * i / cracks + rng.randf_range(-0.2, 0.2)
+			var length := radius * rng.randf_range(0.55, 1.0)
+			var path := PackedVector2Array([Vector2.ZERO])
+			var point := Vector2.ZERO
+			var heading := angle
+			while point.length() < length:
+				heading = angle + rng.randf_range(-0.5, 0.5)
+				point += Vector2.from_angle(heading) * rng.randf_range(24.0, 48.0)
+				path.append(point)
+				# Now and then a crack forks.
+				if rng.randf() < 0.12 and _paths.size() < cracks * 3:
+					var fork := PackedVector2Array([point])
+					var tip := point
+					for k in rng.randi_range(2, 5):
+						tip += Vector2.from_angle(heading + rng.randf_range(0.5, 1.1) * (1.0 if rng.randf() < 0.5 else -1.0)) \
+							* rng.randf_range(18.0, 36.0)
+						fork.append(tip)
+					_paths.append(fork)
+			_paths.push_front(path)
+		NelvarVoidFx.flash_light(self, Vector2.ZERO, VIOLET, 2.4, radius * 1.2, life * 0.6)
+
+	func _step(_delta: float) -> void:
+		if age >= life:
+			queue_free()
+
+	func _shown(path: PackedVector2Array) -> PackedVector2Array:
+		var k := clampf(age / grow_time, 0.0, 1.0)
+		k = 1.0 - pow(1.0 - k, 3.0)
+		var count := maxi(2, int(ceilf(path.size() * k)))
+		return path.slice(0, mini(count, path.size()))
+
+	func _draw() -> void:
+		var fade := 1.0 - clampf((age - grow_time) / (life - grow_time), 0.0, 1.0)
+		var dark := VOID
+		dark.a = 0.85 * fade
+		for path in _paths:
+			var shown := _shown(path)
+			if shown.size() >= 2:
+				draw_polyline(shown, dark, 12.0)
+
+	func _draw_glow() -> void:
+		var fade := 1.0 - clampf((age - grow_time) / (life - grow_time), 0.0, 1.0)
+		if fade <= 0.0:
+			return
+		var flicker := 0.85 + 0.15 * sin(age * 40.0)
+		var haze := VIOLET
+		haze.a = 0.35 * fade
+		var core := color
+		core.a = fade * flicker
+		for i in _paths.size():
+			var shown := _shown(_paths[i])
+			if shown.size() < 2:
+				continue
+			_glow.draw_polyline(shown, haze, 9.0)
+			_glow.draw_polyline(shown, core, 3.0 if i < cracks else 2.0)
+			if age < grow_time + 0.1:
+				dot(shown[shown.size() - 1], 9.0, PALE, true)
+		var heart := PALE
+		heart.a = fade
+		_glow.draw_circle(Vector2.ZERO, 18.0 + 40.0 * (1.0 - fade), Color(VIOLET, 0.4 * fade))
+		_glow.draw_circle(Vector2.ZERO, 10.0 * fade + 4.0, heart)
+
+
+## Beams of cold light fanning out from a point and turning slowly: the Only One
+## coming apart, or tearing itself into its next shape. Purely visual.
+class Rays:
+	extends Hazard
+	var count := 9
+	var length := 1400.0
+	var life := 2.4
+	var spin := 0.25
+	var _angles: Array[float] = []
+	var _widths: Array[float] = []
+
+	func _init() -> void:
+		super()
+		z_as_relative = false
+		z_index = 7
+
+	func _setup() -> void:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash(global_position)
+		for i in count:
+			_angles.append(TAU * i / count + rng.randf_range(-0.25, 0.25))
+			_widths.append(rng.randf_range(0.03, 0.09))
+
+	func _step(_delta: float) -> void:
+		if age >= life:
+			queue_free()
+
+	func _draw_glow() -> void:
+		var k := clampf(age / life, 0.0, 1.0)
+		var strength := sin(k * PI)
+		if strength <= 0.01:
+			return
+		for i in count:
+			var angle := _angles[i] + age * spin * (1.0 if i % 2 == 0 else -0.6)
+			var half := _widths[i] * (0.5 + strength)
+			var reach := length * (0.3 + 0.7 * minf(k * 3.0, 1.0))
+			for layer in 3:
+				var w := half * (1.0 - layer * 0.3)
+				var color := VIOLET.lerp(PALE, layer / 2.0)
+				color.a = strength * (0.1 + layer * 0.08) * (0.8 + 0.2 * sin(age * 13.0 + i))
+				_glow.draw_colored_polygon(PackedVector2Array([Vector2.ZERO,
+					Vector2.from_angle(angle - w) * reach, Vector2.from_angle(angle + w) * reach]), color)
+		_glow.draw_circle(Vector2.ZERO, 10.0 + 18.0 * strength, Color(PALE, 0.4 * strength))
+
+
+## The arena breathing while the Only One lives: motes of the Void rising from the
+## floor and pale embers drifting towards the boss, more of both with each phase.
+## Purely visual; it outlives nothing (the boss clears every hazard when it dies).
+class Ambience:
+	extends Hazard
+	var radius := 1000.0
+	var level := 0
+	var _rising: CPUParticles2D
+	var _embers: CPUParticles2D
+	const RISING: Array[int] = [60, 90, 130, 180]
+	const EMBERS: Array[int] = [20, 40, 70, 110]
+
+	func _init() -> void:
+		super()
+		z_index = 2
+
+	func _setup() -> void:
+		_rising = NelvarVoidFx.spark_emitter(VIOLET)
+		_rising.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+		_rising.emission_sphere_radius = radius
+		_rising.lifetime = 3.5
+		_rising.direction = Vector2(0.0, -1.0)
+		_rising.spread = 12.0
+		_rising.gravity = Vector2(0.0, -20.0)
+		_rising.initial_velocity_min = 20.0
+		_rising.initial_velocity_max = 70.0
+		_rising.scale_amount_max = NelvarVoidFx.SPARK_SIZE
+		add_child(_rising)
+		_embers = NelvarVoidFx.spark_emitter(PALE)
+		_embers.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE_SURFACE
+		_embers.emission_sphere_radius = radius * 0.8
+		_embers.lifetime = 2.6
+		_embers.gravity = Vector2.ZERO
+		_embers.radial_accel_min = -140.0
+		_embers.radial_accel_max = -80.0
+		_embers.tangential_accel_min = 30.0
+		_embers.tangential_accel_max = 70.0
+		_embers.scale_amount_max = NelvarVoidFx.SPARK_SIZE
+		add_child(_embers)
+		set_level(level)
+
+	func set_level(value: int) -> void:
+		level = clampi(value, 0, 3)
+		if _rising == null:
+			return
+		_rising.amount = RISING[level]
+		_embers.amount = EMBERS[level]
+		_rising.emitting = true
+		_embers.emitting = true
+
+	func _draw_glow() -> void:
+		# A slow ring of dim light sweeping out across the arena floor, like a pulse.
+		var period := 3.2 - level * 0.5
+		var k := fmod(age, period) / period
+		var ring := VIOLET
+		ring.a = 0.16 * (1.0 - k) * (0.6 + 0.2 * level)
+		_glow.draw_arc(Vector2.ZERO, radius * k, 0.0, TAU, 96, ring, 3.0 + 6.0 * (1.0 - k))
 
 
 ## The Only One forming: a pillar of cold light from the sigil, the Void streaming

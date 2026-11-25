@@ -1,27 +1,28 @@
 shader_type canvas_item;
 render_mode unshaded;
 
-// CanvasGroup shader of the Only One's body (the_one_body.gd). The group buffer
-// holds the assembled body. Phase IV turns it into an almost empty silhouette: its
-// edges crawl, the inside is the Void with fragments of the old form showing
-// through, a cold violet rim around it all. A hit flashes it pale violet.
-
+// The group buffer holds the assembled body. The last phase hollows it into a
+// crawling silhouette, with light from the old form and stars caught inside.
 uniform sampler2D screen_texture : hint_screen_texture, repeat_disable, filter_nearest;
-// 0 = the body as painted, 1 = only a silhouette of the Void is left.
 uniform float void_amount = 0.0;
-// How far the edges crawl, in screen pixels.
 uniform float distort = 0.0;
 uniform float flash = 0.0;
-// A cold rim along the whole silhouette, so the dark body stands out from the floor.
+uniform float split = 0.0;
 uniform float rim_amount = 0.0;
 uniform float time = 0.0;
-uniform vec4 rim_color : source_color = vec4(0.72, 0.58, 1.0, 1.0);
+uniform vec4 violet : source_color = vec4(0.62, 0.4, 1.0, 1.0);
+uniform vec4 pale : source_color = vec4(0.9, 0.84, 1.0, 1.0);
+uniform vec4 deep : source_color = vec4(0.32, 0.12, 0.7, 1.0);
 uniform vec4 void_color : source_color = vec4(0.02, 0.0, 0.05, 1.0);
 
 varying vec2 world_position;
+varying vec2 world_origin;
+varying vec2 screen_texel;
 
 void vertex() {
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 0.0, 1.0)).xy;
+	world_origin = MODEL_MATRIX[3].xy;
+	screen_texel = 3.0 * vec2(length(CANVAS_MATRIX[0].xy), length(CANVAS_MATRIX[1].xy));
 }
 
 float hash12(vec2 p) {
@@ -30,51 +31,51 @@ float hash12(vec2 p) {
 	return fract((p3.x + p3.y) * p3.z);
 }
 
-float value_noise(vec2 p) {
-	vec2 i = floor(p);
-	vec2 f = fract(p);
-	vec2 u = f * f * (3.0 - 2.0 * f);
-	return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), u.x),
-		mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x), u.y);
-}
-
-vec4 body_at(vec2 uv) {
-	vec4 c = textureLod(screen_texture, uv, 0.0);
-	if (c.a > 0.0001) {
-		c.rgb /= c.a;
-	}
-	return c;
+float body_alpha(vec2 uv) {
+	return textureLod(screen_texture, uv, 0.0).a;
 }
 
 void fragment() {
-	// Crawl on a coarse grid (one body texel is 3 world units), so it stays pixel art.
-	vec2 cell = floor(world_position / 3.0);
-	float t = floor(time * 12.0);
-	vec2 crawl = vec2(value_noise(cell / 3.0 + vec2(t * 0.37, 0.0)),
-		value_noise(cell / 3.0 + vec2(0.0, t * 0.41) + 17.0)) - 0.5;
-	vec2 uv = SCREEN_UV + crawl * distort * SCREEN_PIXEL_SIZE * 2.0;
-	vec4 c = body_at(uv);
-	float empty = 0.0;
-	if ((void_amount > 0.0 || rim_amount > 0.0) && c.a > 0.0) {
-		// Where the silhouette meets empty space.
-		vec2 step_uv = SCREEN_PIXEL_SIZE * 3.0;
-		empty += step(body_at(uv + vec2(step_uv.x, 0.0)).a, 0.01);
-		empty += step(body_at(uv - vec2(step_uv.x, 0.0)).a, 0.01);
-		empty += step(body_at(uv + vec2(0.0, step_uv.y)).a, 0.01);
-		empty += step(body_at(uv - vec2(0.0, step_uv.y)).a, 0.01);
+	vec2 cell = floor((world_position - world_origin) / 3.0);
+	vec2 step_uv = screen_texel * SCREEN_PIXEL_SIZE;
+	float tick = floor(time * 14.0);
+	vec2 uv = SCREEN_UV;
+	float streak = 0.0;
+	if (split > 0.0) {
+		float row = hash12(vec2(floor(cell.y / 2.0), tick));
+		streak = step(1.0 - 0.22 * split, row);
+		uv.x += (2.0 * step(0.5, fract(row * 11.0)) - 1.0) * step_uv.x * streak;
 	}
-	if (rim_amount > 0.0 && empty > 0.0) {
-		c.rgb = mix(c.rgb, rim_color.rgb, rim_amount);
+	if (distort > 0.0) {
+		float jitter = hash12(floor(cell / vec2(2.0, 3.0)) + vec2(tick, 13.0));
+		float shift = step(1.0 - 0.24 * distort, jitter) - step(jitter, 0.24 * distort);
+		uv.x += shift * step_uv.x;
 	}
-	if (void_amount > 0.0 && c.a > 0.0) {
-		// Fragments of the former body drift inside the silhouette.
-		float fragment = step(0.66, value_noise(cell / 4.0 + vec2(time * 0.6, -time * 0.4)));
-		vec3 inside = mix(void_color.rgb, c.rgb, fragment);
-		c.rgb = mix(c.rgb, inside, void_amount);
-		if (empty > 0.0) {
-			c.rgb = mix(c.rgb, rim_color.rgb, void_amount);
+	vec4 body = textureLod(screen_texture, uv, 0.0);
+	vec2 horizontal = vec2(step_uv.x, 0.0);
+	float left = body_alpha(uv - horizontal);
+	float right = body_alpha(uv + horizontal);
+	if (body.a > 0.001) {
+		vec3 ink = body.rgb / body.a;
+		vec2 vertical = vec2(0.0, step_uv.y);
+		float edge = 1.0 - min(min(left, right), min(body_alpha(uv - vertical), body_alpha(uv + vertical)));
+		float rim = edge * rim_amount;
+		if (void_amount > 0.0) {
+			float cloud = hash12(floor(cell / 3.0) + vec2(17.0, floor(time * 1.8)));
+			float star = step(0.978, hash12(cell));
+			float twinkle = 0.45 + 0.55 * sin(time * 3.7 + cloud * 12.0);
+			float bright = smoothstep(0.31, 0.77, max(max(ink.r, ink.g), ink.b));
+			vec3 abyss = mix(void_color.rgb, deep.rgb, cloud * 0.2);
+			abyss = mix(abyss, pale.rgb, star * (0.5 + 0.5 * twinkle));
+			abyss = mix(abyss, ink, max(bright, 0.24 * step(0.72, cloud)));
+			ink = mix(ink, abyss, void_amount);
+			rim = max(rim, edge * void_amount * (0.3 + 0.33 * cloud));
 		}
+		ink = mix(ink, violet.rgb, rim * (1.0 - 0.7 * clamp(max(ink.r, ink.b), 0.0, 1.0)));
+		body.rgb = mix(ink, pale.rgb, flash * 0.92);
+	} else {
+		float fringe = max(left, right) * max(streak * split, flash);
+		body = vec4(left > right ? deep.rgb : violet.rgb, fringe * 0.76);
 	}
-	c.rgb = mix(c.rgb, vec3(0.86, 0.8, 1.0), flash);
-	COLOR *= c;
+	COLOR *= body;
 }

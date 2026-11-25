@@ -17,6 +17,7 @@ extends Node2D
 ## The boss (NelvarTheOne) sets `pose`, `aim` and `phase`; the origin is the ground
 ## between its feet.
 
+const ATMOSPHERE := preload("res://scripts/void/boss/the_one_body_atmosphere.gd")
 const FORM_SHADER := preload("res://scripts/void/boss/the_one_form.gdshader")
 const WINDOW_SHADER := preload("res://scripts/void/boss/the_one_window.gdshader")
 ## Light it casts on the arena, per phase; sparks rising from its cracks, per phase.
@@ -47,6 +48,11 @@ var presence := 1.0
 var _form: CanvasGroup
 var _rig: Node2D
 var _pool: Node2D
+var _aura_light: Node2D
+var _aura_center := Vector2.ZERO
+var _core_position := Vector2.ZERO
+var _charge := 0.0
+var _hit := 0.0
 var _light: PointLight2D
 var _flare := 0.0
 var _ash: CPUParticles2D
@@ -82,13 +88,23 @@ var _glitch := 0.0
 
 func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	# A pool of the Void under its feet instead of a shadow.
+	# Keep the atmosphere behind the sprite so the arms and head read through it.
+	ATMOSPHERE.prepare()
 	_pool = Node2D.new()
 	_pool.name = "Pool"
 	_pool.z_index = -1
 	_pool.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_pool.draw.connect(_draw_pool)
 	add_child(_pool)
+	_aura_light = Node2D.new()
+	_aura_light.name = "CoronaLight"
+	_aura_light.z_index = -1
+	var aura_material := CanvasItemMaterial.new()
+	aura_material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	aura_material.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
+	_aura_light.material = aura_material
+	_aura_light.draw.connect(_draw_aura_light)
+	add_child(_aura_light)
 	_light = NelvarVoidFx.make_light(NelvarVoidFx.VIOLET, LIGHT_ENERGY[0], 400.0)
 	_light.position = Vector2(0.0, -LIGHT_HEIGHT * 0.5)
 	add_child(_light)
@@ -168,10 +184,10 @@ func _ready() -> void:
 func flash() -> void:
 	if _flash_tween != null:
 		_flash_tween.kill()
-	_material.set_shader_parameter("flash", 0.75)
+	_hit = 1.0
+	_material.set_shader_parameter("flash", _hit)
 	_flash_tween = create_tween()
-	_flash_tween.tween_method(func(v: float) -> void: _material.set_shader_parameter("flash", v),
-		0.75, 0.0, 0.14)
+	_flash_tween.tween_property(self, "_hit", 0.0, 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 ## Its light flares up for a moment (an attack, a hit, a phase change).
@@ -223,6 +239,13 @@ func _process(delta: float) -> void:
 func _update(delta: float) -> void:
 	_time += delta
 	_glitch = maxf(0.0, _glitch - delta)
+	_flare = maxf(0.0, _flare - delta * 2.5)
+	var charge_target := 0.0
+	if pose == &"windup":
+		charge_target = 1.0
+	elif pose == &"cast":
+		charge_target = 0.62
+	_charge = lerpf(_charge, charge_target, 1.0 - exp(-delta * 9.0))
 	if absf(aim.x) > 0.15:
 		_flip = signf(aim.x)
 	_update_quirks(delta)
@@ -256,11 +279,17 @@ func _apply() -> void:
 	_rig.position = Vector2(0.0, hover)
 	if _glitch > 0.0:
 		_rig.position += Vector2(randf_range(-4.0, 4.0), randf_range(-3.0, 3.0)).round()
+	if _hit > 0.12:
+		var kick := -_flip if _hit > 0.45 else _flip
+		_rig.position.x += kick * TEXEL
 	var torso: Sprite2D = _sprites["torso"]
 	var torso_rest: Dictionary = _rest["torso"]
 	torso.position = Vector2(0.0, -NelvarTheOnePainter.HIP_HEIGHT) + torso_rest["offset"]
 	torso.rotation = torso_rest["rotation"]
 	torso.scale = Vector2.ONE * TEXEL * Vector2(1.0, torso_rest["scale"])
+	var torso_transform := _rig.transform * torso.transform
+	_core_position = torso_transform * NelvarTheOnePainter.CORE_FROM_HIP
+	_aura_center = _core_position + Vector2(0.0, -10.0)
 	var gap := Vector2.ZERO
 	if phase >= 1:
 		gap = Vector2(LIMB_GAP, -1.5) * TEXEL
@@ -296,10 +325,12 @@ func _apply() -> void:
 		sprite.self_modulate.a = alpha
 		var glow: Sprite2D = _glows[name]
 		var strength: float = GLOW_STRENGTH[phase]
-		glow.modulate.a = alpha * strength * (0.75 + 0.25 * sin(_time * 3.0 + name.length()))
+		strength *= 0.75 + 0.25 * sin(_time * 3.0 + name.length())
+		strength += _flare * 0.32 + _charge * (0.82 if name == "arm_l" else 0.36)
+		glow.modulate.a = alpha * minf(strength, 1.0)
 	_form.modulate.a = presence
 	_pool.queue_redraw()
-	_flare = maxf(0.0, _flare - get_process_delta_time() * 2.5)
+	_aura_light.queue_redraw()
 	_light.energy = (LIGHT_ENERGY[phase] * (0.85 + 0.15 * sin(_time * 2.3)) + _flare) * presence
 	_light.position.y = _rig.position.y - LIGHT_HEIGHT
 	if _shown_phase != phase:
@@ -310,17 +341,21 @@ func _apply() -> void:
 	_sparks.emitting = presence > 0.3
 	if _window_material != null:
 		_window_material.set_shader_parameter("time", _time)
-		_window_material.set_shader_parameter("intensity", 0.6 + GLOW_STRENGTH[phase] * 0.6)
+		_window_material.set_shader_parameter("charge", clampf(_charge * 0.8 + _flare * 0.42, 0.0, 1.0))
+		_window_material.set_shader_parameter("visibility", _sprites["torso"].self_modulate.a)
 	_material.set_shader_parameter("time", _time)
+	_material.set_shader_parameter("flash", _hit)
+	var split := 0.65 if phase == 2 else 0.3 if phase == 3 else 0.0
+	_material.set_shader_parameter("split", maxf(split, maxf(_hit, 0.8 if _glitch > 0.0 else 0.0)))
 	_material.set_shader_parameter("void_amount", 1.0 if phase >= 3 else 0.0)
 	_material.set_shader_parameter("rim_amount", clampf(RIM[phase] * (0.8 + 0.2 * sin(_time * 3.0)) + _flare * 0.3, 0.0, 1.0))
 	var crawl := 0.0
 	if phase >= 3:
-		crawl = 3.0
+		crawl = 1.0
 	elif phase >= 2:
-		crawl = 0.8
+		crawl = 0.28
 	if _glitch > 0.0:
-		crawl = maxf(crawl, 4.0)
+		crawl = 1.0
 	_material.set_shader_parameter("distort", crawl)
 
 
@@ -440,11 +475,12 @@ func _draw_ghosts() -> void:
 		var then := _transform_at(name, delay)
 		var now: Transform2D = _history[0][1][name]
 		var drift := then.origin.distance_to(now.origin) + absf(then.get_rotation() - now.get_rotation()) * 40.0
-		# Sitting on its part the contour is hidden; only where it trails does it show.
-		var alpha := clampf((drift - 1.5) * 0.06, 0.0, 0.7)
+		# Keep the contours subdued beside the bright rim and orbiting shards.
+		var alpha := clampf((drift - 1.5) * 0.045, 0.0, 0.5)
 		if phase >= 3:
-			alpha = maxf(alpha, 0.4)
-			then.origin += Vector2(randf_range(-3.0, 3.0), randf_range(-3.0, 3.0)).round()
+			alpha = maxf(alpha, 0.22)
+			var jitter := NelvarPixelArt.hash01(name.length(), int(_time * 12.0), 0xD0)
+			then.origin.x += roundf(jitter * 2.0 - 1.0) * TEXEL
 		alpha *= maxf(presence, 0.35)
 		var sprite: Sprite2D = _sprites[name]
 		_ghosts.draw_set_transform_matrix(then)
@@ -460,35 +496,14 @@ func _transform_at(name: String, delay: float) -> Transform2D:
 	return _history[_history.size() - 1][1][name]
 
 
-## The pool of the Void under it: a dithered dark ellipse on the art grid with a
-## cold rim and tendrils that crawl out and back. Smaller when it hovers (IV).
+## The ground and corona use separate dark and additive layers.
 func _draw_pool() -> void:
-	var size := Vector2(52.0, 18.0) * (0.75 if phase >= 3 else 1.0) * (0.6 + 0.4 * presence)
-	if presence <= 0.01:
-		return
-	for y in range(-int(size.y), int(size.y) + 1, 3):
-		for x in range(-int(size.x), int(size.x) + 1, 3):
-			var d := Vector2(x / size.x, y / size.y).length_squared()
-			if d > 1.0:
-				continue
-			var cell := Vector2i(x / 3, y / 3)
-			if d > 0.6 and (1.0 - d) / 0.4 * 16.0 < NelvarPixelArt.bayer(cell) + 0.5:
-				continue
-			var color := NelvarVoidFx.DARK
-			color.a = 0.8 * presence
-			if d > 0.78:
-				color = NelvarVoidFx.DEEP
-				color.a = 0.55 * presence
-			_pool.draw_rect(Rect2(x, y, 3.0, 3.0), color)
-	# Tendrils: a few dotted strands that reach out and pull back.
-	var tendril := NelvarVoidFx.DEEP
-	for i in 6:
-		var angle := TAU * i / 6.0 + 0.4 * sin(_time * 0.7 + i)
-		var length := (0.4 + 0.6 * (0.5 + 0.5 * sin(_time * 1.3 + i * 1.7))) * size.x * 0.9
-		for step in range(0, int(length), 4):
-			var along := float(step)
-			var wave := sin(along * 0.12 + _time * 3.0 + i) * 4.0
-			var point := Vector2.from_angle(angle) * Vector2(1.0, 0.36) * (size.x * 0.8 + along)
-			point += Vector2.from_angle(angle).orthogonal() * wave * 0.4
-			tendril.a = (1.0 - along / maxf(length, 1.0)) * 0.7 * presence
-			_pool.draw_rect(Rect2((point / 3.0).floor() * 3.0, Vector2(3.0, 3.0)), tendril)
+	if presence > 0.01:
+		ATMOSPHERE.draw_shadow(_pool, _aura_center, _time, phase, presence,
+			clampf(_flare, 0.0, 1.0), _rig.position)
+
+
+func _draw_aura_light() -> void:
+	if presence > 0.01:
+		ATMOSPHERE.draw_light(_aura_light, _aura_center, _core_position, _time, phase, presence,
+			clampf(_flare, 0.0, 1.0), _charge)
