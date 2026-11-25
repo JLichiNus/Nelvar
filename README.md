@@ -81,6 +81,38 @@ standing still; storm core; last breath). The catalog is
 reads instead of its exports; the meter, the queue and the choice are
 `NelvarMutationDirector` under the player; the HUD is `ui/mutations/`.
 
+### Sound
+
+Three audio buses (`default_bus_layout.tres`): **Master**, **Music** and **SFX**.
+Every music player sends to Music and every sound to SFX; their volumes are
+set in Settings → «Аудио» (main menu and pause menu alike) and saved in
+`user://settings.cfg` (`GameSettings`). The settings panel is split into tabs:
+«Экран», «Интерфейс», «Аудио».
+
+Music during a run is the `GameMusic` autoload (`scripts/game_music.gd`): a
+track fades in, plays to its end, fades out, then 30 s of silence and the next
+track is picked at random from `PLAYLIST` (`assets/audio/music/game/`). It
+keeps playing through the pause menu and through a restart after death, and
+fades out when the main menu opens.
+
+Sound effects are synthesised by `tools/gen_sfx.py` (numpy only) into
+`assets/audio/sfx/`; run `python3 tools/gen_sfx.py` from the project root to
+rebuild them. The LMB shot has no sound of its own: each shot feeds a small,
+looped wind (`wind.wav`, `ShotWind` under the player) that holds while the
+next shot is due and dies down without shots. A tap is a short breath of wind,
+held LMB one even wind of the same volume — five separate sounds a second
+would wear the ear out. The wind eases in and drifts away rather than
+switching on and off; volume, fade and easing are exports on the player
+(`shot_wind_*`). The RMB wave is one gust that rushes ahead with it and sinks as
+it spreads (`wind_wave_1..3.wav` via `wind_wave.tres`, `WaveSound`). The R
+compression rushes air in and strikes softly on impact
+(`compression_start_*`), then holds a looped tight wind whose pitch rises over
+the squeeze (`compression_hold.wav`); when the compression ends, early or not,
+both fade out instead of cutting off. Flight (Shift) takes off with a soft upward gust
+(`flight_lift_*`), keeps a looped rush of air while airborne that is louder the
+faster the player flies (`flight_air.wav`, `FlightAir`) and settles with a
+soft low puff on landing (`flight_land_*`).
+
 `test_world.tscn` is a flat arena for tuning combat without the generator (F6).
 
 ### The Void (developer menu)

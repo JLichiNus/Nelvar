@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 
 FullscreenToggle="*res://scripts/fullscreen_toggle.gd"
 GameSettings="*res://scripts/game_settings.gd"
+GameMusic="*res://scripts/game_music.gd"
 
 [display]
 

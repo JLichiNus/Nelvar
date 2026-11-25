@@ -18,7 +18,7 @@ func _ready() -> void:
 	inventory_button.pressed.connect(_open_inventory)
 	inventory_panel.back_button.pressed.connect(_close_inventory)
 	%MainMenu.pressed.connect(_return_to_menu)
-	%Quit.pressed.connect(get_tree().quit)
+	%Quit.pressed.connect(GameMusic.quit_game)
 	settings_panel.back_button.pressed.connect(_close_settings)
 	settings_panel.dev_panel_toggled.connect(_on_dev_panel_toggled)
 
