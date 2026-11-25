@@ -17,7 +17,8 @@ func setup(data: NelvarWorldData, leaf: NelvarWorldData.Chunk,
 	name = "Chunk_%d_%d_D%d" % [int(position.x), int(position.y), leaf.depth]
 	if not leaf.borders.is_empty():
 		var body := StaticBody2D.new()
-		body.collision_layer = 1
+		# Edges stop enemies only: the player may step off into the sky.
+		body.collision_layer = NelvarWorldData.EDGE_LAYER
 		body.collision_mask = 2
 		add_child(body)
 		for border in leaf.borders:

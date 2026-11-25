@@ -333,8 +333,14 @@ thicker than in the forge. F3 shows the edge, the shore and the capes, the islan
 are now, the rings, the geysers and the splashes.
 
 The earth map contains 2–3 large floating islands and 6–7 small ones, connected
-by narrow wooden bridges. Shorelines and bridge sides block movement; falling
-and height differences are not implemented yet.
+by narrow wooden bridges. Shorelines and bridge sides are on their own physics
+layer 8 («Edges», `NelvarWorldData.EDGE_LAYER`): they stop enemies, but not the
+player or projectiles. Off the ground the player keeps going for a moment
+(`COYOTE_TIME` in `scripts/main.gd`), longer is a fall: they sink into the clouds,
+lose 10 HP and come back where they last stood firmly (`SAFE_CLEARANCE` from any
+edge, so the middle of a bridge counts). The flight (Shift) carries them over the
+sky, even from island to island, but landing in it is a fall too. Height
+differences are not implemented yet.
 
 The world wears the style of the air reality from the main menu. The islands
 float above a sea of clouds (`scripts/world/cloud_sea.gd` and its shader): puffy
