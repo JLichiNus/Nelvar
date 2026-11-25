@@ -1,43 +1,45 @@
 class_name NelvarCraterData
 extends NelvarFireData
-## The volcano (Огонь 2): the top of one huge mountain. A narrow rim of rock runs round
-## the crater; the crater is a lake of lava filled almost to the brim; islands float on
-## it, carried round the vent in its middle by rings of current. Beyond the rim's outer
-## edge is a sheer drop into clouds of ash far below; the camera, looking down from the
-## south, sees the mountain's front slope under the southern edge.
+## The volcano (Огонь 2): the top of one huge mountain. A broad rim of rock runs round
+## the crater; the crater is a lake of lava filled almost to the brim, with the vent in
+## its middle. Beyond the rim's outer edge is a sheer drop into clouds of ash far below;
+## the camera, looking down from the south, sees the mountain's front slope under the
+## southern edge.
+##
+## Floes of magma crust of every size and shape cover much of the lake, a step apart
+## from the shore to the vent's moat; they sway together on one slow swell, hold whoever
+## walks on them and carry them along. Some of them sink now and then (they warn first)
+## and come up again red-hot; their place and their sinking depend on the time only, so
+## every layout is reproducible.
 ##
 ## Nothing here is a wall. The lava and the edge are falls: a step over either holds for
-## a moment (COYOTE_TIME), then the player goes down. Anchors stand round the vent and
-## never sink; plates and rafts ride the rings (their place depends on the time only, so
-## every layout is reproducible) and sink now and then, and under weight.
+## a moment (COYOTE_TIME), then the player goes down.
 ##
 ## NelvarCraterGenerator builds it; crater_ground.gdshader draws the same geometry: the
-## lake, the capes and the anchors are computed the same way there (lava_depth), the
-## summit's edge is read from the same table of radii.
-
-enum IsleKind { ANCHOR, PLATE, RAFT }
+## lake and the capes are computed the same way there (lava_depth), the summit's edge is
+## read from the same table of radii.
 
 ## A step over the lava or the edge holds this long (seconds) before it is a fall.
 const COYOTE_TIME := 0.12
-## Ground reaches this far past an island's drawn edge (the body overhangs a little).
+## Ground reaches this far past a floe's drawn edge (the body overhangs a little).
 const EDGE_TOLERANCE := 6.0
 ## How round the capes meet the shore (world units).
 const CAPE_BLEND := 48.0
 ## A gap this wide is crossed at a run (the run covers about 54 in COYOTE_TIME).
 const RUN_GAP := 44.0
-## Islands never come closer than this to each other, to a cape or to an anchor.
+## Floes never come closer than this to each other.
 const MIN_GAP := 8.0
-## Sinking: the plate comes up red-hot (RISE), cools (COOL); warns (WARN) and goes down
+## Floes: samples of an outline for floe_gap, the cells they are filed by, and how far
+## past a floe's reach a query still finds it.
+const FLOE_GAP_SAMPLES := 48
+const FLOE_CELL := 256.0
+const FLOE_QUERY_MARGIN := 80.0
+## Sinking: the floe comes up red-hot (RISE), cools (COOL); warns (WARN) and goes down
 ## (DESCENT) before its time under.
 const RISE := 1.2
 const COOL := 2.0
 const WARN := 3.0
 const DESCENT := 1.2
-## Under weight: at this load the island settles (sinks a little), at 1 it goes down.
-const SETTLE_LOAD := 0.75
-const SETTLE_SINK := 0.12
-## Rafts stay under this long after sinking under someone.
-const RAFT_UNDER := 5.0
 
 
 ## The summit's edge: a radius per direction (a terrace pushes it out locally, which a
@@ -61,8 +63,7 @@ class Profile extends NelvarEarthData.Radial:
 		return best
 
 
-## A tongue of rock from the shore into the lake, narrowing to a round tip. The islands
-## of the outer ring pass close by its tip.
+## A tongue of rock from the shore into the lake, narrowing to a round tip.
 class Cape:
 	var angle := 0.0
 	## Its axis: from under the rim to the centre of the round tip.
@@ -87,46 +88,54 @@ class Cape:
 		return tip + base.direction_to(tip) * width_at(1.0)
 
 
-## An island: an anchor standing round the vent, or a plate or raft riding a ring of
-## current round it. Its shape lies round its own origin.
+## A floe of magma crust swaying round its own place. Its shape lies round that place.
 class Isle:
 	var id := 0
-	var kind := IsleKind.PLATE
 	var shape := NelvarEarthData.Radial.new()
-	## The vent for islands on a ring, the island's place for an anchor.
 	var center := Vector2.ZERO
-	## Ring index (-1 for anchors), distance of the centre from the vent, the angle at
-	## time 0 and radians per second (the sign is the way round).
-	var ring := -1
-	var orbit := 0.0
-	var phase := 0.0
-	var speed := 0.0
+	## Its sway round `center`: reach on x and y, radians per second on each, phases.
+	var drift := Vector4.ZERO
+	var drift_phase := Vector2.ZERO
+	var outline := PackedVector2Array()
+	var radii := PackedFloat32Array()
 	## Sinking by itself: seconds per cycle (0: never), where it starts, time under.
 	var sink_period := 0.0
 	var sink_phase := 0.0
-	var sink_under := 8.0
-	## Seconds of standing on it before it goes down (INF: never).
-	var hold_time := INF
+	var sink_under := 6.0
 	var appearance_seed := 0
 	## Smallest and largest radius of the shape.
 	var inner := 0.0
 	var outer := 0.0
-	## Play state (NelvarCraterMain): weight on it, 0..1, and when it last went down
-	## under it.
-	var weight := 0.0
-	var sank_at := -INF
-
-	func moving() -> bool:
-		return ring >= 0
 
 	func position_at(time: float) -> Vector2:
-		if ring < 0:
-			return center
-		return center + Vector2.from_angle(phase + speed * time) * orbit
+		return center + Vector2(drift.x * sin(drift.z * time + drift_phase.x),
+			drift.y * sin(drift.w * time + drift_phase.y))
+
+	func sinks() -> bool:
+		return sink_period > 0.0
+
+	## Furthest a floe strays from its place.
+	func drift_reach() -> float:
+		return Vector2(drift.x, drift.y).length()
+
+	## The outline sampled once (FLOE_GAP_SAMPLES round its place), for floe_gap.
+	func tabulate() -> void:
+		outline.resize(FLOE_GAP_SAMPLES)
+		radii.resize(FLOE_GAP_SAMPLES)
+		for i in FLOE_GAP_SAMPLES:
+			var angle := TAU * i / FLOE_GAP_SAMPLES
+			radii[i] = shape.radius_at(angle)
+			outline[i] = Vector2.from_angle(angle) * radii[i]
+
+	## The shape's radius read from the table.
+	func table_radius(angle: float) -> float:
+		var t := fposmod(angle, TAU) / TAU * FLOE_GAP_SAMPLES
+		var i := int(t) % FLOE_GAP_SAMPLES
+		return lerpf(radii[i], radii[(i + 1) % FLOE_GAP_SAMPLES], t - floorf(t))
 
 	## How far under it is, 0..1: the lava eats it from the edge inwards.
 	func sink_at(time: float) -> float:
-		return clampf(maxf(maxf(_cycle(time).x, _under_weight(time).x), _settle()), 0.0, 1.0)
+		return _cycle(time).x
 
 	## 0..1 in the seconds before it goes down by itself.
 	func warn_at(time: float) -> float:
@@ -134,7 +143,7 @@ class Isle:
 
 	## 1 as it comes up red-hot, 0 once cooled.
 	func hot_at(time: float) -> float:
-		return maxf(_cycle(time).z, _under_weight(time).z)
+		return _cycle(time).z
 
 	## How deep into it the lava eats when it is fully under: past its core, so nothing
 	## of it is left.
@@ -168,29 +177,6 @@ class Isle:
 		if c >= warn_at_time:
 			return Vector3(0.0, (c - warn_at_time) / WARN, 0.0)
 		return Vector3.ZERO
-
-	## The same after it went down under weight.
-	func _under_weight(time: float) -> Vector3:
-		var e := time - sank_at
-		if e < 0.0 or not is_finite(e):
-			return Vector3.ZERO
-		var under := RAFT_UNDER if kind == IsleKind.RAFT else sink_under
-		if e < DESCENT:
-			# It had settled already: it goes on down from there.
-			return Vector3(lerpf(SETTLE_SINK, 1.0, e / DESCENT), 1.0, 0.0)
-		e -= DESCENT
-		if e < under:
-			return Vector3(1.0, 1.0, 0.0)
-		e -= under
-		if e < RISE:
-			return Vector3(1.0 - e / RISE, 0.0, 1.0)
-		e -= RISE
-		if e < COOL:
-			return Vector3(0.0, 0.0, 1.0 - e / COOL)
-		return Vector3.ZERO
-
-	func _settle() -> float:
-		return smoothstep(SETTLE_LOAD, 1.0, weight) * SETTLE_SINK
 
 
 ## A geyser on the rim: rests, warns, then throws up a column of steam and fire.
@@ -231,15 +217,13 @@ var lake: NelvarEarthData.Radial
 var vent := Vector2.ZERO
 var vent_radius := 72.0
 var capes: Array[Cape] = []
-## Anchors first, then the islands of the rings.
-var isles: Array[Isle] = []
-## Per ring: inner and outer edge (distance from the vent), radians per second.
-var rings: Array[Vector3] = []
-## Where the anchors' outer edges lie from the vent.
-var anchor_reach := 0.0
 var geysers: Array[Geyser] = []
 ## Patches of boiling lava: centre and radius (z).
 var boils: Array[Vector3] = []
+## Floes of magma crust.
+var floes: Array[Isle] = []
+## Floes by cell (index_floes).
+var _floe_cells := {}
 ## Broad places of the rim: direction and angular half-width.
 var terraces: Array[Vector2] = []
 ## Fresh lava on the rim (NelvarCraterMain keeps it current): centre and radius (z).
@@ -247,30 +231,6 @@ var fresh_lava: Array[Vector3] = []
 ## The shared clock (NelvarCraterMain sets it each physics frame): hoppers ask where to
 ## land without a time.
 var now := 0.0
-
-
-func count_isles(kind: IsleKind) -> int:
-	var total := 0
-	for isle in isles:
-		if isle.kind == kind:
-			total += 1
-	return total
-
-
-func anchors() -> Array[Isle]:
-	var result: Array[Isle] = []
-	for isle in isles:
-		if not isle.moving():
-			result.append(isle)
-	return result
-
-
-func moving_isles() -> Array[Isle]:
-	var result: Array[Isle] = []
-	for isle in isles:
-		if isle.moving():
-			result.append(isle)
-	return result
 
 
 ## Positive on the summit, negative past its edge, world units.
@@ -284,50 +244,53 @@ func rim_width_at(angle: float) -> float:
 
 
 ## How deep the point lies in the lake's lava, world units: positive in it, negative on
-## the rim, the capes and the anchors. Floating islands are not counted (lava_depth_at).
+## the rim and the capes. Floes are not counted (lava_depth_at).
 func lava_depth(point: Vector2) -> float:
 	var ground := -lake.signed_distance(point)
 	if ground > 600.0:
 		return -ground
 	for cape in capes:
 		ground = smooth_max(ground, cape.signed_distance(point), CAPE_BLEND)
-	for isle in isles:
-		if isle.moving():
-			break
-		ground = maxf(ground, isle.depth_at(point, 0.0))
 	return -ground
 
 
-## The same with the floating islands as they are at `time` (sunk ones count less).
+## The same with the floes as they are at `time` (sunk ones count less).
 func lava_depth_at(point: Vector2, time: float) -> float:
 	var depth := lava_depth(point)
 	if depth <= 0.0:
 		return depth
-	for isle in isles:
-		if isle.moving():
-			depth = minf(depth, -isle.depth_at(point, time))
+	for floe: Isle in _floes_near(point):
+		depth = minf(depth, -floe.depth_at(point, time))
 	return depth
 
 
-## The floating island under the point at `time` (it carries whoever stands on it), or
-## null. Ground past its edge by `margin` counts.
+## The floe under the point at `time` (it carries whoever stands on it), or null. Ground
+## past its edge by `margin` counts.
 func carrier_at(point: Vector2, time: float, margin: float = EDGE_TOLERANCE) -> Isle:
-	for isle in isles:
-		if isle.moving() and isle.depth_at(point, time) > -margin:
-			return isle
+	for floe: Isle in _floes_near(point):
+		if floe.depth_at(point, time) > -margin:
+			return floe
 	return null
 
 
-## Any island under the point (anchors too), or null.
-func isle_at(point: Vector2, time: float, margin: float = 0.0) -> Isle:
-	for isle in isles:
-		if isle.depth_at(point, time) > -margin:
-			return isle
-	return null
+## Files the floes by the cells their sway can reach, with room for the margins asked of
+## carrier_at and lava_depth_at.
+func index_floes() -> void:
+	_floe_cells.clear()
+	for floe in floes:
+		var reach := floe.outer + floe.drift_reach() + FLOE_QUERY_MARGIN
+		var lo := ((floe.center - Vector2.ONE * reach) / FLOE_CELL).floor()
+		var hi := ((floe.center + Vector2.ONE * reach) / FLOE_CELL).floor()
+		for y in range(int(lo.y), int(hi.y) + 1):
+			for x in range(int(lo.x), int(hi.x) + 1):
+				var key := Vector2i(x, y)
+				if not _floe_cells.has(key):
+					_floe_cells[key] = []
+				_floe_cells[key].append(floe)
 
 
-func on_island(point: Vector2, margin: float = 0.0) -> bool:
-	return isle_at(point, now, margin) != null
+func _floes_near(point: Vector2) -> Array:
+	return _floe_cells.get(Vector2i((point / FLOE_CELL).floor()), [])
 
 
 ## The geyser whose mouth is under the point (`margin` beyond it), or null.
@@ -338,7 +301,7 @@ func geyser_at(point: Vector2, margin: float = 0.0) -> Geyser:
 	return null
 
 
-## Standing ground: on the summit, off the lava (anchors and capes count), out of the
+## Standing ground: on the summit, off the lava (capes count), out of the
 ## geysers' mouths; `margin` to spare.
 func is_open_ground(point: Vector2, margin: float = 0.0) -> bool:
 	if rim_depth(point) < margin:
@@ -364,21 +327,21 @@ static func smooth_max(a: float, b: float, k: float) -> float:
 	return maxf(a, b) + h * h * k * 0.25
 
 
-## Edge-to-edge gap between two islands at `time` (approximate for near-round shapes).
-static func isle_gap(a: Isle, b: Isle, time: float) -> float:
-	var pa := a.position_at(time)
-	var pb := b.position_at(time)
-	var offset := pb - pa
-	var distance := offset.length()
-	var angle := offset.angle()
-	return distance - a.shape.radius_at(angle) - b.shape.radius_at(angle + PI)
+## Narrowest lava between two floes at `time` (tabulated), measured from each one's
+## outline along rays from the other's place: never less than the true gap, exact in
+## sign (negative once they overlap). Fit for long and lobed shapes.
+static func floe_gap(a: Isle, b: Isle, time: float) -> float:
+	var offset := b.position_at(time) - a.position_at(time)
+	var best := INF
+	for i in FLOE_GAP_SAMPLES:
+		var p := a.outline[i] - offset
+		best = minf(best, p.length() - b.table_radius(p.angle()))
+		var q := b.outline[i] + offset
+		best = minf(best, q.length() - a.table_radius(q.angle()))
+	return best
 
 
-## Gap between an island at `time` and a cape's tip (approximate).
-static func cape_gap(isle: Isle, cape: Cape, time: float) -> float:
-	var at := isle.position_at(time)
-	var axis := cape.tip - cape.base
-	var t := clampf((at - cape.base).dot(axis) / axis.length_squared(), 0.0, 1.0)
-	var closest := cape.base + axis * t
-	var toward := at.direction_to(closest)
-	return at.distance_to(closest) - cape.width_at(t) - isle.shape.radius_at(toward.angle())
+## Most two floes on the same swell move apart or together.
+static func sway_between(a: Isle, b: Isle) -> float:
+	var d := (a.drift_phase - b.drift_phase) * 0.5
+	return Vector2(2.0 * a.drift.x * absf(sin(d.x)), 2.0 * a.drift.y * absf(sin(d.y))).length()

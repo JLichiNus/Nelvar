@@ -1,13 +1,13 @@
 class_name NelvarLavaSplashes
 extends Node2D
 ## Lava slopping over the volcano's shores. Every SPLASH_INTERVAL seconds (a sequence
-## drawn from the map's seed) a spot on the rim's shore or on a floating plate's edge,
+## drawn from the map's seed) a spot on the rim's shore or on a broad floe's edge,
 ## between 250 and 800 from the player (so they see it), bulges and bubbles (WARN_TIME),
 ## then a tongue of lava sloshes over it: whoever is in it is hurt and thrown back from
 ## the lake (NelvarCraterMain). The fresh lava burns and slows for FRESH_TIME, sets into
 ## a crust with glowing seams that is safe (COOL_TIME), and fades away (FADE_TIME).
 ##
-## Each splash is a decal drawn by lava_splashes.gdshader; on a plate it is the plate's
+## Each splash is a decal drawn by lava_splashes.gdshader; on a floe it is the floe's
 ## child and floats with it.
 
 signal struck(splash: Splash)
@@ -23,14 +23,16 @@ const FADE_TIME := 20.0
 const MAX_SPLASHES := 16
 const WIDTH := Vector2(80.0, 160.0)
 const REACH := Vector2(50.0, 110.0)
+## Splashes come over floes at least this broad (their smallest radius).
+const MIN_FLOE := 90.0
 
 enum Stage { WARN, FRESH, COOLING, FADING, GONE }
 
 
 class Splash:
-	## The plate it came over, or null on the rim.
+	## The floe it came over, or null on the rim.
 	var isle: NelvarCraterData.Isle
-	## Where the lava comes over: world on the rim, from the plate's centre on a plate.
+	## Where the lava comes over: world on the rim, from the floe's centre on a floe.
 	var origin := Vector2.ZERO
 	## Inland, away from the lava.
 	var direction := Vector2.DOWN
@@ -78,7 +80,7 @@ var data: NelvarCraterData
 var splashes: Array[Splash] = []
 ## Splashes so far (HUD and tests).
 var count := 0
-## The plates' nodes, by island id (a splash on a plate is drawn as their child).
+## The floes' nodes, by id (a splash on a floe is drawn as their child).
 var isle_nodes := {}
 
 var _rng := RandomNumberGenerator.new()
@@ -140,10 +142,10 @@ func rim_hazards(time: float) -> Array[Vector3]:
 	return result
 
 
-## A spot on the rim's shore, or on the edge of a plate afloat in range.
+## A spot on the rim's shore, or on the edge of a broad floe in range.
 func _place(time: float, around: Vector2) -> Splash:
 	for attempt in 40:
-		var splash := _on_plate(time, around) if _rng.randf() < 0.3 else _on_rim(around)
+		var splash := _on_floe(time, around) if _rng.randf() < 0.3 else _on_rim(around)
 		if splash != null:
 			splash.start = time
 			return splash
@@ -182,18 +184,18 @@ func _on_rim(around: Vector2) -> Splash:
 	return splash
 
 
-func _on_plate(time: float, around: Vector2) -> Splash:
-	var plates: Array[NelvarCraterData.Isle] = []
-	for isle in data.isles:
-		if isle.kind != NelvarCraterData.IsleKind.PLATE or not isle_nodes.has(isle.id):
+func _on_floe(time: float, around: Vector2) -> Splash:
+	var floes: Array[NelvarCraterData.Isle] = []
+	for isle in data.floes:
+		if isle.inner < MIN_FLOE or not isle_nodes.has(isle.id):
 			continue
 		var distance := isle.position_at(time).distance_to(around)
 		if distance > RANGE.x and distance < RANGE.y and isle.sink_at(time) < 0.01 \
 				and isle.sink_at(time + WARN_TIME + FRESH_TIME) < 0.01:
-			plates.append(isle)
-	if plates.is_empty():
+			floes.append(isle)
+	if floes.is_empty():
 		return null
-	var isle := plates[_rng.randi_range(0, plates.size() - 1)]
+	var isle := floes[_rng.randi_range(0, floes.size() - 1)]
 	for other in splashes:
 		if other.isle == isle:
 			return null
@@ -207,7 +209,7 @@ func _on_plate(time: float, around: Vector2) -> Splash:
 	return splash
 
 
-## Puts a splash in play (its decal, on the plate's node when it is on a plate).
+## Puts a splash in play (its decal, on the floe's node when it is on a floe).
 func add(splash: Splash) -> void:
 	count += 1
 	var size := ceili(maxf(splash.reach, splash.width * 0.5) / STEP) + 8

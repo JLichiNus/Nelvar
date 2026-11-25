@@ -1,14 +1,14 @@
 shader_type canvas_item;
 render_mode unshaded;
 
-// A floating island of the volcano (NelvarCraterIsland): the forge's black plates with
-// glowing seams (fire_common's plates()), on a raft a thinner crust of small plates. Its
-// south face shows as a dark row lit red from below. It warns before it sinks (its seams
+// A floe of magma crust on the volcano's lake (NelvarCraterIsland): dark plates whose
+// seams glow and dim slowly, a red-hot edge where the lava laps at it. Its south face
+// shows as a dark row lit red from below. A floe that sinks warns first (its seams
 // flare, lava bubbles along its edge), sinks from the edge inwards with a seam of lava
-// eating in, comes up red-hot and cools; under weight it cracks.
+// eating in, comes up red-hot and cools.
 //
-// TEXTURE is its mask (R: in from the edge, G: south face, A: island), one texel per art
-// pixel; the pattern is the island's own and floats with it.
+// TEXTURE is its mask (R: in from the edge, G: south face, A: floe), one texel per art
+// pixel; the pattern is the floe's own and floats with it.
 
 uniform float time = 0.0;
 uniform vec2 seed_offset;
@@ -18,9 +18,6 @@ uniform float sink = 0.0;
 uniform float warn = 0.0;
 // 1 just come up, 0 cooled.
 uniform float hot = 0.0;
-// Weight on it, 0..1.
-uniform float crack = 0.0;
-uniform float raft = 0.0;
 
 #include "res://scripts/fire/fire_common.gdshaderinc"
 
@@ -36,30 +33,17 @@ void fragment() {
 	if (inside <= sink) {
 		discard;
 	}
-	vec3 color;
-	if (raft > 0.5) {
-		// A raft: a crust of small floes with red joints.
-		vec3 c = cells(np / 3.5);
-		color = c.y < 0.08 ? PAL[LAVA + 1] : ramp(CRUST, 3, 0.25 + c.z * 0.7 + (value_noise(np * 0.4) - 0.5) * 0.2, px);
-		if (c.y < 0.05 && sin(time * 2.1 + c.z * 30.0) > 0.4) {
-			color = PAL[LAVA + 2];
-		}
-	} else {
-		// Bigger plates than the forge's: an island is a raft of a few of them.
-		color = plates(px, np * 0.75, -10.0);
+	// Flat dark plates (no dithering: it drifts as one), seams at least a pixel wide.
+	vec3 cell = cells(np / 8.0);
+	float tone = cell.z + (value_noise(np / 6.0 + cell.z * 13.0) - 0.5) * 0.4;
+	vec3 color = tone < 0.3 ? PAL[CRUST] : (tone < 0.72 ? PAL[CRUST + 1] : PAL[CRUST + 2]);
+	if (cell.y < 0.16) {
+		color = sin(time * 1.4 + cell.z * 23.0) > 0.4 ? PAL[LAVA + 2] : PAL[LAVA + 1];
 	}
 	// The lake lights everything round it (fire_glow): the stone is kept darker so the
-	// islands stay black under that light; seams keep their glow.
+	// floes stay dark under that light; seams keep their glow.
 	if (color.r < 0.4) {
 		color *= 0.72;
-	}
-	// Weight opens wide cracks across it, glowing deeper as it settles.
-	if (crack > 0.45) {
-		vec3 big = cells(np / 13.0 + 31.0);
-		float open = (crack - 0.45) * 0.14;
-		if (big.y < open) {
-			color = crack > 0.8 ? PAL[LAVA + 3] : PAL[LAVA + 1];
-		}
 	}
 	// Before it sinks by itself: the seams flare, bubbles along the edge.
 	if (warn > 0.0) {
@@ -79,11 +63,9 @@ void fragment() {
 			color = ramp(LAVA, 6, 0.15 + glow * 0.5 - c.y * 1.5, px);
 		}
 	}
-	// The outline: a near-black edge against the lava, and the south face lit from below.
-	if (inside < 0.03 + sink) {
-		color = PAL[FLOW_EDGE];
-	} else if (inside < 0.06 + sink) {
-		color = PAL[CRUST];
+	// The edge: red-hot where the lava laps at it; the south face lit from below.
+	if (inside < 0.035) {
+		color = PAL[LAVA];
 	}
 	if (sink > 0.0 && inside < sink + 0.06) {
 		color = inside < sink + 0.03 ? PAL[LAVA + 4] : PAL[LAVA + 2];

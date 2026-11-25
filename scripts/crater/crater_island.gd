@@ -1,13 +1,13 @@
 class_name NelvarCraterIsland
 extends Node2D
-## A floating island of the volcano's lake on screen: black plates with glowing seams (a
-## raft: a thinner crust) drawn by crater_island.gdshader from a mask baked once:
+## A floe of magma crust on the volcano's lake on screen: dark plates with glowing seams
+## drawn by crater_island.gdshader from a mask baked once:
 ##   R — how far in from the edge over Isle.sink_depth(), 0 at the edge (sinking eats
 ##       it from 0 up: the same rule as NelvarCraterData.Isle.depth_at);
 ##   G — the south face: 1 on the lowest row above the lava, 2 on the one above it;
-##   A — 255 on the island.
-## The pattern belongs to the island and floats with it. The node sits on whole art
-## pixels (the island's exact place is the logic's); NelvarCraterMain syncs it with the
+##   A — 255 on the floe.
+## The pattern belongs to the floe and floats with it. The node sits on whole art
+## pixels (the floe's exact place is the logic's); NelvarCraterMain syncs it with the
 ## shared clock every frame.
 
 const SHADER := preload("res://scripts/crater/crater_island.gdshader")
@@ -34,12 +34,11 @@ func setup(spec: NelvarCraterData.Isle, image: Image) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = spec.appearance_seed
 	_material.set_shader_parameter("seed_offset", Vector2(rng.randi_range(-4096, 4096), rng.randi_range(-4096, 4096)))
-	_material.set_shader_parameter("raft", 1.0 if spec.kind == NelvarCraterData.IsleKind.RAFT else 0.0)
 	material = _material
 	sync(0.0, 0.0)
 
 
-## The mask of an island's shape (on a worker thread: no textures here).
+## The mask of a floe's shape (on a worker thread: no textures here).
 static func bake_mask(spec: NelvarCraterData.Isle) -> Image:
 	var r := ceili(spec.outer / STEP) + 2
 	var size := r * 2 + 1
@@ -76,4 +75,3 @@ func sync(time: float, clock: float) -> void:
 	_material.set_shader_parameter("sink", isle.sink_at(time))
 	_material.set_shader_parameter("warn", isle.warn_at(time))
 	_material.set_shader_parameter("hot", isle.hot_at(time))
-	_material.set_shader_parameter("crack", isle.weight)

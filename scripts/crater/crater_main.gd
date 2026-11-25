@@ -1,25 +1,28 @@
 class_name NelvarCraterMain
 extends Node2D
 ## The volcano, Огонь 2 (developer setting "Запускать игру в Огне 2"): the top of one
-## huge mountain. The player runs round the crater's narrow rim; the crater is a lake of
-## lava with islands afloat on it; below the summit's edge clouds of ash drift far down.
+## huge mountain. The player runs round the crater's broad rim; the crater is a lake of
+## lava crowded with floes of magma crust; below the summit's edge clouds of ash drift
+## far down.
 ##
-## Nothing here is a wall. A step into the lava or off the edge holds for a moment
+## Nothing here is a wall. The floes drift slowly on the lava; they hold the player,
+## unharmed, and carry them along; some sink now and then (their seams flare first) and
+## come up again. A step into the lava or off the edge holds for a moment
 ## (NelvarCraterData.COYOTE_TIME, sparks hiss under the player over the lava), then the
 ## player falls: into the lava they burn, off the edge they drop into the clouds; either
-## way they come back where they last stood safely (on the rim or an anchor), hurt.
-## Floating islands carry whoever stands on them; plates sink now and then by themselves
-## (they warn first) and under someone who stands still too long, rafts almost at once.
+## way they come back where they last stood safely (on the rim or on a floe that never
+## sinks), hurt.
 ## Geysers erupt and throw whoever stands in them up and along their run-up. Lava
 ## splashes over the shores: the fresh lava burns and slows, then sets into a safe crust.
 ## Hoppers burn in the lava and die off the edge, the wind can blow them either way.
 ##
 ## Loading paints the things on several cores (as the forge does); the floor, the clouds
-## below, the islands, the light and the heat haze are drawn on the GPU.
+## below, the floes, the light and the heat haze are drawn on the GPU.
 
 const STEP := NelvarFireData.PIXEL
+## Floes this far outside the view are still kept in place on screen.
+const FLOE_VIEW_MARGIN := 400.0
 const MOLTEN_SHADER := preload("res://scripts/fire/fire_molten.gdshader")
-const IsleKind = NelvarCraterData.IsleKind
 ## Burning in the lava, and dropping off the edge.
 const LAVA_DAMAGE := 20.0
 const SINK_TIME := 0.45
@@ -41,8 +44,8 @@ const SPLASH_PUSH := 520.0
 const FRESH_DAMAGE := 4.0
 const FRESH_INTERVAL := 0.5
 const FRESH_SLOW := 0.6
-const HINT_SINK := "Остров не выдержит, если стоять на месте. Двигайся"
-const HINT_FAR := "Слишком далеко. Разбегись (Ctrl), взлети (Shift) или дождись, пока остров подплывёт"
+const HINT_SINK := "Эта плита уходит под лаву: когда её швы разгораются, сходи с неё"
+const HINT_FAR := "Лава не держит. Иди по плитам магмы, разбегись (Ctrl) или взлети (Shift)"
 const MESSAGE_FADE := 0.6
 const MESSAGE_HOLD := 3.0
 const MAX_GEYSERS := 10
@@ -53,13 +56,12 @@ const MAX_FLARES := 8
 var data: NelvarCraterData
 var thing_nodes: Array[NelvarFireThing] = []
 var isle_nodes: Array[NelvarCraterIsland] = []
-## Falls so far: into the lava and off the edge; islands sunk under weight; eruptions.
+## Falls so far: into the lava and off the edge; eruptions.
 var burns := 0
 var drops := 0
-var sunk := 0
 var eruptions := 0
 
-## The shared clock: the islands' places and the geysers' cycles follow it.
+## The shared clock: the floes' places and sinking and the geysers' cycles follow it.
 var clock := 0.0
 var _time := 0.0
 var _swaying: Array[NelvarFireThing] = []
@@ -70,10 +72,13 @@ var _arts: Array = []
 var _masks: Array = []
 var _field: NelvarCraterField
 var _molten_material: ShaderMaterial
+## Where the player last stood safely: on the rim, or on a floe that never sinks (then
+## relative to it, as it drifts).
 var _safe_position := Vector2.ZERO
+var _safe_floe: NelvarCraterData.Isle
 var _over_time := 0.0
 var _falling := false
-## The floating island the player stands on (null on the rim), and the last one.
+## The floe the player stands on (null on the rim).
 var _riding: NelvarCraterData.Isle
 var _geyser_stage := PackedInt32Array()
 var _geyser_thrown := {}
@@ -145,15 +150,14 @@ func _ready() -> void:
 	enemy_spawner.call("start_on", data)
 	seed_label.text = "ОГОНЬ 2 · ВУЛКАН · СИД %d" % data.world_seed
 	_update_status()
-	print("Nelvar volcano seed: %d | anchors: %d | plates: %d | rafts: %d | capes: %d | geysers: %d | boils: %d | things: %d | %d ms" % [
-		data.world_seed, data.count_isles(IsleKind.ANCHOR), data.count_isles(IsleKind.PLATE),
-		data.count_isles(IsleKind.RAFT), data.capes.size(), data.geysers.size(), data.boils.size(),
-		data.things.size(), Time.get_ticks_msec() - started])
+	print("Nelvar volcano seed: %d | floes: %d (%d sink) | capes: %d | geysers: %d | boils: %d | things: %d | %d ms" % [
+		data.world_seed, data.floes.size(), data.floes.filter(func(floe: NelvarCraterData.Isle) -> bool: return floe.sinks()).size(),
+		data.capes.size(), data.geysers.size(), data.boils.size(), data.things.size(), Time.get_ticks_msec() - started])
 
 
 func _update_status() -> void:
-	status_label.text = "%d островов · %d гейзеров · выплесков: %d · падений: %d" % [
-		data.isles.size(), data.geysers.size(), splashes.count, burns + drops]
+	status_label.text = "%d плит магмы · %d гейзеров · выплесков: %d · падений: %d" % [
+		data.floes.size(), data.geysers.size(), splashes.count, burns + drops]
 
 
 # --- Building -------------------------------------------------------------------
@@ -167,8 +171,8 @@ func _build_debug() -> void:
 	add_child(_outlines)
 
 
-## F3: the summit's edge and the shore, the islands as they are now (sunk parts left
-## out), the rings they ride, the geysers' mouths and the splashes' tongues.
+## F3: the summit's edge and the shore, the floes as they are now (sunk parts left out;
+## the ones that sink in cyan), the geysers' mouths and the splashes' tongues.
 func _draw_outlines() -> void:
 	var closed := func(polygon: PackedVector2Array) -> PackedVector2Array:
 		var line := polygon.duplicate()
@@ -189,17 +193,14 @@ func _draw_outlines() -> void:
 			var t := 1.0 - i / 12.0
 			outline.append(cape.base + axis * t - side * cape.width_at(t))
 		_outlines.draw_polyline(outline, Color.ORANGE, 2.0)
-	for ring in data.rings:
-		_outlines.draw_arc(data.vent, ring.x, 0.0, TAU, 96, Color(1.0, 0.8, 0.3, 0.35), 1.0)
-		_outlines.draw_arc(data.vent, ring.y, 0.0, TAU, 96, Color(1.0, 0.8, 0.3, 0.35), 1.0)
-	for isle in data.isles:
+	for isle in data.floes:
 		var at := isle.position_at(clock)
 		var sink := isle.sink_at(clock) * isle.sink_depth()
 		var outline := PackedVector2Array()
 		for i in 41:
 			var angle := TAU * i / 40.0
 			outline.append(at + Vector2.from_angle(angle) * maxf(0.0, isle.shape.radius_at(angle) - sink))
-		_outlines.draw_polyline(outline, Color.CYAN if isle.moving() else Color.GREEN, 2.0)
+		_outlines.draw_polyline(outline, Color.CYAN if isle.sinks() else Color.ORANGE_RED, 2.0)
 	for geyser in data.geysers:
 		_outlines.draw_arc(geyser.position, geyser.radius + NelvarPlayer.BODY_RADIUS, 0.0, TAU, 24,
 			Color.YELLOW if geyser.stage_at(clock) == 2 else Color.KHAKI, 2.0)
@@ -213,17 +214,16 @@ func _draw_outlines() -> void:
 		_outlines.draw_polyline(outline, Color.RED, 2.0)
 
 
-## Things on the rim and the anchors, painted on several cores; the islands' masks and
-## the ground map are made alongside.
+## Things on the rim, painted on several cores; the floes' masks and the ground map are
+## made alongside.
 func _paint_world() -> void:
 	_painting.append_array(data.things)
 	_arts.resize(_painting.size())
-	var moving := data.moving_isles()
-	_masks.resize(moving.size())
+	_masks.resize(data.floes.size())
 	var field_task := WorkerThreadPool.add_task(_build_field, true, "Volcano ground map")
 	var group := WorkerThreadPool.add_group_task(_paint_thing, _painting.size(), _painters, true, "Volcano art")
-	var mask_group := WorkerThreadPool.add_group_task(_bake_mask.bind(moving), moving.size(), _painters, true,
-		"Volcano islands")
+	var mask_group := WorkerThreadPool.add_group_task(_bake_mask.bind(data.floes), data.floes.size(), _painters, true,
+		"Volcano floes")
 	WorkerThreadPool.wait_for_group_task_completion(group)
 	WorkerThreadPool.wait_for_group_task_completion(mask_group)
 	WorkerThreadPool.wait_for_task_completion(field_task)
@@ -248,9 +248,9 @@ func _paint_world() -> void:
 		if art.vent.is_finite():
 			wisps.append(thing.position + art.vent * STEP)
 		sparks.append_array(node.spark_points())
-	for i in moving.size():
+	for i in data.floes.size():
 		var node := NelvarCraterIsland.new()
-		node.setup(moving[i], _masks[i])
+		node.setup(data.floes[i], _masks[i])
 		world_layer.add_child(node)
 		world_layer.move_child(node, 0)
 		isle_nodes.append(node)
@@ -271,8 +271,8 @@ func _paint_thing(index: int) -> void:
 	_arts[index] = _painter.paint(_painting[index])
 
 
-func _bake_mask(index: int, moving: Array[NelvarCraterData.Isle]) -> void:
-	_masks[index] = NelvarCraterIsland.bake_mask(moving[index])
+func _bake_mask(index: int, floes: Array[NelvarCraterData.Isle]) -> void:
+	_masks[index] = NelvarCraterIsland.bake_mask(floes[index])
 
 
 func _build_field() -> void:
@@ -308,33 +308,12 @@ func _setup_ground() -> void:
 	material.set_shader_parameter("cape_line", lines)
 	material.set_shader_parameter("cape_form", forms)
 	material.set_shader_parameter("cape_blend", NelvarCraterData.CAPE_BLEND)
-	var shapes: Array[Vector4] = []
-	var amps := PackedFloat32Array()
-	var phases := PackedFloat32Array()
-	for anchor in data.anchors():
-		shapes.append(Vector4(anchor.center.x, anchor.center.y, anchor.shape.axes.x, anchor.shape.axes.y))
-		amps.append_array(anchor.shape.amplitudes)
-		phases.append_array(anchor.shape.phases)
-	material.set_shader_parameter("anchor_count", shapes.size())
-	while shapes.size() < 4:
-		shapes.append(Vector4.ZERO)
-	amps.resize(24)
-	phases.resize(24)
-	material.set_shader_parameter("anchor_shape", shapes)
-	material.set_shader_parameter("anchor_amp", amps)
-	material.set_shader_parameter("anchor_phase", phases)
 	material.set_shader_parameter("vent", Vector3(data.vent.x, data.vent.y, data.vent_radius))
 	var boils: Array[Vector3] = data.boils.duplicate()
 	material.set_shader_parameter("boil_count", boils.size())
 	while boils.size() < 6:
 		boils.append(Vector3(0.0, 0.0, 1.0))
 	material.set_shader_parameter("boils", boils.slice(0, 6))
-	var rings: Array[Vector3] = data.rings.duplicate()
-	material.set_shader_parameter("ring_count", rings.size())
-	while rings.size() < 3:
-		rings.append(Vector3.ZERO)
-	material.set_shader_parameter("rings", rings.slice(0, 3))
-	material.set_shader_parameter("ring_gap", config.ring_gap)
 	material.set_shader_parameter("geyser_count", mini(data.geysers.size(), MAX_GEYSERS))
 	material.set_shader_parameter("slope_tex", _field.slope_texture())
 	material.set_shader_parameter("slope_origin", float(_field.slope_origin))
@@ -407,8 +386,11 @@ func _process(delta: float) -> void:
 	for node in _swaying:
 		if view.has_point(node.position):
 			node.set_gust(gust(node.position))
+	# Floes off screen wait (there are a couple of hundred); they only drift.
+	var floe_view := view.grow(FLOE_VIEW_MARGIN)
 	for node in isle_nodes:
-		node.sync(clock, _time)
+		if floe_view.has_point(node.position):
+			node.sync(clock, _time)
 	var gusts := NelvarEmbers.gusts_in(self)
 	embers.gusts = gusts
 	smoke.gusts = gusts
@@ -467,7 +449,7 @@ func _physics_process(delta: float) -> void:
 	_carry(next)
 	clock = next
 	data.now = clock
-	_weigh(delta)
+	_sinking(delta)
 	_geysers()
 	splashes.step(clock, player.global_position)
 	data.fresh_lava = splashes.rim_hazards(clock)
@@ -496,10 +478,14 @@ func _physics_process(delta: float) -> void:
 		return
 	_over_time = 0.0
 	if _is_safe(point):
+		_safe_floe = null
 		_safe_position = point
+	elif _riding != null and _is_safe_on(_riding, point):
+		_safe_floe = _riding
+		_safe_position = point - _riding.position_at(clock)
 
 
-## Floating islands carry whoever stands on them from `clock` to `next`.
+## Floes carry whoever stands on them from `clock` to `next`.
 func _carry(next: float) -> void:
 	_riding = null
 	if not player.is_falling() and not player.is_airborne() and not _falling:
@@ -515,8 +501,7 @@ func _carry(next: float) -> void:
 			body.global_position += carrier.position_at(next) - carrier.position_at(clock)
 
 
-## Firm ground: the rim or an anchor, away from the lava, the edge, the geysers and any
-## splash.
+## Firm ground: the rim, away from the lava, the edge, the geysers and any splash.
 func _is_safe(point: Vector2) -> bool:
 	var spare := NelvarPlayer.BODY_RADIUS + SAFE_MARGIN
 	if data.rim_depth(point) < spare or data.lava_depth(point) > -spare:
@@ -526,32 +511,33 @@ func _is_safe(point: Vector2) -> bool:
 	return not splashes.active_near(point, clock, spare) and splashes.fresh_at(point, clock) == null
 
 
-## Weight on the island under the player: it settles, then goes down; it recovers half as
-## fast once they leave.
-func _weigh(delta: float) -> void:
-	var standing: NelvarCraterData.Isle = null
-	if not player.is_airborne() and not player.is_falling() and not _falling:
-		standing = data.carrier_at(player.global_position, clock, 0.0)
-	for isle in data.isles:
-		if not isle.moving() or not is_finite(isle.hold_time):
+## Firm ground on a floe: one that never sinks, well in from its edge, out of any splash.
+func _is_safe_on(floe: NelvarCraterData.Isle, point: Vector2) -> bool:
+	var spare := NelvarPlayer.BODY_RADIUS + SAFE_MARGIN
+	if floe.sinks() or floe.depth_at(point, clock) < spare:
+		return false
+	return not splashes.active_near(point, clock, spare) and splashes.fresh_at(point, clock) == null
+
+
+## Where a fall brings the player back.
+func _safe_spot() -> Vector2:
+	if _safe_floe != null:
+		return _safe_floe.position_at(clock) + _safe_position
+	return _safe_position
+
+
+## Lava licks at the edges of the floes going down and warning (near the view only).
+func _sinking(delta: float) -> void:
+	var around := player.global_position
+	for floe in data.floes:
+		if not floe.sinks() or floe.center.distance_squared_to(around) > 1400.0 * 1400.0:
 			continue
-		if isle == standing and isle.sink_at(clock) < 0.5:
-			isle.weight += delta / isle.hold_time
-			if isle.weight >= 0.5 and randf() < delta * 3.0:
-				embers.burst(player.global_position + Vector2(randf_range(-30, 30), randf_range(-16, 16)), 1, 0.4)
-			if isle.weight >= 1.0:
-				isle.weight = 0.0
-				isle.sank_at = clock
-				sunk += 1
-		else:
-			isle.weight = maxf(0.0, isle.weight - delta / (isle.hold_time * 2.0))
-		# Lava licks at a sinking edge.
-		var sink := isle.sink_at(clock)
-		if (sink > 0.0 and sink < 1.0) or isle.warn_at(clock) > 0.3:
+		var sink := floe.sink_at(clock)
+		if (sink > 0.0 and sink < 1.0) or floe.warn_at(clock) > 0.3:
 			if randf() < delta * 6.0:
 				var angle := randf() * TAU
-				var edge := isle.position_at(clock) + Vector2.from_angle(angle) \
-					* maxf(0.0, isle.shape.radius_at(angle) - sink * isle.sink_depth())
+				var edge := floe.position_at(clock) + Vector2.from_angle(angle) \
+					* maxf(0.0, floe.shape.radius_at(angle) - sink * floe.sink_depth())
 				embers.flame(edge, 1, 4.0)
 
 
@@ -640,7 +626,7 @@ func _fresh_lava(delta: float) -> void:
 		embers.flame(player.global_position, 2, 8.0)
 
 
-## Hoppers in the lava burn up; off the edge they are gone; in fresh lava they hurt.
+## Hoppers in the lava burn up (floes hold them); off the edge they are gone.
 func _enemies(_delta: float) -> void:
 	for enemy in get_tree().get_nodes_in_group("enemies"):
 		var body := enemy as Node2D
@@ -663,7 +649,7 @@ func _burn() -> void:
 	burns += 1
 	var hint := ""
 	var last := _riding if _riding != null else data.carrier_at(player.global_position, clock, 60.0)
-	if last != null and (last.sink_at(clock) > 0.0 or last.sank_at > clock - 3.0):
+	if last != null and last.sinks() and (last.sink_at(clock) > 0.0 or last.warn_at(clock) > 0.0):
 		if not _hinted_sink:
 			_hinted_sink = true
 			hint = HINT_SINK
@@ -678,7 +664,7 @@ func _burn() -> void:
 	_falling = false
 	if not is_instance_valid(player):
 		return
-	player.recover_at(_safe_position)
+	player.recover_at(_safe_spot())
 	player.take_damage(LAVA_DAMAGE)
 	if not hint.is_empty():
 		say(hint)
@@ -694,7 +680,7 @@ func _drop() -> void:
 	_falling = false
 	if not is_instance_valid(player):
 		return
-	player.recover_at(_safe_position)
+	player.recover_at(_safe_spot())
 	player.take_damage(CLIFF_DAMAGE)
 
 

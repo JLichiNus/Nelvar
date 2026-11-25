@@ -1,33 +1,26 @@
 class_name NelvarCraterGenerator
 extends RefCounted
-## Lays out the volcano from a seed: the crater lake and its vent, the anchors round the
-## vent and the rings of floating islands round them, the capes reaching for the outer
-## ring, the narrow rim with its terraces, the spawn on the southern terrace, boiling
-## patches, roads of cooled lava (a ring along the rim, spurs to the capes and terraces),
-## geysers, fumaroles under smoke banks, and the stones, snags and few plants of the top.
-##
-## The rings are set so that nothing ever collides: each ring keeps to its own band of
-## distance from the vent, `ring_gap` from the next one, the anchors inside the first and
-## the capes' tips outside the last. Every island spans its band (its size differs from
-## the ring's biggest by `ring_slack` at most), so it comes within a short run of each
-## island of the neighbouring rings as they pass each other, of the anchors or of the
-## capes. The generator samples every pair over a full turn to make sure.
+## Lays out the volcano from a seed: the crater lake and its vent, the capes reaching
+## into it, the broad rim with its terraces, the spawn on the southern terrace, boiling
+## patches, floes of magma crust grown out from the shore across the lake (some of them
+## sink now and then and come up again), roads of cooled lava (a ring along the rim,
+## spurs to the capes and terraces), geysers, fumaroles under smoke banks, and the
+## stones, snags and few plants of the top.
 ##
 ## Every stage draws from its own seeded generator, so changing one leaves the others.
 
 const Kind = NelvarFireData.Kind
 const Species = NelvarFireData.Species
 const Stone = NelvarFireData.Stone
-const IsleKind = NelvarCraterData.IsleKind
 
 const GRID := 160.0
 const PROFILE_SAMPLES := 1440
-## Islands are almost round: their gaps are tight. Bounds on how far their outline
-## strays from the radius (the bends, and the short axis).
-const ISLE_WOBBLE := 0.03
-const ISLE_REACH := 1.045
-## Samples of a full turn when gaps are checked.
-const GAP_SAMPLES := 360
+## Floes: tries along the shore, misses before a floe stops growing others, the grid of
+## their centres, samples of an outline.
+const FLOE_SHORE_TRIES := 90
+const FLOE_MISSES := 10
+const FLOE_CELL := 256.0
+const FLOE_EDGE_SAMPLES := 40
 const TRUNK := Vector2(11.0, 15.0)
 const CROWN := Vector2(34.0, 50.0)
 const HEIGHT := Vector2(150.0, 200.0)
@@ -49,15 +42,12 @@ func generate(config: NelvarCraterConfig, world_seed: int) -> NelvarCraterData:
 	_data.world_seed = world_seed
 	_grid.clear()
 	_lake(_rng("lake"))
-	if not _rings(_rng("rings")):
-		push_error("Crater %d: the islands' rings do not fit in the lake." % world_seed)
-		_data = null
-		return null
 	_capes(_rng("capes"))
-	_check_gaps()
 	_summit(_rng("summit"))
 	_spawn()
 	_boils(_rng("boils"))
+	_floes(_rng("floes"))
+	_data.index_floes()
 	_flows(_rng("flows"))
 	_data.index_flows()
 	_geysers(_rng("geysers"))
@@ -67,8 +57,8 @@ func generate(config: NelvarCraterConfig, world_seed: int) -> NelvarCraterData:
 	_snags(_rng("snags"))
 	_plants(_rng("plants"))
 	_data.finish()
-	for i in _data.isles.size():
-		_data.isles[i].id = i
+	for i in _data.floes.size():
+		_data.floes[i].id = i
 	var result := _data
 	_data = null
 	_grid.clear()
@@ -96,7 +86,7 @@ static func _bend(shape: NelvarEarthData.Radial, rng: RandomNumberGenerator, dep
 			shape.amplitudes[i] *= limit / total
 
 
-# --- The lake and its islands ------------------------------------------------------
+# --- The lake and its floes ------------------------------------------------------
 
 func _lake(rng: RandomNumberGenerator) -> void:
 	var lake := NelvarEarthData.Radial.new()
@@ -110,169 +100,14 @@ func _lake(rng: RandomNumberGenerator) -> void:
 	_data.vent_radius = rng.randf_range(_config.vent_radius.x, _config.vent_radius.y)
 
 
-## Nearest the shore comes to the vent.
-func _lake_min() -> float:
-	var best := INF
-	for i in 720:
-		best = minf(best, _data.lake.radius_at(TAU * i / 720.0))
-	return best
-
-
-## Anchors round the vent, then three rings: big plates, rafts, smaller plates. The sizes
-## shrink towards their smallest until the capes fit between the last ring and the shore.
-func _rings(rng: RandomNumberGenerator) -> bool:
-	var gap := _config.ring_gap
-	var room := _lake_min() - _config.cape_min_length - gap
-	var anchor_top := rng.randf_range(_config.anchor_radius.x, _config.anchor_radius.y)
-	var tops: Array[float] = [rng.randf_range(_config.inner_plate_radius.x, _config.inner_plate_radius.y),
-		rng.randf_range(_config.raft_radius.x, _config.raft_radius.y),
-		rng.randf_range(_config.outer_plate_radius.x, _config.outer_plate_radius.y)]
-	var lows: Array[float] = [_config.inner_plate_radius.x, _config.raft_radius.x, _config.outer_plate_radius.x]
-	var sizes: Array[float] = []
-	var anchor_size := 0.0
-	for attempt in 11:
-		var t := attempt / 10.0
-		anchor_size = lerpf(anchor_top, _config.anchor_radius.x, t)
-		sizes.clear()
-		var edge := _config.vent_clearance + anchor_size * 2.0 * ISLE_REACH
-		for k in 3:
-			sizes.append(lerpf(tops[k], lows[k], t))
-			edge += gap + sizes[k] * 2.0 * ISLE_REACH
-		if edge <= room:
-			break
-		if attempt == 10:
-			return false
-	# Room left over pushes everything out from the vent, so the capes stay short.
-	var used := _config.vent_clearance + anchor_size * 2.0 * ISLE_REACH
-	for k in 3:
-		used += gap + sizes[k] * 2.0 * ISLE_REACH
-	var spare := maxf(0.0, room - used - rng.randf_range(0.0, 40.0))
-	_data.anchor_reach = _config.vent_clearance + spare + anchor_size * 2.0 * ISLE_REACH
-	_anchors(rng, anchor_size)
-	var inner := _data.anchor_reach + gap
-	var way := 1.0 if rng.randf() < 0.5 else -1.0
-	var kinds: Array[int] = [IsleKind.PLATE, IsleKind.RAFT, IsleKind.PLATE]
-	var counts: Array[int] = [rng.randi_range(_config.inner_plates.x, _config.inner_plates.y),
-		rng.randi_range(_config.rafts.x, _config.rafts.y),
-		rng.randi_range(_config.outer_plates.x, _config.outer_plates.y)]
-	for k in 3:
-		var outer := inner + sizes[k] * 2.0 * ISLE_REACH
-		var period := rng.randf_range(_config.ring_period.x, _config.ring_period.y)
-		var speed := way * TAU / period
-		way = -way
-		_data.rings.append(Vector3(inner, outer, speed))
-		_ring(rng, k, kinds[k], counts[k], sizes[k], (inner + outer) * 0.5, speed)
-		inner = outer + gap
-	return true
-
-
-func _isle_shape(rng: RandomNumberGenerator, radius: float) -> NelvarEarthData.Radial:
-	var shape := NelvarEarthData.Radial.new()
-	shape.axes = Vector2(radius, radius * rng.randf_range(0.97, 1.0))
-	if rng.randf() < 0.5:
-		shape.axes = Vector2(shape.axes.y, shape.axes.x)
-	_bend(shape, rng, ISLE_WOBBLE, ISLE_WOBBLE * 1.4)
-	return shape
-
-
-func _measure(isle: NelvarCraterData.Isle) -> void:
-	isle.inner = INF
-	isle.outer = 0.0
-	for i in 96:
-		var r := isle.shape.radius_at(TAU * i / 96.0)
-		isle.inner = minf(isle.inner, r)
-		isle.outer = maxf(isle.outer, r)
-
-
-## Anchors stand round the vent, their outer edges all at anchor_reach.
-func _anchors(rng: RandomNumberGenerator, top: float) -> void:
-	var count := rng.randi_range(_config.anchors.x, _config.anchors.y)
-	var start := rng.randf() * TAU
-	var made: Array[NelvarCraterData.Isle] = []
-	for i in count:
-		for attempt in 20:
-			var isle := NelvarCraterData.Isle.new()
-			isle.kind = IsleKind.ANCHOR
-			isle.shape = _isle_shape(rng, rng.randf_range(_config.anchor_radius.x, top))
-			_measure(isle)
-			var angle := start + TAU * i / count + rng.randf_range(-0.3, 0.3) * TAU / count
-			# Its outer edge at anchor_reach: the inner ring passes it one gap away.
-			isle.center = _data.vent + Vector2.from_angle(angle) * (_data.anchor_reach - isle.outer)
-			isle.appearance_seed = rng.randi()
-			var apart := true
-			for other in made:
-				if isle.center.distance_to(other.center) < isle.outer + other.outer + 140.0:
-					apart = false
-			if apart:
-				made.append(isle)
-				break
-	_data.isles.append_array(made)
-
-
-## The islands of one ring, spread round it with lava between them.
-func _ring(rng: RandomNumberGenerator, ring: int, kind: int, count: int, size: float, orbit: float,
-		speed: float) -> void:
-	var made: Array[NelvarCraterData.Isle] = []
-	for i in count:
-		var isle := NelvarCraterData.Isle.new()
-		isle.kind = kind
-		isle.ring = ring
-		isle.center = _data.vent
-		isle.orbit = orbit
-		isle.speed = speed
-		isle.shape = _isle_shape(rng, size - rng.randf() * _config.ring_slack)
-		_measure(isle)
-		isle.appearance_seed = rng.randi()
-		if kind == IsleKind.RAFT:
-			isle.hold_time = 1.0
-		else:
-			isle.hold_time = lerpf(3.5, 5.0, clampf((isle.outer - 70.0) / 70.0, 0.0, 1.0))
-			isle.sink_period = rng.randf_range(_config.sink_period.x, _config.sink_period.y)
-			isle.sink_phase = rng.randf() * isle.sink_period
-			isle.sink_under = rng.randf_range(_config.sink_time.x, _config.sink_time.y)
-		made.append(isle)
-	# Angles: each neighbour at least the smallest spacing away; the rest spread at random.
-	var needs := PackedFloat32Array()
-	while not made.is_empty():
-		needs.clear()
-		var total := 0.0
-		for i in made.size():
-			var a := made[i]
-			var b := made[(i + 1) % made.size()]
-			var chord := a.outer + b.outer + _config.ring_spacing.x
-			var need := 2.0 * asin(minf(1.0, chord / (2.0 * orbit)))
-			needs.append(need)
-			total += need
-		if total < TAU * 0.96 or made.size() == 1:
-			break
-		made.pop_back()
-	var weights := PackedFloat32Array()
-	var weight_sum := 0.0
-	for i in made.size():
-		weights.append(rng.randf_range(0.25, 1.0))
-		weight_sum += weights[i]
-	var leftover := TAU
-	for need in needs:
-		leftover -= need
-	var angle := rng.randf() * TAU
-	for i in made.size():
-		made[i].phase = angle
-		angle += needs[i] + leftover * weights[i] / weight_sum
-	_data.isles.append_array(made)
-
-
-## Capes along the shore, their tips one gap outside the last ring.
+## Capes along the shore, reaching into the lake.
 func _capes(rng: RandomNumberGenerator) -> void:
 	var count := rng.randi_range(_config.capes.x, _config.capes.y)
-	var tip_reach := _data.rings[_data.rings.size() - 1].y + _config.ring_gap
 	var angles: Array[float] = []
 	for attempt in 300:
 		if angles.size() >= count:
 			break
 		var angle := rng.randf() * TAU
-		# Short capes first: where the shore lies close to the rings.
-		if attempt < 200 and _data.lake.radius_at(angle) - tip_reach > _config.cape_max_length:
-			continue
 		var apart := true
 		for other in angles:
 			if absf(angle_difference(angle, other)) < TAU / (count + 1.5):
@@ -289,63 +124,207 @@ func _capes(rng: RandomNumberGenerator) -> void:
 		cape.wobble_phase = rng.randf() * TAU
 		var direction := Vector2.from_angle(angle)
 		cape.base = _data.vent + direction * (_data.lake.radius_at(angle) + 50.0)
-		cape.tip = _data.vent + direction * (tip_reach + cape.width_at(1.0))
+		var length := rng.randf_range(_config.cape_length.x, _config.cape_length.y)
+		cape.tip = _data.vent + direction * (_data.lake.radius_at(angle) - length + cape.width_at(1.0))
 		_data.capes.append(cape)
 
 
-## Every pair that could meet is sampled over a full turn: nothing may touch, and every
-## floating island must come within a run of something (a neighbour, an anchor or a
-## cape). An island that does not is dropped.
-func _check_gaps() -> void:
-	var moving := _data.moving_isles()
-	var closest := {}
-	var dropped := {}
-	for a in moving:
-		closest[a] = INF
-	for i in moving.size():
-		var a := moving[i]
-		for j in range(i + 1, moving.size()):
-			var b := moving[j]
-			if absi(a.ring - b.ring) > 1:
-				continue
-			var gap := _pair_gap(a, b)
-			if gap < NelvarCraterData.MIN_GAP:
-				dropped[b] = true
-			closest[a] = minf(closest[a], gap)
-			closest[b] = minf(closest[b], gap)
-		for anchor in _data.anchors():
-			if a.ring != 0:
-				continue
-			var gap := INF
-			for s in GAP_SAMPLES:
-				gap = minf(gap, NelvarCraterData.isle_gap(a, anchor, TAU / absf(a.speed) * s / GAP_SAMPLES))
-			if gap < NelvarCraterData.MIN_GAP:
-				dropped[a] = true
-			closest[a] = minf(closest[a], gap)
-		if a.ring == _data.rings.size() - 1:
-			for cape in _data.capes:
-				var gap := INF
-				for s in GAP_SAMPLES:
-					gap = minf(gap, NelvarCraterData.cape_gap(a, cape, TAU / absf(a.speed) * s / GAP_SAMPLES))
-				if gap < NelvarCraterData.MIN_GAP:
-					dropped[a] = true
-				closest[a] = minf(closest[a], gap)
-	for a in moving:
-		if closest[a] > NelvarCraterData.RUN_GAP:
-			dropped[a] = true
-	for isle: NelvarCraterData.Isle in dropped:
-		_data.isles.erase(isle)
+## Floes of magma crust, grown out from the shore: each new one a step of lava (floe_gap)
+## from the one it grew from, so that one can walk across the lake on them all the way
+## to the vent's moat. They differ in size (most small, a few broad) and in shape (long,
+## three-cornered, lobed). All of them sway on one slow swell: its wave is far longer
+## than a floe, so neighbours sway almost together and the steps between them hold.
+## Wherever the swell takes it, a floe stays in the lava, clear of the shore, the capes,
+## the vent's moat, the boiling patches and the other floes. Some of them (more of the
+## small than of the broad) sink now and then and come up again.
+func _floes(rng: RandomNumberGenerator) -> void:
+	var cap := _config.floe_limit
+	var drift := Vector4(rng.randf_range(_config.floe_drift.x, _config.floe_drift.y),
+		rng.randf_range(_config.floe_drift.x, _config.floe_drift.y),
+		TAU / rng.randf_range(_config.floe_period.x, _config.floe_period.y),
+		TAU / rng.randf_range(_config.floe_period.x, _config.floe_period.y))
+	var wave := TAU / _config.floe_swell
+	var wave_x := Vector2.from_angle(rng.randf() * TAU) * wave
+	var wave_y := Vector2.from_angle(rng.randf() * TAU) * wave
+	var base := Vector2(rng.randf() * TAU, rng.randf() * TAU)
+	var place := func(floe: NelvarCraterData.Isle) -> void:
+		floe.drift = drift
+		floe.drift_phase = base + Vector2(wave_x.dot(floe.center), wave_y.dot(floe.center))
+	var reach := Vector2(drift.x, drift.y).length()
+	var cells := {}
+	var frontier: Array[NelvarCraterData.Isle] = []
+	var misses: Array[int] = []
+	var sow := func(floe: NelvarCraterData.Isle) -> void:
+		place.call(floe)
+		if _floe_fits(floe, cells):
+			_add_floe(floe, cells)
+			frontier.append(floe)
+			misses.append(0)
+	# Along the shore first: a step from it however the swell moves the floe.
+	var start := rng.randf() * TAU
+	for i in FLOE_SHORE_TRIES:
+		if _data.floes.size() >= cap:
+			break
+		var angle := start + TAU * i / FLOE_SHORE_TRIES
+		var floe := _floe_shape(rng)
+		floe.center = _data.vent + Vector2.from_angle(angle) * (_data.lake.radius_at(angle)
+			- floe.shape.radius_at(angle) - reach - rng.randf_range(10.5, 14.0))
+		sow.call(floe)
+	# Then each grows the next beside it, until there is no room left.
+	for attempt in cap * 40:
+		if frontier.is_empty() or _data.floes.size() >= cap:
+			break
+		var k := rng.randi() % frontier.size()
+		var parent := frontier[k]
+		var floe := _floe_shape(rng)
+		var angle := rng.randf() * TAU
+		var gap := rng.randf_range(_config.floe_gap.x, _config.floe_gap.y)
+		floe.center = parent.center + Vector2.from_angle(angle) * (parent.shape.radius_at(angle) + gap
+			+ floe.shape.radius_at(angle + PI))
+		place.call(floe)
+		if _floe_fits(floe, cells):
+			_add_floe(floe, cells)
+			frontier.append(floe)
+			misses.append(0)
+		else:
+			misses[k] += 1
+			if misses[k] >= FLOE_MISSES:
+				frontier.remove_at(k)
+				misses.remove_at(k)
+	_keep_floes_on_foot(cells, reach)
+	for floe in _data.floes:
+		var share := _config.sinking_share * lerpf(1.4, 0.5, inverse_lerp(_config.floe_radius.x, _config.floe_radius.y * 1.2, floe.outer))
+		if rng.randf() < share:
+			floe.sink_period = rng.randf_range(_config.sink_period.x, _config.sink_period.y)
+			floe.sink_phase = rng.randf() * floe.sink_period
+			floe.sink_under = rng.randf_range(_config.sink_time.x, _config.sink_time.y)
 
 
-## Smallest gap between two floating islands over the time it takes them to meet again.
-static func _pair_gap(a: NelvarCraterData.Isle, b: NelvarCraterData.Isle) -> float:
-	if a.ring == b.ring:
-		return NelvarCraterData.isle_gap(a, b, 0.0)
-	var period := TAU / absf(a.speed - b.speed)
-	var best := INF
-	for s in GAP_SAMPLES:
-		best = minf(best, NelvarCraterData.isle_gap(a, b, period * s / GAP_SAMPLES))
-	return best
+## Only the floes one can walk to from the shore stay: steps of at most a run however the
+## swell moves them (a floe walled in by others it could not reach goes).
+func _keep_floes_on_foot(cells: Dictionary, reach: float) -> void:
+	var reached := {}
+	var queue: Array[NelvarCraterData.Isle] = []
+	for floe in _data.floes:
+		if _data.lava_depth(floe.center) > floe.outer + NelvarCraterData.RUN_GAP + 20.0:
+			continue
+		for k in FLOE_EDGE_SAMPLES:
+			var angle := TAU * k / FLOE_EDGE_SAMPLES
+			var point := floe.center + Vector2.from_angle(angle) * floe.table_radius(angle)
+			if _data.lava_depth(point) <= NelvarCraterData.RUN_GAP - reach:
+				reached[floe] = true
+				queue.append(floe)
+				break
+	while not queue.is_empty():
+		var floe: NelvarCraterData.Isle = queue.pop_back()
+		var around := floe.outer + _config.floe_radius.y * 1.6 + NelvarCraterData.RUN_GAP
+		var lo := ((floe.center - Vector2.ONE * around) / FLOE_CELL).floor()
+		var hi := ((floe.center + Vector2.ONE * around) / FLOE_CELL).floor()
+		for y in range(int(lo.y), int(hi.y) + 1):
+			for x in range(int(lo.x), int(hi.x) + 1):
+				for other: NelvarCraterData.Isle in cells.get(Vector2i(x, y), []):
+					var offset := other.center - floe.center
+					var distance := offset.length()
+					if reached.has(other) or distance > floe.outer + other.outer + NelvarCraterData.RUN_GAP:
+						continue
+					var step := NelvarCraterData.RUN_GAP - NelvarCraterData.sway_between(floe, other)
+					# The line between them first: the gap is never wider there.
+					var angle := offset.angle()
+					if distance - floe.table_radius(angle) - other.table_radius(angle + PI) <= step \
+							or NelvarCraterData.floe_gap(floe, other, 0.0) <= step:
+						reached[other] = true
+						queue.append(other)
+	var kept: Array[NelvarCraterData.Isle] = []
+	for floe in _data.floes:
+		if reached.has(floe):
+			kept.append(floe)
+	_data.floes = kept
+
+
+## A floe of a random size and shape: round, oval, a long slab, three-cornered or
+## lobed, with a ragged edge. The bends (k = 2 stretches it, k = 3 gives it corners) keep
+## the radius above half its mean, so no part of it is too thin to stand on.
+func _floe_shape(rng: RandomNumberGenerator) -> NelvarCraterData.Isle:
+	var floe := NelvarCraterData.Isle.new()
+	var radius := lerpf(_config.floe_radius.x, _config.floe_radius.y, pow(rng.randf(), 1.4))
+	floe.shape = NelvarEarthData.Radial.new()
+	floe.shape.axes = Vector2(radius, radius)
+	floe.shape.amplitudes.resize(NelvarEarthData.HARMONICS)
+	floe.shape.phases.resize(NelvarEarthData.HARMONICS)
+	var stretch := 0.0
+	var corners := 0.0
+	match rng.randi() % 5:
+		1:
+			stretch = rng.randf_range(0.12, 0.22)
+		2:
+			stretch = rng.randf_range(0.26, 0.38)
+		3:
+			corners = rng.randf_range(0.09, 0.15)
+		4:
+			stretch = rng.randf_range(0.1, 0.2)
+			corners = rng.randf_range(0.06, 0.11)
+	for i in NelvarEarthData.HARMONICS:
+		var amplitude := rng.randf_range(0.0, 0.05 / float(i))
+		if i == 0:
+			amplitude = stretch + rng.randf_range(0.0, 0.05)
+		elif i == 1:
+			amplitude = corners + rng.randf_range(0.0, 0.03)
+		floe.shape.amplitudes[i] = amplitude
+		floe.shape.phases[i] = rng.randf() * TAU
+	floe.tabulate()
+	floe.inner = INF
+	floe.outer = 0.0
+	for r in floe.radii:
+		floe.inner = minf(floe.inner, r)
+		floe.outer = maxf(floe.outer, r)
+	# Between the samples the outline strays a little further.
+	floe.inner -= 1.0
+	floe.outer += 1.0
+	floe.appearance_seed = rng.randi()
+	return floe
+
+
+## Whether the floe keeps clear of everything wherever the swell takes it.
+func _floe_fits(floe: NelvarCraterData.Isle, cells: Dictionary) -> bool:
+	var reach := floe.drift_reach()
+	if floe.center.distance_to(_data.vent) < _data.vent_radius + _config.vent_moat + floe.outer + reach:
+		return false
+	for boil in _data.boils:
+		if floe.center.distance_to(Vector2(boil.x, boil.y)) < boil.z + floe.outer + reach + 10.0:
+			return false
+	var around := floe.outer + _config.floe_radius.y * 1.6 + _config.floe_gap.y
+	var lo := ((floe.center - Vector2.ONE * around) / FLOE_CELL).floor()
+	var hi := ((floe.center + Vector2.ONE * around) / FLOE_CELL).floor()
+	for y in range(int(lo.y), int(hi.y) + 1):
+		for x in range(int(lo.x), int(hi.x) + 1):
+			for other: NelvarCraterData.Isle in cells.get(Vector2i(x, y), []):
+				var offset := other.center - floe.center
+				var distance := offset.length()
+				var need := NelvarCraterData.MIN_GAP + NelvarCraterData.sway_between(floe, other)
+				if distance > floe.outer + other.outer + need:
+					continue
+				# Along the line between them first: the gap is never wider there.
+				var angle := offset.angle()
+				if distance - floe.table_radius(angle) - other.table_radius(angle + PI) < need:
+					return false
+				if NelvarCraterData.floe_gap(floe, other, 0.0) < need:
+					return false
+	# Deep in the lake its outline need not be walked.
+	if _data.lava_depth(floe.center) > floe.outer + reach + 40.0:
+		return true
+	for k in FLOE_EDGE_SAMPLES:
+		var angle := TAU * k / FLOE_EDGE_SAMPLES
+		if _data.lava_depth(floe.center + Vector2.from_angle(angle) * floe.table_radius(angle)) < reach + 10.0:
+			return false
+	return true
+
+
+func _add_floe(floe: NelvarCraterData.Isle, cells: Dictionary) -> void:
+	_data.floes.append(floe)
+	var key := Vector2i((floe.center / FLOE_CELL).floor())
+	if not cells.has(key):
+		cells[key] = []
+	cells[key].append(floe)
 
 
 # --- The rim -----------------------------------------------------------------------
@@ -419,15 +398,13 @@ func _spawn() -> void:
 
 func _boils(rng: RandomNumberGenerator) -> void:
 	var wanted := rng.randi_range(_config.boils.x, _config.boils.y)
-	var outer := _data.rings[_data.rings.size() - 1].y + _config.ring_gap
 	for attempt in 200:
 		if _data.boils.size() >= wanted:
 			break
 		var angle := rng.randf() * TAU
 		var shore := _data.lake.radius_at(angle)
 		var radius := rng.randf_range(40.0, 76.0)
-		var distance := rng.randf_range(outer + 30.0, shore - 70.0) if rng.randf() < 0.6 \
-			else rng.randf_range(_data.vent_radius + 150.0, shore - 70.0)
+		var distance := rng.randf_range(_data.vent_radius + 150.0, shore - 70.0)
 		var center := _data.vent + Vector2.from_angle(angle) * distance
 		if _data.lava_depth(center) < radius + 30.0:
 			continue
@@ -495,7 +472,7 @@ func _spur(rng: RandomNumberGenerator, a: Vector2, b: Vector2) -> void:
 
 # --- Geysers and fumaroles ------------------------------------------------------------
 
-## A few on the capes (springboards to the islands), the rest along the rim, mostly
+## A few on the capes (springboards out over the floes), the rest along the rim, mostly
 ## near the lake.
 func _geysers(rng: RandomNumberGenerator) -> void:
 	var wanted := rng.randi_range(_config.geysers.x, _config.geysers.y)
@@ -521,7 +498,7 @@ func _geysers(rng: RandomNumberGenerator) -> void:
 			break
 		var angle := rng.randf() * TAU
 		var radius := rng.randf_range(_config.geyser_radius.x, _config.geyser_radius.y)
-		var point := _data.vent + Vector2.from_angle(angle) * (_data.lake.radius_at(angle) + rng.randf_range(54.0, 120.0))
+		var point := _data.vent + Vector2.from_angle(angle) * (_data.lake.radius_at(angle) + rng.randf_range(54.0, 170.0))
 		if _geyser_fits(point, radius, 34.0) and _data.flow_clearance(point) > radius + 10.0:
 			_add_geyser(rng, point, radius, -1)
 
@@ -608,7 +585,7 @@ func _nearby(point: Vector2, reach: float) -> Array:
 	return result
 
 
-## Shared rules for anything on the rim or an anchor. `trail_gap` is the free ground kept
+## Shared rules for anything on the rim. `trail_gap` is the free ground kept
 ## beside roads (negative: none), `lava_gap` the ground kept from lava. Solid things keep
 ## a passage between each other; the ring road keeps the way round free of them.
 func _fits(point: Vector2, radius: float, solid: bool, trail_gap: float, lava_gap: float,
@@ -640,12 +617,8 @@ func _fits(point: Vector2, radius: float, solid: bool, trail_gap: float, lava_ga
 	return true
 
 
-## A random point of the rim, or of an anchor now and then.
-func _random_ground(rng: RandomNumberGenerator, anchors_share: float = 0.0) -> Vector2:
-	var anchors := _data.anchors()
-	if not anchors.is_empty() and rng.randf() < anchors_share:
-		var anchor := anchors[rng.randi_range(0, anchors.size() - 1)]
-		return anchor.center + Vector2.from_angle(rng.randf() * TAU) * anchor.inner * 0.8 * sqrt(rng.randf())
+## A random point of the rim.
+func _random_ground(rng: RandomNumberGenerator) -> Vector2:
 	return _rim_point(rng.randf() * TAU, rng.randf_range(0.06, 0.94))
 
 
@@ -663,16 +636,6 @@ func _rocks(rng: RandomNumberGenerator) -> void:
 			else _random_ground(rng)
 		if _try_rock(rng, point, radius, look, 30.0):
 			placed += 1
-	for anchor in _data.anchors():
-		var count := rng.randi_range(_config.anchor_rocks.x, _config.anchor_rocks.y)
-		var done := 0
-		for attempt in count * 20:
-			if done >= count:
-				break
-			var radius := rng.randf_range(16.0, 30.0)
-			var point := anchor.center + Vector2.from_angle(rng.randf() * TAU) * anchor.inner * 0.6 * sqrt(rng.randf())
-			if _try_rock(rng, point, radius, Stone.EMBER if rng.randf() < 0.5 else Stone.PLAIN, 34.0):
-				done += 1
 
 
 func _try_rock(rng: RandomNumberGenerator, point: Vector2, radius: float, look: int, lava_gap: float) -> bool:
@@ -700,7 +663,7 @@ func _crystals(rng: RandomNumberGenerator) -> void:
 	for attempt in wanted * 24:
 		if placed >= wanted:
 			break
-		var point := _random_ground(rng, 0.15)
+		var point := _random_ground(rng)
 		var roll := rng.randf()
 		if roll < 0.3 and not _data.geysers.is_empty():
 			var geyser := _data.geysers[rng.randi_range(0, _data.geysers.size() - 1)]
@@ -774,10 +737,6 @@ func _plants(rng: RandomNumberGenerator) -> void:
 		if thing.kind in [Kind.ROCK, Kind.SNAG, Kind.TREE]:
 			hosts.append(thing)
 	var by_lava := func() -> Vector2:
-		var anchors := _data.anchors()
-		if rng.randf() < 0.2 and not anchors.is_empty():
-			var anchor := anchors[rng.randi_range(0, anchors.size() - 1)]
-			return anchor.center + Vector2.from_angle(rng.randf() * TAU) * (anchor.inner - rng.randf_range(24.0, 60.0))
 		# On the shore: _scatter moves it in off the lava.
 		return _rim_point(rng.randf() * TAU, 0.0)
 	var in_open := func() -> Vector2:
@@ -787,7 +746,7 @@ func _plants(rng: RandomNumberGenerator) -> void:
 			var along := flow.points[i].lerp(flow.points[i + 1], rng.randf())
 			var side := flow.points[i].direction_to(flow.points[i + 1]).orthogonal()
 			return along + side * (1.0 if rng.randf() < 0.5 else -1.0) * (flow.half_width + rng.randf_range(16.0, 40.0))
-		return _random_ground(rng, 0.1)
+		return _random_ground(rng)
 	var by_host := func() -> Vector2:
 		if hosts.is_empty():
 			return _random_ground(rng)

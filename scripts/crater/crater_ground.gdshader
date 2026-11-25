@@ -6,17 +6,19 @@ render_mode unshaded, blend_disabled;
 
 // The top of the volcano in the palette of the "Огонь" menu (fire_common): the rim of
 // basalt and ash with its roads of cooled lava, sulfur round the vents and geysers, the
-// geysers' mouths; the lava lake turning slowly with its rings of current, crusted over
-// in the open, bright along its shores, boiling in patches and churning white-hot in
-// the vent; the crater's inner wall under the north shore (a few art pixels of basalt
-// strata lit red from below), the faces of the capes and the anchors; the anchors' hot
-// joints. Under the summit's south edge hangs the front slope of the mountain: strata
+// geysers' mouths; the lava lake, swirled brighter and darker, bright along its shores,
+// boiling in patches and churning white-hot in the vent (the floes of crust on it are
+// sprites); the crater's inner wall under the north shore (a few art pixels of basalt
+// strata lit red from below), the faces of the capes. Under the summit's south edge
+// hangs the front slope of the mountain: strata
 // of basalt and ash, gullies and ribs running down and spreading like a cone, lava
 // trickling down some gullies; it darkens and dissolves into the clouds.
 //
 // Runs through NelvarCloudSea with parallax 1: one fragment per art pixel of the world
-// grid. The lake, the capes, the anchors and the summit's edge are computed here exactly
+// grid. The lake, the capes and the summit's edge are computed here exactly
 // as NelvarCraterData does (lava_depth, rim_depth); NelvarCraterField supplies the rest.
+// The lake is drawn without screen-fixed dithering and holds still: nothing on it
+// shimmers.
 
 uniform vec2 base_pixel;
 uniform vec2 sea_size;
@@ -44,19 +46,10 @@ uniform vec4 cape_line[6];
 uniform vec4 cape_form[6];
 uniform int cape_count = 0;
 uniform float cape_blend = 48.0;
-// Anchors: centre and axes, then six bends each.
-uniform vec4 anchor_shape[4];
-uniform float anchor_amp[24];
-uniform float anchor_phase[24];
-uniform int anchor_count = 0;
 // The vent: world centre and radius. Boiling patches: world centre and radius.
 uniform vec3 vent = vec3(0.0, 0.0, 70.0);
 uniform vec3 boils[6];
 uniform int boil_count = 0;
-// The rings of current: inner and outer edge (distance from the vent), radians per second.
-uniform vec3 rings[3];
-uniform int ring_count = 0;
-uniform float ring_gap = 18.0;
 // Geysers: world art pixel, mouth radius in art pixels, state (0..1 resting, 1..2
 // warning, 2..3 erupting).
 uniform vec4 geysers[10];
@@ -100,20 +93,6 @@ float lake_sd(vec2 world) {
 	return radius * bend - length(offset);
 }
 
-float anchor_sd(int a, vec2 world) {
-	vec2 offset = world - anchor_shape[a].xy;
-	vec2 axes = anchor_shape[a].zw;
-	float angle = atan(offset.y, offset.x);
-	float c = cos(angle);
-	float s = sin(angle);
-	float radius = axes.x * axes.y / sqrt(axes.y * axes.y * c * c + axes.x * axes.x * s * s);
-	float bend = 1.0;
-	for (int i = 0; i < 6; i++) {
-		bend += anchor_amp[a * 6 + i] * cos(float(i + 2) * angle + anchor_phase[a * 6 + i]);
-	}
-	return radius * bend - length(offset);
-}
-
 // NelvarCraterData.Cape.signed_distance.
 float cape_sd(int c, vec2 world) {
 	vec2 base = cape_line[c].xy;
@@ -134,12 +113,6 @@ float lava_depth(vec2 world) {
 			break;
 		}
 		ground = smooth_max(ground, cape_sd(c, world), cape_blend);
-	}
-	for (int a = 0; a < 4; a++) {
-		if (a >= anchor_count) {
-			break;
-		}
-		ground = max(ground, anchor_sd(a, world));
 	}
 	return -ground;
 }
@@ -262,33 +235,14 @@ float boiling(vec2 world, vec2 np) {
 	return best;
 }
 
-// The lake: crust drifting with its ring of current (or churning slowly where no ring
-// runs), bright seams between the floes, a hot band along the shores, bubbles; brighter
-// and barer in the boiling patches and round the vent.
+// The lake: lava swirled brighter and darker in broad flat bands, hottest over the boils
+// and round the vent, bubbles bursting; the white-hot vent churning in the middle.
 vec3 crater_lava(vec2 pixel, vec2 np, float depth, vec2 world) {
-	vec2 offset = world - vent.xy;
-	float r = length(offset);
-	float wander = r + (value_noise(np * 0.04) - 0.5) * 36.0;
-	float spin = 0.0;
-	for (int k = 0; k < 3; k++) {
-		if (k >= ring_count) {
-			break;
-		}
-		if (wander > rings[k].x - ring_gap * 0.5 && wander < rings[k].y + ring_gap * 0.5) {
-			spin = rings[k].z;
-		}
-	}
-	float a = -mod(spin * time, 6.2831853);
-	vec2 turned = vec2(cos(a) * offset.x - sin(a) * offset.y, sin(a) * offset.x + cos(a) * offset.y);
-	vec2 q = (turned + vent.xy) / texel_size + noise_offset;
-	if (spin == 0.0) {
-		q += vec2(sin(time * 0.13 + q.y * 0.02), cos(time * 0.11 + q.x * 0.02)) * 3.0
-			+ vec2(time * 0.4, time * 0.15);
-	}
+	float r = length(world - vent.xy);
 	float mouth = (r - vent.z) / texel_size + (value_noise(np * 0.12) - 0.5) * 5.0;
 	if (mouth < 0.0) {
 		// The vent: white-hot lava welling up and churning.
-		float churn = hash12(pixel + floor(time * 4.0 + hash12(pixel) * 3.0) * 5.3);
+		float churn = hash12(pixel + floor(time * 3.0 + hash12(pixel) * 3.0) * 5.3);
 		return churn < 0.25 ? PAL[LAVA + 5] : (churn < 0.7 ? PAL[LAVA + 4] : PAL[LAVA + 3]);
 	}
 	if (mouth < 2.5 && value_noise(np * 0.2 + 9.0) > 0.38) {
@@ -296,34 +250,14 @@ vec3 crater_lava(vec2 pixel, vec2 np, float depth, vec2 world) {
 		vec3 c = cells(np / 3.0);
 		return c.y < 0.1 ? PAL[LAVA + 2] : ramp(CRUST, 3, 0.2 + c.z * 0.6, pixel);
 	}
-	float shore = 1.0 - smoothstep(0.0, 5.0, depth);
 	float near_vent = 1.0 - smoothstep(0.0, 56.0, mouth);
 	float boil = boiling(world, np);
-	// Rafts of dark crust cover the lake; pools of open lava wander between them, and it
-	// lies open along the shores, over the boils and round the vent.
-	float pool = value_noise(q / 40.0 + 11.0) * 0.75 + value_noise(q / 14.0) * 0.25;
-	float open = max(max(max(shore, near_vent), boil), smoothstep(0.64, 0.76, pool));
-	vec3 floe = cells(q / 12.0);
-	vec3 color;
-	if (open > 0.5 + (floe.z - 0.5) * 0.7) {
-		color = ramp(LAVA, 6, 0.28 + open * 0.3 + (value_noise(q * 0.15) - 0.5) * 0.3, pixel);
-		if (floe.y < 0.03) {
-			color = PAL[LAVA + 4];
-		}
-		float bubbles = 0.004 + boil * 0.06 + near_vent * 0.05;
-		if (hash12(floor(q / 3.0) + floor(time * (1.4 + boil * 2.0)) * 7.0) < bubbles) {
-			color = PAL[LAVA + 5];
-		}
-	} else if (floe.y < 0.03) {
-		// The seams between rafts glow, brighter where the lava is open nearby.
-		color = open > 0.25 ? PAL[LAVA + 3] : PAL[LAVA + 2];
-	} else if (floe.y < 0.06) {
-		color = PAL[LAVA];
-	} else {
-		color = ramp(CRUST, 3, 0.18 + floe.z * 0.45 + (value_noise(q * 0.25) - 0.5) * 0.2, pixel);
-		if (abs(value_noise(q * 0.08 + floe.z * 40.0) - 0.5) < 0.008) {
-			color = PAL[LAVA];
-		}
+	float swirl = value_noise(np / 22.0) * 0.7 + value_noise(np / 9.0 + 3.0) * 0.3;
+	float heat = swirl * 0.8 + boil * 0.35 + near_vent * 0.45;
+	vec3 color = heat < 0.4 ? PAL[LAVA + 2] : (heat < 0.64 ? PAL[LAVA + 3] : (heat < 0.84 ? PAL[LAVA + 4] : PAL[LAVA + 5]));
+	float bubbles = 0.002 + boil * 0.05 + near_vent * 0.04;
+	if (hash12(floor(np / 3.0) + floor(time * (1.2 + boil * 2.0)) * 7.0) < bubbles) {
+		color = PAL[LAVA + 5];
 	}
 	if (depth < 1.0) {
 		color = PAL[LAVA + 3];
@@ -430,20 +364,7 @@ void fragment() {
 			vec4 field = field_at(pixel);
 			float g = floor(field.g * 255.0 + 0.5);
 			float a = floor(field.a * 255.0 + 0.5);
-			float magma = 0.0;
-			if (lake_sd(world) > 0.0) {
-				// On an anchor its joints glow near the lava.
-				for (int i = 0; i < 4; i++) {
-					if (i >= anchor_count) {
-						break;
-					}
-					float inside = anchor_sd(i, world) / texel_size;
-					if (inside > 0.0) {
-						magma = clamp(1.0 - inside / 18.0, 0.0, 1.0) * 0.85 + 0.12;
-					}
-				}
-			}
-			color = bare_ground(pixel, np, magma);
+			color = bare_ground(pixel, np, 0.0);
 			if (edge < 3.0 && (3.0 - edge) / 3.0 * 64.0 > bayer(pixel) + 44.0) {
 				// Loose scree near the edge.
 				color = hash12(np) < 0.5 ? ramp(SCREE, 3, hash12(np * 3.1), pixel) : PAL[CINDER];

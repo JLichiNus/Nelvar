@@ -4,7 +4,7 @@ render_mode unshaded;
 // A splash of lava over the volcano's shore (NelvarLavaSplashes), in art pixels round
 // the spot where it comes over: first the lava there bulges and bubbles; then a tongue
 // of fresh lava lies on the rock, churning; it sets into a dark crust whose seams glow
-// and dim; the crust fades away. Drawn over the floor (or a plate), discarded elsewhere.
+// and dim; the crust fades away. Drawn over the floor (or a floe), discarded elsewhere.
 
 uniform float time = 0.0;
 uniform float age = 0.0;

@@ -1,7 +1,7 @@
 class_name NelvarCraterField
 extends NelvarFireField
 ## What the volcano's ground shader reads besides the shapes it computes itself (the
-## lake, the capes and the anchors are worked out there as in NelvarCraterData), one
+## lake and the capes are worked out there as in NelvarCraterData), one
 ## pixel per art pixel round the summit:
 ##   R — 0 (unused);
 ##   G — distance from a road's centre line in its half widths × 64, 255 far away;
@@ -21,7 +21,7 @@ extends NelvarFireField
 ## Built on a worker thread; the textures are made on the main thread.
 
 ## Light over the open lake (the shores and the vent get the full light).
-const LAKE_LIGHT := 0.42
+const LAKE_LIGHT := 0.5
 ## World units from the shore over which the shore's strong light fades into it.
 const SHORE_GLOW := 150.0
 
