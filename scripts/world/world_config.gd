@@ -13,7 +13,7 @@ extends Resource
 
 @export_group("Bridges")
 @export var character_width: float = 28.0
-@export_range(2.0, 3.0) var bridge_width_in_characters: float = 2.5
+@export_range(2.0, 5.0) var bridge_width_in_characters: float = 4.0
 @export_range(0, 8) var extra_connections: int = 2
 
 @export_group("Chunks")

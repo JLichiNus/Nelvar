@@ -23,13 +23,14 @@ func _run() -> void:
 	await _check_dash()
 	await _check_no_dash_through_wall()
 	await _check_bonk()
+	await _check_edge()
 	await _check_wave_knocks_down()
 	await _check_hold()
 	await _check_death()
 	if is_instance_valid(_world):
 		_world.free()
 	if _failures.is_empty():
-		print("PASS: %d runner checks; art, chase, dash, skid, wall, bonk, wave, hold, death." % _checks)
+		print("PASS: %d runner checks; art, chase, dash, skid, wall, bonk, edge, wave, hold, death." % _checks)
 		quit(0)
 	else:
 		for failure in _failures:
@@ -60,9 +61,9 @@ func _add_runner(at: Vector2, first_delay: float = 0.05) -> NelvarRunner:
 	return runner
 
 
-func _add_wall(at: Vector2, size: Vector2) -> void:
+func _add_wall(at: Vector2, size: Vector2, layer: int = 1) -> void:
 	var wall := StaticBody2D.new()
-	wall.collision_layer = 1
+	wall.collision_layer = layer
 	var shape := CollisionShape2D.new()
 	var rect := RectangleShape2D.new()
 	rect.size = size
@@ -149,6 +150,20 @@ func _check_bonk() -> void:
 	_check(runner.is_stunned(), "Running into a wall did not stun")
 	_check(runner.contact_damage == 0.0, "A stunned Runner still hurts")
 	_check(runner.global_position.x < 120.0, "Ran through the wall")
+
+
+# The brink of an island on the air map: the Runner stays on the ground and only
+# brakes there, no bonk.
+func _check_edge() -> void:
+	_fresh_world()
+	_add_wall(Vector2(120, 0), Vector2(20, 200), NelvarWorldData.EDGE_LAYER)
+	var runner := _add_runner(Vector2.ZERO, 30.0)
+	await _frames(2)
+	runner._dash_dir = Vector2.RIGHT
+	runner._start_dash()
+	await _frames(20)
+	_check(runner.global_position.x < 120.0 and not runner.is_stunned(),
+		"Ran off an edge or bonked into it")
 
 
 func _check_wave_knocks_down() -> void:
