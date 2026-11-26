@@ -5,6 +5,11 @@ extends Control
 ## (the UI is drawn at 3x).
 
 const ART_PIXEL := 3.0
+## 3x the 11 px bitmap font: one font pixel = one art pixel, so the digits
+## scale as evenly as the rest of the art on non-integer window scales.
+const FONT_SIZE := 33
+## Label top inside the bar: puts the digits one art pixel inside the fill.
+const TEXT_TOP := 3.0
 
 @export var player: Node
 @export var frame_color := Color.WHITE
@@ -23,7 +28,9 @@ func _ready() -> void:
 	_label = Label.new()
 	_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	_label.offset_top = TEXT_TOP
+	_label.add_theme_font_size_override("font_size", FONT_SIZE)
 	_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_label.add_theme_color_override("font_color", text_color)
 	# A one-pixel dark shadow keeps the white text readable over the green.

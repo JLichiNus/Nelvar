@@ -1,15 +1,20 @@
 class_name NelvarVolumeSlider
 extends Control
-## One volume in the settings: its name and percent on top, a pixel bar
-## below, drawn like the HUD bars (whole art pixels, white frame). Click or
-## drag on the bar, or press left/right while it is focused (5% a step).
-## Reads and writes GameSettings.volumes[bus].
+## One volume row in the settings: its name on the left, a pixel bar and the
+## percent on the right, drawn like the HUD bars (whole art pixels, white
+## frame). Click or drag on the bar, or press left/right while it is focused
+## (5% a step). Reads and writes GameSettings.volumes[bus].
 
 const ART_PIXEL := 3.0
 const FONT_SIZE := 22
 const STEP := 0.05
 const BAR_HEIGHT := 18.0
-const GAP := 9.0
+## Widest the bar gets; narrower rows give it 45% of their width.
+const BAR_WIDTH := 330.0
+## Column right of the bar for the percent ("100%").
+const PERCENT_WIDTH := 72.0
+## Same height as a CheckButton row (theme: 6 above and below the text).
+const PADDING := 6.0
 
 @export var bus: StringName = &"Master"
 @export var title := "Громкость"
@@ -38,7 +43,7 @@ func _ready() -> void:
 
 func _get_minimum_size() -> Vector2:
 	var font := get_theme_font("font", "Label")
-	return Vector2(0.0, font.get_height(FONT_SIZE) + GAP + BAR_HEIGHT)
+	return Vector2(0.0, maxf(font.get_height(FONT_SIZE), BAR_HEIGHT) + PADDING * 2.0)
 
 
 func value() -> float:
@@ -91,21 +96,23 @@ func _set_hovered(hovered: bool) -> void:
 
 
 func _bar_rect() -> Rect2:
-	var top := snappedf(size.y - BAR_HEIGHT, ART_PIXEL)
-	return Rect2(Vector2(0.0, top), Vector2(snappedf(size.x, ART_PIXEL), BAR_HEIGHT))
+	var width := snappedf(minf(BAR_WIDTH, size.x * 0.45), ART_PIXEL)
+	var left := snappedf(size.x - PERCENT_WIDTH - width, ART_PIXEL)
+	var top := snappedf((size.y - BAR_HEIGHT) / 2.0, ART_PIXEL)
+	return Rect2(Vector2(left, top), Vector2(width, BAR_HEIGHT))
 
 
 func _draw() -> void:
 	var font := get_theme_font("font", "Label")
 	var active := has_focus() or _hovered or _dragging
 	var label_color := focus_color if active else text_color
-	var baseline := font.get_ascent(FONT_SIZE)
-	draw_string(font, Vector2(0.0, baseline), title, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+	var baseline := (size.y - font.get_height(FONT_SIZE)) / 2.0 + font.get_ascent(FONT_SIZE)
+	draw_string(font, Vector2(PADDING, baseline), title, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
 		FONT_SIZE, label_color)
 	var percent := "%d%%" % roundi(_value * 100.0)
 	var width := font.get_string_size(percent, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x
-	draw_string(font, Vector2(size.x - width, baseline), percent, HORIZONTAL_ALIGNMENT_LEFT,
-		-1.0, FONT_SIZE, label_color)
+	draw_string(font, Vector2(size.x - width - PADDING, baseline), percent,
+		HORIZONTAL_ALIGNMENT_LEFT, -1.0, FONT_SIZE, label_color)
 
 	var bar := _bar_rect()
 	draw_rect(bar, back_color)

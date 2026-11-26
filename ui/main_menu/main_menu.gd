@@ -22,6 +22,17 @@ const TEXT_SLIDE := 3.0
 ## out when the game starts.
 const MUSIC_FADE_IN := 2.5
 const MUSIC_FADE_OUT := 1.5
+## Opening the settings (progress of NelvarPanelMorph, 0..1): the other
+## buttons fold away to the left one after another, nearest to «Настройки»
+## first, then the logo rises to the top of the screen to make room.
+const FOLD_SLIDE := 18.0
+const FOLD_LENGTH := 0.2
+const FOLD_STAGGER := 0.07
+const LIFT_FROM := 0.1
+const LIFT_TO := 0.5
+## Between the risen logo and the settings panel.
+const PANEL_GAP := 24.0
+const ART_PIXEL := 3.0
 
 @export var play_element: NelvarMenuElement
 @export var settings_element: NelvarMenuElement
@@ -54,8 +65,13 @@ var _texel := 1.0
 var _wind := 0.0
 var _open_panel: NelvarMenuPanel
 var _panel_owner: Button
-var _menu_tween: Tween
 var _music_tween: Tween
+var _settings_morph: NelvarPanelMorph
+## Menu buttons top to bottom.
+var _menu_buttons: Array[Button] = []
+## Positions the menu column gave the logo and the buttons; they are moved
+## from these while the settings are open.
+var _homes: Dictionary = {}
 
 @onready var background: TextureRect = $Background
 @onready var particle_root: Node2D = $Particles
@@ -69,6 +85,7 @@ var _music_tween: Tween
 @onready var settings_panel: NelvarSettingsPanel = %SettingsPanel
 @onready var about_panel: NelvarMenuPanel = %AboutPanel
 @onready var about_back: Button = %AboutBack
+@onready var margin: MarginContainer = $Margin
 @onready var music: AudioStreamPlayer = $Music
 @onready var hover_sound: AudioStreamPlayer = $HoverSound
 @onready var click_sound: AudioStreamPlayer = $ClickSound
@@ -85,6 +102,7 @@ func _ready() -> void:
 		about_button: about_element,
 		quit_button: quit_element,
 	}
+	_menu_buttons = [play_button, settings_button, about_button, quit_button]
 	_mutate_launch()
 	# The theme's dark pixel frames; the highlight is tinted per reality.
 	_idle_style = play_button.get_theme_stylebox("normal")
@@ -113,16 +131,24 @@ func _ready() -> void:
 		_add_button_sounds(button)
 	get_tree().node_added.connect(_on_node_added)
 	play_button.pressed.connect(_on_play_pressed)
-	settings_button.pressed.connect(_open.bind(settings_panel, settings_button, settings_panel.fullscreen_check))
+	settings_button.pressed.connect(_open_settings)
 	about_button.pressed.connect(_open.bind(about_panel, about_button, about_back))
 	quit_button.pressed.connect(_quit)
 	# Closing the window goes through _quit too, so the sounds stop first.
 	get_tree().auto_accept_quit = false
-	settings_panel.back_button.pressed.connect(_close_panel)
-	settings_panel.dev_panel_toggled.connect(_on_dev_panel_toggled)
+	settings_panel.back_button.pressed.connect(_close_settings)
 	about_back.pressed.connect(_close_panel)
 
-	settings_panel.hide()
+	# Drawn above the settings panel: added after it.
+	_settings_morph = NelvarPanelMorph.new()
+	add_child(_settings_morph)
+	_settings_morph.setup(settings_panel, settings_button, _highlight_styles[settings_element],
+		_button_labels[settings_button])
+	_settings_morph.target_rect = _settings_rect
+	_settings_morph.progress_changed.connect(_fold_menu)
+	_settings_morph.opened.connect(_on_settings_opened)
+	_settings_morph.closed.connect(_on_settings_closed)
+	menu_column.sort_children.connect(_on_menu_sorted)
 	about_panel.hide()
 	settings_panel.accent = settings_element.accent
 	about_panel.accent = about_element.accent
@@ -145,11 +171,15 @@ func _notification(what: int) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel") and _settings_morph.is_open():
+		_close_settings()
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("ui_cancel") and _open_panel != null:
 		_close_panel()
 		get_viewport().set_input_as_handled()
 		return
-	if get_viewport().gui_get_focus_owner() != null:
+	if _settings_morph.is_active() or get_viewport().gui_get_focus_owner() != null:
 		return
 	for action in ["ui_down", "ui_up", "ui_focus_next", "ui_focus_prev", "ui_accept"]:
 		if event.is_action_pressed(action):
@@ -433,16 +463,101 @@ func _close_panel() -> void:
 		_panel_owner.grab_focus()
 
 
-## The developer panel opens left of the settings, over the menu column: the
-## column fades out and stops taking input while the panel is open.
-func _on_dev_panel_toggled(open: bool) -> void:
-	if _menu_tween != null:
-		_menu_tween.kill()
-	_menu_tween = create_tween()
-	_menu_tween.tween_property(menu_column, "modulate:a", 0.0 if open else 1.0, 0.15)
-	for button: Button in _button_elements:
-		button.mouse_filter = Control.MOUSE_FILTER_IGNORE if open else Control.MOUSE_FILTER_STOP
-		button.focus_mode = Control.FOCUS_NONE if open else Control.FOCUS_ALL
+# --- Settings ----------------------------------------------------------------
+# «Настройки» does not open a panel next to the menu: the other buttons fold
+# away, the logo rises, and the button itself grows into the settings panel
+# (NelvarPanelMorph). Esc or «Назад» plays it all backwards.
+
+func _open_settings() -> void:
+	if _open_panel != null:
+		_open_panel.close_now()
+		_open_panel = null
+	for button in _menu_buttons:
+		button.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# The settings button keeps focus (and its highlight) until it is
+		# hidden: losing it now would flash the plain frame.
+		if button != settings_button:
+			button.focus_mode = Control.FOCUS_NONE
+	_settings_morph.open()
+
+
+func _close_settings() -> void:
+	if not _settings_morph.is_open():
+		return
+	_settings_morph.close()
+	settings_button.focus_mode = Control.FOCUS_ALL
+	settings_button.grab_focus()
+
+
+func _on_settings_opened() -> void:
+	settings_panel.first_focus().grab_focus()
+	# Hidden under the panel: arrows must not find it.
+	settings_button.focus_mode = Control.FOCUS_NONE
+
+
+func _on_settings_closed() -> void:
+	for button in _menu_buttons:
+		button.mouse_filter = Control.MOUSE_FILTER_STOP
+		button.focus_mode = Control.FOCUS_ALL
+
+
+## The settings panel fills the screen under the risen logo.
+func _settings_rect() -> Rect2:
+	var area := margin.get_global_rect()
+	var left := area.position.x + margin.get_theme_constant("margin_left")
+	var right := area.end.x - margin.get_theme_constant("margin_right")
+	var top := _logo_top() + logo.size.y + PANEL_GAP
+	var bottom := area.end.y - margin.get_theme_constant("margin_bottom")
+	return Rect2(left, top, right - left, bottom - top)
+
+
+## Where the risen logo's top edge is: the top margin of the screen.
+func _logo_top() -> float:
+	return margin.global_position.y + margin.get_theme_constant("margin_top")
+
+
+## The menu's part of the settings animation (see the constants above).
+func _fold_menu(progress: float) -> void:
+	if _homes.is_empty():
+		_remember_homes()
+	var settings_index := _menu_buttons.find(settings_button)
+	for i in _menu_buttons.size():
+		var button := _menu_buttons[i]
+		if button == settings_button:
+			continue
+		var start := (absi(i - settings_index) - 1) * FOLD_STAGGER
+		var fold := _ease_out(_phase(progress, start, start + FOLD_LENGTH))
+		button.self_modulate.a = 1.0 - fold
+		(_button_labels[button] as Label).modulate.a = 1.0 - fold
+		button.position.x = _homes[button].x - snappedf(FOLD_SLIDE * fold, ART_PIXEL)
+	var home: Vector2 = _homes[logo]
+	var lift := maxf(0.0, menu_column.global_position.y + home.y - _logo_top())
+	var rise := _ease_out(_phase(progress, LIFT_FROM, LIFT_TO))
+	logo.position.y = home.y - snappedf(lift * rise, ART_PIXEL)
+	if progress == 0.0:
+		_homes.clear()
+
+
+func _remember_homes() -> void:
+	_homes[logo] = logo.position
+	for button in _menu_buttons:
+		_homes[button] = button.position
+
+
+## The column laid its children out again (window resized): they are at
+## their new homes now; move them back to where the animation has them.
+func _on_menu_sorted() -> void:
+	_homes.clear()
+	if _settings_morph.progress > 0.0:
+		_settings_morph.refresh.call_deferred()
+
+
+static func _phase(value: float, from: float, to: float) -> float:
+	return clampf((value - from) / (to - from), 0.0, 1.0)
+
+
+static func _ease_out(x: float) -> float:
+	return 1.0 - pow(1.0 - x, 3.0)
 
 
 func _on_play_pressed() -> void:
@@ -450,7 +565,9 @@ func _on_play_pressed() -> void:
 		button.disabled = true
 	_fade_out_music()
 	_keep_click_sound()
-	get_tree().change_scene_to_file(VOID_SCENE if GameSettings.start_in_void else GAME_SCENE)
+	# The Void start is a developer setting: public builds ignore a saved one.
+	var void_start := GameSettings.start_in_void and OS.is_debug_build()
+	get_tree().change_scene_to_file(VOID_SCENE if void_start else GAME_SCENE)
 
 
 ## Quitting with sounds still held by the audio server leaks them at exit:
