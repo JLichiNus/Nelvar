@@ -30,8 +30,10 @@ const FOLD_LENGTH := 0.2
 const FOLD_STAGGER := 0.07
 const LIFT_FROM := 0.1
 const LIFT_TO := 0.5
-## Between the risen logo and the settings panel.
+## Between the risen logo and the settings panel, and between the logo and
+## the hint frame right of it.
 const PANEL_GAP := 24.0
+const HINT_GAP := 48.0
 const ART_PIXEL := 3.0
 
 @export var play_element: NelvarMenuElement
@@ -145,6 +147,7 @@ func _ready() -> void:
 	_settings_morph.setup(settings_panel, settings_button, _highlight_styles[settings_element],
 		_button_labels[settings_button])
 	_settings_morph.target_rect = _settings_rect
+	_settings_morph.hint_rect = _hint_rect
 	_settings_morph.progress_changed.connect(_fold_menu)
 	_settings_morph.opened.connect(_on_settings_opened)
 	_settings_morph.closed.connect(_on_settings_closed)
@@ -509,6 +512,17 @@ func _settings_rect() -> Rect2:
 	var top := _logo_top() + logo.size.y + PANEL_GAP
 	var bottom := area.end.y - margin.get_theme_constant("margin_bottom")
 	return Rect2(left, top, right - left, bottom - top)
+
+
+## The hint frame: right of the risen logo up to the screen margin, level
+## with the logo's middle.
+func _hint_rect() -> Rect2:
+	var area := margin.get_global_rect()
+	var left := menu_column.global_position.x + logo.position.x + logo.size.x + HINT_GAP
+	var right := area.end.x - margin.get_theme_constant("margin_right")
+	var height := _settings_morph.hint_box.frame_height()
+	var top := _logo_top() + (logo.size.y - height) / 2.0
+	return Rect2(left, top, maxf(right - left, 0.0), height)
 
 
 ## Where the risen logo's top edge is: the top margin of the screen.

@@ -9,9 +9,13 @@ const FADE_LENGTH := 0.18
 const FADE_STAGGER := 0.05
 const FRAME_FROM := 0.1
 const FRAME_TO := 0.35
-## Largest settings panel; smaller windows keep this margin around it.
+## Largest settings panel; smaller windows keep this margin around the
+## panel and the hint frame above it.
 const SETTINGS_MAX := Vector2(1150, 640)
 const SETTINGS_MARGIN := Vector2(96, 64)
+## The hint frame sits above the panel at its right edge, this wide a share of it.
+const HINT_GAP := 12.0
+const HINT_SHARE := 0.6
 
 @export var settings_element: NelvarMenuElement
 
@@ -41,6 +45,7 @@ func _ready() -> void:
 	shade.add_child(_settings_morph)
 	_settings_morph.setup(settings_panel, settings_button, settings_button.get_theme_stylebox("hover"))
 	_settings_morph.target_rect = _settings_rect
+	_settings_morph.hint_rect = _hint_rect
 	_settings_morph.progress_changed.connect(_fade_dialog)
 	_settings_morph.opened.connect(_on_settings_opened)
 	_settings_morph.closed.connect(_on_settings_closed)
@@ -98,11 +103,29 @@ func _on_settings_closed() -> void:
 		button.focus_mode = Control.FOCUS_ALL
 
 
-## The settings panel in the middle of the screen, as large as fits.
+## The settings panel in the middle of the screen, as large as fits under
+## the hint frame.
 func _settings_rect() -> Rect2:
+	return _settings_layout()[0]
+
+
+func _hint_rect() -> Rect2:
+	return _settings_layout()[1]
+
+
+## [panel, hint frame]: the two stacked and centered together.
+func _settings_layout() -> Array[Rect2]:
 	var area := shade.get_global_rect()
-	var panel_size := (area.size - SETTINGS_MARGIN * 2.0).min(SETTINGS_MAX)
-	return Rect2(area.position + (area.size - panel_size) / 2.0, panel_size).abs()
+	var hint_height := _settings_morph.hint_box.frame_height()
+	var room := area.size - SETTINGS_MARGIN * 2.0 - Vector2(0.0, hint_height + HINT_GAP)
+	var panel_size := room.min(SETTINGS_MAX).max(settings_panel.get_combined_minimum_size())
+	var top := area.position.y + (area.size.y - panel_size.y - hint_height - HINT_GAP) / 2.0
+	var left := area.position.x + (area.size.x - panel_size.x) / 2.0
+	var hint_width := panel_size.x * HINT_SHARE
+	return [
+		Rect2(left, top + hint_height + HINT_GAP, panel_size.x, panel_size.y),
+		Rect2(left + panel_size.x - hint_width, top, hint_width, hint_height),
+	]
 
 
 ## The dialog's part of the settings animation: every row but «Настройки»

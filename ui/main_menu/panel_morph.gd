@@ -11,7 +11,8 @@ extends Control
 ##                menu folds its other buttons away and lifts the logo
 ##   0.25 - 0.78  the button's frame grows into the panel's frame, its text
 ##                flies to the panel's header
-##   0.78 - 1.00  the panel's content appears (NelvarSettingsPanel.set_reveal)
+##   0.78 - 1.00  the panel's content appears (NelvarSettingsPanel.set_reveal),
+##                the hint frame last (NelvarHintBox; first to go on closing)
 ##
 ## A full-rect overlay that must be drawn above the panel (add it after the
 ## panel). It holds the growing frame and the flying title, and blocks the
@@ -36,6 +37,10 @@ var button: Button
 var button_label: Label
 ## Global rect the panel opens to: `func() -> Rect2`.
 var target_rect: Callable
+## Global rect of the hint frame: `func() -> Rect2`; its height should be
+## `hint_box.frame_height()`.
+var hint_rect: Callable
+var hint_box: NelvarHintBox
 ## 0..1, see the timeline above.
 var progress := 0.0
 
@@ -63,6 +68,8 @@ func _ready() -> void:
 		node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		node.hide()
 		add_child(node)
+	hint_box = NelvarHintBox.new()
+	add_child(hint_box)
 	resized.connect(refresh)
 
 
@@ -74,6 +81,7 @@ func setup(settings_panel: NelvarSettingsPanel, from_button: Button, look: Style
 	button_label = text_label
 	_button_look.add_theme_stylebox_override("panel", look)
 	_panel_look.add_theme_stylebox_override("panel", panel.get_theme_stylebox("panel"))
+	panel.hint_changed.connect(hint_box.show_hint)
 	panel.hide()
 
 
@@ -124,6 +132,7 @@ func _begin() -> void:
 	_copy_title_style()
 	panel.set_interactive(false)
 	panel.reset_view()
+	hint_box.clear()
 	panel.self_modulate.a = 0.0
 	panel.show()
 
@@ -151,6 +160,7 @@ func _end() -> void:
 	_button_look.hide()
 	_panel_look.hide()
 	_title.hide()
+	hint_box.reveal = 0.0
 	_set_button_alpha(1.0)
 
 
@@ -182,6 +192,9 @@ func _set_progress(value: float) -> void:
 
 	var reveal := _phase(progress, GROW_TO, 1.0)
 	panel.set_reveal(reveal)
+	if hint_rect.is_valid():
+		hint_box.place(hint_rect.call())
+	hint_box.reveal = _phase(reveal, 0.6, 1.0)
 	# The button's text flies to the header and fades into it.
 	var title_alpha := 1.0 - panel.header.modulate.a
 	_title.visible = progress > GROW_FROM and title_alpha > 0.0

@@ -1,14 +1,17 @@
 class_name NelvarSettingsPanel
 extends NelvarMenuPanel
 ## Settings: categories on the left, the chosen category's rows on the right
-## (one line each, scrolled when they do not fit) and, under them, the hint of
-## the row under the cursor or in focus (rows keep it in `metadata/hint`).
+## (one line each, scrolled when they do not fit). The hint of the row under
+## the cursor or in focus (rows keep it in `metadata/hint`) is sent out with
+## `hint_changed`; NelvarPanelMorph shows it in its own frame (NelvarHintBox).
 ## Q/E or the gamepad shoulders switch categories from anywhere in the panel.
 ## «Разработчик» exists only in debug builds (editor runs and debug exports).
 ##
 ## The same panel serves the main menu and the pause menu. Both grow it out
 ## of their «Настройки» button with NelvarPanelMorph, which shows the content
 ## through `set_reveal`.
+
+signal hint_changed(text: String)
 
 const HINT_META := &"hint"
 
@@ -24,7 +27,6 @@ const PREVIOUS_KEY := KEY_Q
 @onready var categories: VBoxContainer = %Categories
 @onready var pages: VBoxContainer = %Pages
 @onready var scroll: ScrollContainer = %Scroll
-@onready var hint: Label = %Hint
 @onready var body: HBoxContainer = %Body
 @onready var footer: HBoxContainer = %Footer
 @onready var divider: ColorRect = %Body/Divider
@@ -198,11 +200,15 @@ func _set_hovered_row(row: Control) -> void:
 
 
 func _refresh_hint() -> void:
+	hint_changed.emit(current_hint())
+
+
+## Hint of the row under the cursor, else of the row in focus; "" if none.
+func current_hint() -> String:
 	var row := _hovered_row if _hovered_row != null else _focused_row
 	if row != null and is_instance_valid(row) and row.is_visible_in_tree():
-		hint.text = row.get_meta(HINT_META, "")
-	else:
-		hint.text = ""
+		return row.get_meta(HINT_META, "")
+	return ""
 
 
 static func _phase(amount: float, from: float, to: float) -> float:
