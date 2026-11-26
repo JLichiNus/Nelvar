@@ -145,8 +145,7 @@ func fresh_near(point: Vector2, radius: float, age: float = 30.0) -> int:
 
 
 func _on_snow(point: Vector2) -> bool:
-	return _data != null and _data.lake_depth(point) < -4.0 and _data.crevasse_sample(point).x < -6.0 \
-		and _data.valley.signed_distance(point) > 0.0
+	return _data != null and _data.is_snow(point)
 
 
 func _count(point: Vector2) -> void:

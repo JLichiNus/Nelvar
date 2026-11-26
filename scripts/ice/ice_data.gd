@@ -18,12 +18,18 @@ const PIXEL := NelvarEarthData.PIXEL
 const ICE_GRIP := 0.15
 ## A hole is open water, then slush, until this share of its freezing; then thin ice.
 const SLUSH_END := 0.8
+## Safe ground (where a fall brings the player back) keeps this much from any danger.
+const SAFE_MARGIN := 18.0
 
-enum Kind { PINE, DEAD_TREE, ROCK, STATUE, DRIFT, ICE_BLOCK, DRY_GRASS, SHRUB }
-## What lies under a point (ice_at).
-enum Surface { SNOW, ICE, THIN }
-## Looks of a creature frozen into a lake.
-enum Creature { BEAST, FISH, SERPENT }
+## The last six are the ice cave's (NelvarCaveData): the valley never makes them.
+enum Kind { PINE, DEAD_TREE, ROCK, STATUE, DRIFT, ICE_BLOCK, DRY_GRASS, SHRUB,
+	ICE_STONE, CRYSTAL, STALAGMITE, BONES, EMBEDDED, VENT }
+## What lies under a point (ice_at). The cave adds bare stone, melting ice and open water.
+enum Surface { SNOW, ICE, THIN, STONE, MELT, WATER }
+## Looks of a creature frozen into a lake. The cave adds the winged and the crawler.
+enum Creature { BEAST, FISH, SERPENT, WINGED, CRAWLER }
+## What a step leads into (fall_kind): nothing, a crack, the water, a chasm (the cave).
+enum Fall { NONE, CREVASSE, WATER, CHASM }
 ## Looks of a block of ice (Thing.variant of Kind.ICE_BLOCK): one block, a pressure ridge.
 enum Block { CHUNK, RIDGE }
 
@@ -121,6 +127,18 @@ class Frozen:
 	var appearance_seed := 0
 	var eye := false
 	var facing_left := false
+	## The eye opens this much further off (the cave's creatures deep in a wall).
+	var reach := 0.0
+	## Drifting under melting ice: a loop of radius x, one round in y seconds, starting
+	## at phase z. Zero: frozen in place.
+	var drift := Vector3.ZERO
+
+	## Where it is after `time` seconds (it only moves while drifting).
+	func position_at(time: float) -> Vector2:
+		if drift.x <= 0.0:
+			return position
+		var angle := drift.z + TAU * time / maxf(drift.y, 1.0)
+		return position + Vector2(cos(angle), sin(angle) * 0.6) * drift.x
 
 
 ## A hole broken in thin ice during play: open water, then slush, then thin ice again.
@@ -161,8 +179,12 @@ class Thing:
 				return Vector2(radius * 1.45, radius * 0.62)
 			Kind.DRIFT:
 				return Vector2(radius, radius * 0.42)
-			Kind.ICE_BLOCK:
+			Kind.ICE_BLOCK, Kind.ICE_STONE, Kind.VENT, Kind.STALAGMITE:
 				return Vector2(radius, radius * 0.6)
+			Kind.CRYSTAL:
+				return Vector2(radius, radius * 0.55)
+			Kind.EMBEDDED:
+				return Vector2(radius, radius * 0.45)
 		return Vector2(radius, radius)
 
 	## Distance used to keep things apart: the larger half-axis of the footprint.
@@ -341,6 +363,38 @@ func is_open_ground(point: Vector2, margin: float = 0.0) -> bool:
 ## or a hole, and not on thin ice.
 func is_safe_landing(point: Vector2) -> bool:
 	return is_open_ground(point, 22.0) and thin_depth(point) < -16.0 and hole_depth(point) < -30.0
+
+
+## Snow lies here (marks show only on it): off the ice and out of the crevasses.
+func is_snow(point: Vector2) -> bool:
+	return lake_depth(point) < -4.0 and crevasse_sample(point).x < -6.0 and valley.signed_distance(point) > 0.0
+
+
+## What a step onto the point leads into (Fall): a crevasse, an open hole, nothing.
+## `margin`: how far in it must be (hoppers die 6 in).
+func fall_kind(point: Vector2, margin: float = 0.0) -> int:
+	if crevasse_depth(point) > margin:
+		return Fall.CREVASSE
+	if hole_depth(point) > margin:
+		return Fall.WATER
+	return Fall.NONE
+
+
+## Ground a fall brings the player back to: snow away from the ice, the crevasses and
+## the mountains.
+func is_safe_spot(point: Vector2) -> bool:
+	return lake_depth(point) < -SAFE_MARGIN \
+		and crevasse_depth(point) < -(NelvarPlayer.BODY_RADIUS + SAFE_MARGIN) \
+		and valley.signed_distance(point) > NelvarPlayer.BODY_RADIUS + 4.0
+
+
+## Points the creatures under the ice move round with the parallax (NelvarIceDepths):
+## Frozen.lake indexes them. Here the lakes' centres.
+func depth_anchors() -> PackedVector2Array:
+	var anchors := PackedVector2Array()
+	for lake in lakes:
+		anchors.append(lake.shape.center)
+	return anchors
 
 
 ## How hard a blizzard blows here, 0..1.

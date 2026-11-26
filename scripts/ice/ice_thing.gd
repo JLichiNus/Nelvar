@@ -40,11 +40,11 @@ func setup(spec: NelvarIceData.Thing, artwork: NelvarIceArt) -> void:
 	collision_layer = 0
 	collision_mask = 0
 	_sparkle_timer = fmod(float(spec.appearance_seed & 0xffff) / 997.0, 3.0)
-	set_process(spec.kind == Kind.STATUE or not artwork.sparkles.is_empty())
+	set_process(spec.kind == Kind.STATUE or artwork.eye.is_finite() or not artwork.sparkles.is_empty())
 	if not spec.solid:
 		return
 	collision_layer = NelvarProp.WORLD_LAYER
-	if spec.kind in [Kind.ROCK, Kind.ICE_BLOCK, Kind.DRIFT]:
+	if spec.kind in [Kind.ROCK, Kind.ICE_BLOCK, Kind.DRIFT, Kind.ICE_STONE, Kind.CRYSTAL, Kind.STALAGMITE]:
 		collision_layer = NelvarProp.rock_layer(spec.radius)
 	collision_mask = 2
 	var collider := CollisionShape2D.new()
@@ -62,7 +62,7 @@ func setup(spec: NelvarIceData.Thing, artwork: NelvarIceArt) -> void:
 
 ## Low things on the ground never hide the player.
 func occludes() -> bool:
-	return thing.kind not in [Kind.DRY_GRASS, Kind.DRIFT]
+	return thing.kind not in [Kind.DRY_GRASS, Kind.DRIFT, Kind.BONES]
 
 
 func _enter_tree() -> void:

@@ -18,27 +18,11 @@ extends Node2D
 ## the depths and the blizzard are drawn on the GPU.
 
 const STEP := NelvarIceData.PIXEL
-## A step over a crevasse or an open hole holds this long before it is a fall: walking
-## is too slow to cross even the narrowest crack, running crosses up to about 40 wide.
-const COYOTE_TIME := 0.09
-const FALL_TIME := 0.6
-const FALL_DAMAGE := 12.0
-const CREVASSE_TINT := Color(0.16, 0.26, 0.62, 0.0)
-const WATER_TINT := Color(0.2, 0.72, 0.78, 0.0)
-## Thin ice: standing this long within CRACK_REACH of a spot cracks it; the crack
-## breaks after CRACK_TIME unless the player gets further than CRACK_REACH from it
-## (then it holds for CRACK_LINGER, and a step on it breaks it at once).
-const HOLD_TIME := 0.35
-const CRACK_TIME := 0.8
-const CRACK_REACH := 40.0
-const CRACK_LINGER := 10.0
-const HOLE_RADIUS := 40.0
-## Seconds for a hole to freeze over again (open water, slush, thin ice).
-const FREEZE_TIME := 25.0
-const MAX_CRACKS := 8
-const MAX_HOLES := 16
-## Safe ground: snow this far from crevasses, holes and thin ice.
-const SAFE_MARGIN := 18.0
+## Falls, thin ice and holes are NelvarIceHazards'; the tests read these here.
+const FALL_TIME := NelvarIceHazards.FALL_TIME
+const FREEZE_TIME := NelvarIceHazards.FREEZE_TIME
+const MAX_CRACKS := NelvarIceHazards.MAX_CRACKS
+const MAX_HOLES := NelvarIceHazards.MAX_HOLES
 ## Blizzards: how long they take to cross, the lulls between them, how they slow the
 ## player at full strength, how far ahead they are announced.
 const STORM_TIME := Vector2(40.0, 60.0)
@@ -52,19 +36,9 @@ const WARN_TIME := 4.0
 const STORM_CLOCK := 6.0
 ## Snow-clock seconds a mark in the snow lasts.
 const MARK_LIFE := 90.0
-const HINT_WIDE := "Слишком широко. Разбегись (Ctrl) или взлети (Shift)"
-const HINT_THIN := "Тонкий лёд: по нему можно бежать, стоять нельзя"
 const HINT_STORM := "Надвигается метель"
 const MESSAGE_FADE := 0.6
 const MESSAGE_HOLD := 2.6
-
-
-## A crack spreading under the player on thin ice, or one that held.
-class Crack:
-	var center := Vector2.ZERO
-	var age := 0.0
-	var held := false
-	var held_time := 0.0
 
 
 ## A blizzard's way across the valley.
@@ -96,11 +70,21 @@ class Storm:
 var data: NelvarIceData
 var thing_nodes: Array[NelvarIceThing] = []
 var peak_nodes: Array[NelvarIceThing] = []
+## The falls, the thin ice and the holes (shared with the cave).
+var hazards: NelvarIceHazards
 ## Falls into crevasses, plunges into holes, cracks and holes so far (HUD and tests).
-var falls := 0
-var plunges := 0
-var cracks_made := 0
-var holes_broken := 0
+var falls: int:
+	get:
+		return hazards.falls if hazards != null else 0
+var plunges: int:
+	get:
+		return hazards.plunges if hazards != null else 0
+var cracks_made: int:
+	get:
+		return hazards.cracks_made if hazards != null else 0
+var holes_broken: int:
+	get:
+		return hazards.holes_broken if hazards != null else 0
 ## Blizzard strength where the player stands, 0..1.
 var storm_level := 0.0
 var snow_clock := 0.0
@@ -117,16 +101,10 @@ var _painting: Array = []
 var _arts: Array = []
 var _field: NelvarIceField
 var _mountain_field: NelvarMountainField
-var _safe_position := Vector2.ZERO
-var _over_time := 0.0
-var _falling := false
-var _cracks: Array[Crack] = []
-var _stand_anchor := Vector2.INF
-var _stand_time := 0.0
-var _hinted_wide := false
-var _hinted_thin := false
-## Enemies in the air last frame (a hopper's landing leaves a dent).
-var _airborne_enemies := {}
+## The cracks on thin ice now (NelvarIceHazards keeps them).
+var _cracks: Array:
+	get:
+		return hazards.cracks if hazards != null else []
 var _message_tween: Tween
 var _show_debug := false
 var _outlines: Node2D
@@ -176,7 +154,8 @@ func _ready() -> void:
 	_plan_storms()
 	player.position = data.spawn_position
 	player.camera.reset_smoothing()
-	_safe_position = data.spawn_position
+	hazards = NelvarIceHazards.new(data, player, self, snow_marks)
+	hazards.fell.connect(_update_status.unbind(1))
 	enemy_spawner.call("start_on", data)
 	seed_label.text = "ЛЁД · ДОЛИНА · СИД %d" % data.world_seed
 	_update_status()
@@ -414,9 +393,11 @@ func _process(delta: float) -> void:
 	material.set_shader_parameter("time", _time)
 	material.set_shader_parameter("snow_clock", snow_clock)
 	var cracks: Array[Vector4] = []
-	for crack in _cracks:
-		var stage := 1.0 + crack.held_time / CRACK_LINGER if crack.held else crack.age / CRACK_TIME
-		cracks.append(Vector4(crack.center.x / STEP, crack.center.y / STEP, (CRACK_REACH + 6.0) / STEP, stage))
+	for crack in hazards.cracks:
+		var stage := 1.0 + crack.held_time / NelvarIceHazards.CRACK_LINGER if crack.held \
+			else crack.age / NelvarIceHazards.CRACK_TIME
+		cracks.append(Vector4(crack.center.x / STEP, crack.center.y / STEP,
+			(NelvarIceHazards.CRACK_REACH + 6.0) / STEP, stage))
 	var crack_count := cracks.size()
 	while cracks.size() < MAX_CRACKS:
 		cracks.append(Vector4.ZERO)
@@ -441,156 +422,17 @@ func _physics_process(delta: float) -> void:
 		return
 	clock += delta
 	_update_storms(delta)
-	_update_holes(delta)
-	_update_cracks(delta)
-	_enemies_on_ice()
+	hazards.update_holes(delta)
+	hazards.update_cracks(delta)
+	hazards.enemies()
 	snow_marks.set_clock(snow_clock)
-	snow_marks.track_player(player.global_position, player.is_airborne() or player.is_falling() or _falling)
-	if _falling or player.is_falling() or player.health <= 0.0:
-		return
-	var point := player.global_position
-	if player.is_airborne():
-		# The flight passes over everything and leaves the ice alone.
-		player.traction = 1.0
-		_over_time = 0.0
-		_stand_anchor = Vector2.INF
-		return
-	player.traction = data.grip_at(point)
-	var crevasse := data.crevasse_depth(point)
-	var hole := data.hole_depth(point)
-	if crevasse > 0.0 or hole > 0.0:
-		_over_time += delta
-		if _over_time > COYOTE_TIME:
-			_over_time = 0.0
-			if crevasse > 0.0:
-				_fall(true)
-			else:
-				_fall(false)
-		return
-	_over_time = 0.0
-	_thin_ice(point, delta)
-	if data.lake_depth(point) < -SAFE_MARGIN and crevasse < -(NelvarPlayer.BODY_RADIUS + SAFE_MARGIN) \
-			and data.valley.signed_distance(point) > NelvarPlayer.BODY_RADIUS + 4.0:
-		_safe_position = point
+	snow_marks.track_player(player.global_position, player.is_airborne() or player.is_falling() or hazards.falling)
+	hazards.step(delta)
 
 
-## Into a crevasse (or the water of a hole): the player sinks and comes back on the
-## snow they last stood on safely, hurt. The first fall into a crevasse says how it is
-## crossed.
-func _fall(crevasse: bool) -> void:
-	_falling = true
-	if crevasse:
-		falls += 1
-	else:
-		plunges += 1
-		_splash(player.global_position, 18)
-	_update_status()
-	player.fall_into_abyss(FALL_TIME, CREVASSE_TINT if crevasse else WATER_TINT)
-	await get_tree().create_timer(FALL_TIME + 0.3, false).timeout
-	_falling = false
-	if not is_instance_valid(player):
-		return
-	player.recover_at(_safe_position)
-	player.take_damage(FALL_DAMAGE)
-	_stand_anchor = Vector2.INF
-	if crevasse and not _hinted_wide:
-		_hinted_wide = true
-		say(HINT_WIDE)
-	elif not crevasse and not _hinted_thin:
-		_hinted_thin = true
-		say(HINT_THIN)
-
-
-## Thin ice holds a running player, not a standing one: standing a moment in one spot
-## cracks it; a crack that held breaks at once under the next step.
-func _thin_ice(point: Vector2, delta: float) -> void:
-	if data.ice_at(point) != NelvarIceData.Surface.THIN:
-		_stand_anchor = Vector2.INF
-		return
-	for crack in _cracks:
-		if crack.held and point.distance_to(crack.center) < CRACK_REACH * 0.8:
-			_break(crack)
-			return
-	if not _stand_anchor.is_finite() or point.distance_to(_stand_anchor) > CRACK_REACH:
-		_stand_anchor = point
-		_stand_time = 0.0
-		return
-	_stand_time += delta
-	if _stand_time < HOLD_TIME:
-		return
-	for crack in _cracks:
-		if crack.center.distance_to(_stand_anchor) < CRACK_REACH:
-			return
-	if _cracks.size() >= MAX_CRACKS:
-		_cracks.remove_at(0)
-	var crack := Crack.new()
-	crack.center = _stand_anchor
-	_cracks.append(crack)
-	cracks_made += 1
-	_stand_time = -INF
-
-
-## Spreading cracks break under a player who stays, or hold once they get away (or take
-## off); held ones fade.
-func _update_cracks(delta: float) -> void:
-	for crack in _cracks.duplicate():
-		if crack.held:
-			crack.held_time += delta
-			if crack.held_time > CRACK_LINGER:
-				_cracks.erase(crack)
-			continue
-		crack.age += delta
-		var away := player.global_position.distance_to(crack.center) > CRACK_REACH
-		if away or player.is_airborne() or player.is_falling():
-			crack.held = true
-			continue
-		if crack.age >= CRACK_TIME:
-			_break(crack)
-
-
-## The ice gives: a hole of open water where the crack was.
-func _break(crack: Crack) -> void:
-	_cracks.erase(crack)
-	if data.holes.size() >= MAX_HOLES:
-		data.holes.remove_at(0)
-	var hole := NelvarIceData.Hole.new()
-	hole.center = crack.center
-	hole.radius = HOLE_RADIUS
-	data.holes.append(hole)
-	holes_broken += 1
-	_splash(crack.center, 14)
-
-
-## Holes freeze over: open water, slush, thin ice, then gone into the patch again.
+## Holes freeze over (the tests hurry them on).
 func _update_holes(delta: float) -> void:
-	for hole in data.holes.duplicate():
-		hole.freeze += delta / FREEZE_TIME
-		if hole.freeze >= 1.0:
-			data.holes.erase(hole)
-
-
-## Hoppers blown into a crevasse fall, into a hole drown; a hopper landing on snow
-## leaves a dent.
-func _enemies_on_ice() -> void:
-	var seen := {}
-	for enemy in get_tree().get_nodes_in_group("enemies"):
-		var body := enemy as Node2D
-		if body == null:
-			continue
-		var id := body.get_instance_id()
-		var airborne: bool = enemy.has_method("is_airborne") and enemy.call("is_airborne")
-		seen[id] = airborne
-		if airborne:
-			continue
-		if _airborne_enemies.get(id, false):
-			snow_marks.stamp_dent(body.global_position)
-		if data.crevasse_depth(body.global_position) > 6.0:
-			_puff(body.global_position, Color(0.86, 0.92, 1.0), 12)
-			enemy.call("take_damage", 10000.0)
-		elif data.hole_depth(body.global_position) > 6.0:
-			_splash(body.global_position, 14)
-			enemy.call("take_damage", 10000.0)
-	_airborne_enemies = seen
+	hazards.update_holes(delta)
 
 
 ## Blizzards move on; the one over the player slows them and drifts the snow faster;
@@ -629,35 +471,6 @@ func _update_storms(delta: float) -> void:
 	snow_clock += delta * lerpf(1.0, STORM_CLOCK, storm_level)
 	blizzard.warning = warning if storm_level < 0.2 else 0.0
 	blizzard.warning_side = side
-
-
-## Snow thrown up (a hopper falling into a crevasse).
-func _puff(point: Vector2, color: Color, count: int) -> void:
-	var puff := CPUParticles2D.new()
-	puff.one_shot = true
-	puff.explosiveness = 0.9
-	puff.amount = count
-	puff.lifetime = 0.6
-	puff.direction = Vector2.UP
-	puff.spread = 70.0
-	puff.initial_velocity_min = 60.0
-	puff.initial_velocity_max = 160.0
-	puff.gravity = Vector2(0.0, 320.0)
-	puff.scale_amount_min = STEP
-	puff.scale_amount_max = STEP
-	puff.color = color
-	puff.position = point
-	puff.z_index = 20
-	puff.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	puff.finished.connect(puff.queue_free)
-	add_child(puff)
-	puff.emitting = true
-
-
-## Water and shards of ice thrown up where the ice breaks or someone goes in.
-func _splash(point: Vector2, count: int) -> void:
-	_puff(point, Color(0.62, 0.86, 0.92), count)
-	_puff(point, Color(0.95, 0.98, 1.0), count / 2)
 
 
 ## A line in the middle of the screen, faded in and out.

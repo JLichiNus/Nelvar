@@ -299,16 +299,16 @@ func _check_art(data: NelvarCraterData) -> void:
 
 # --- The start setting -------------------------------------------------------------
 
-## The five start options exclude each other. The saved settings are put back as they were.
+## The six start options exclude each other. The saved settings are put back as they were.
 func _check_settings() -> void:
 	var settings: Node = root.get_node("GameSettings")
 	var path: String = settings.PATH
 	var saved := FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else PackedByteArray()
 	var was := [settings.start_in_void, settings.start_on_earth, settings.start_in_fire, settings.start_on_ice,
-		settings.start_in_fire2]
+		settings.start_in_fire2, settings.start_on_ice2]
 	var setters := ["set_start_in_void", "set_start_on_earth", "set_start_in_fire", "set_start_on_ice",
-		"set_start_in_fire2"]
-	var flags := ["start_in_void", "start_on_earth", "start_in_fire", "start_on_ice", "start_in_fire2"]
+		"set_start_in_fire2", "set_start_on_ice2"]
+	var flags := ["start_in_void", "start_on_earth", "start_in_fire", "start_on_ice", "start_in_fire2", "start_on_ice2"]
 	for i in setters.size():
 		settings.call(setters[i], true)
 		for j in flags.size():

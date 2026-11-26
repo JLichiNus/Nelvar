@@ -4,11 +4,17 @@ extends CanvasLayer
 ## creatures frozen into it. Drawn under the floor (whose ice is translucent): only
 ## the ice lets it show, the thin ice most.
 ##
-## It lies deeper than the floor: it follows the camera by PARALLAX only, each lake's
-## creatures round the lake's centre, so standing over a creature puts it right under
-## the player. The offset is snapped to whole art pixels, so the sprites stay on the
-## world grid and never smear. A creature with an eye opens it, slowly, while the
-## player stands over it, and follows them with it (as the petrified ones do).
+## It lies deeper than the floor: it follows the camera by PARALLAX only, the creatures
+## round their anchors (NelvarIceData.depth_anchors: each lake's centre, and in the cave
+## also the spots in the walls), so standing over a creature puts it right under the
+## player. The offset is snapped to whole art pixels, so the sprites stay on the world
+## grid and never smear. A creature with an eye opens it, slowly, while the player
+## stands over it (or, deep in a wall, walks by it), and follows them with it (as the
+## petrified ones do); under melting ice they drift slowly round a loop.
+##
+## The cave gives it a mask (set_mask): under the walls' translucent tops it shows deep
+## blue ice with bubbles and layers instead of water, under the chasms nothing (the
+## abyss below shows). Without a mask it is all water, as on the valley.
 
 const SHADER := preload("res://scripts/ice/ice_depths.gdshader")
 const STEP := NelvarIceData.PIXEL
@@ -50,7 +56,7 @@ class FrozenNode extends Node2D:
 		if not creature.eye or watcher == null or not is_instance_valid(watcher) or not art.eye.is_finite():
 			return
 		var eye_point := global_position + art.eye * STEP
-		var distance := global_position.distance_to(watcher.global_position) - creature.radius
+		var distance := global_position.distance_to(watcher.global_position) - creature.radius - creature.reach
 		var wanted := 2 if distance < OPEN_REACH else (eye if distance < CLOSE_REACH else 0)
 		_lid_timer -= delta
 		if wanted != eye and _lid_timer <= 0.0:
@@ -96,9 +102,10 @@ var frozen_nodes: Array[FrozenNode] = []
 
 var _water: ColorRect
 var _material: ShaderMaterial
-## One holder per lake: its creatures move round the lake's centre.
+## One holder per anchor (a lake, a spot in a wall): its creatures move round it.
 var _holders: Array[Node2D] = []
 var _anchors := PackedVector2Array()
+var _drifting: Array[FrozenNode] = []
 var _time := 0.0
 
 
@@ -118,12 +125,13 @@ func _ready() -> void:
 
 ## `arts[i]` is the painted art of `data.frozen[i]`; `watcher` opens their eyes.
 func setup(data: NelvarIceData, arts: Array, watcher: Node2D) -> void:
-	for i in data.lakes.size():
+	var anchors := data.depth_anchors()
+	for i in anchors.size():
 		var holder := Node2D.new()
-		holder.name = "Lake_%d" % i
+		holder.name = "Lake_%d" % i if i < data.lakes.size() else "Wall_%d" % (i - data.lakes.size())
 		add_child(holder)
 		_holders.append(holder)
-		_anchors.append(data.lakes[i].shape.center)
+		_anchors.append(anchors[i])
 	for i in data.frozen.size():
 		var creature := data.frozen[i]
 		var art: NelvarIceArt = arts[i]
@@ -135,7 +143,24 @@ func setup(data: NelvarIceData, arts: Array, watcher: Node2D) -> void:
 		node.watcher = watcher
 		_holders[creature.lake].add_child(node)
 		frozen_nodes.append(node)
+		if creature.drift.x > 0.0:
+			_drifting.append(node)
 	_update_view()
+
+
+## Shows ice under the walls and nothing under the chasms: the cave's distance field
+## (one texel per `sdf_cell` world units from `sdf_origin`) and its zone map (R chasm,
+## G arch; one texel per art pixel from `zone_origin`).
+func set_mask(sdf: Texture2D, sdf_origin: Vector2, sdf_size: Vector2, sdf_cell: float, zone: Texture2D,
+		zone_origin: Vector2, zone_size: Vector2) -> void:
+	_material.set_shader_parameter("use_mask", true)
+	_material.set_shader_parameter("sdf_tex", sdf)
+	_material.set_shader_parameter("sdf_origin", sdf_origin)
+	_material.set_shader_parameter("sdf_size", sdf_size)
+	_material.set_shader_parameter("sdf_cell", sdf_cell)
+	_material.set_shader_parameter("zone_tex", zone)
+	_material.set_shader_parameter("zone_origin", zone_origin)
+	_material.set_shader_parameter("zone_size", zone_size)
 
 
 func material() -> ShaderMaterial:
@@ -144,6 +169,9 @@ func material() -> ShaderMaterial:
 
 func _process(delta: float) -> void:
 	_time += delta
+	for node in _drifting:
+		# Whole art pixels from where it was painted, so it stays on the world grid.
+		node.position = node.creature.position + snap(node.creature.position_at(_time) - node.creature.position)
 	_update_view()
 	for node in frozen_nodes:
 		node.watch(delta)

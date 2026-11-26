@@ -483,6 +483,96 @@ lick up along the shores, over the boils and the splashes (`NelvarEmbers.flame`)
 thicker than in the forge. F3 shows the edge, the shore and the capes, the floes as they are
 now (the ones that sink in cyan), the geysers and the splashes.
 
+### The ice cave, Ice 2 (developer menu)
+
+Settings → «Меню разработчика» → «Запускать игру на Льду 2» (right under «на Льду») makes
+«Играть» open `scenes/ice2.tscn`: a maze of halls and winding passages cut into a mass of
+blue ice with dead creatures frozen into it. Mostly dusk; under holes in the roof the sun
+shines in slanting shafts, snow falls and lies, pines grow; the biggest halls are cold,
+with frost, mist, ice pillars and geysers. The ice valley (Ice 1) stays as it is; both
+maps live side by side.
+
+`NelvarCaveGenerator` lays it out from the seed (parameters in
+`resources/ice_cave_config.tres`) in a cave of 5200×4200 with solid ice all round:
+
+- **Halls:** 2–3 cold arenas (radius 450–650), 3–5 sunny halls (260–380), 5–8 dark ones
+  (200–320) and 4–7 grottos (90–150), at least 220 of ice apart. The start is on the snow
+  of a sunny hall with a way out to the north, so it is in view at once.
+- **Passages:** a spanning tree of the Delaunay triangulation of the halls plus 35–50% of
+  its other edges (loops: many ways to a place); edges grazing a third hall are left out;
+  every hall has two ways out, every grotto hangs on one (dead ends). A passage winds, its
+  half width wanders between 50 and 95, now and then it narrows to a slit (36, a hopper
+  gets through); niches and pockets beside it hold the things, the way stays free. 2–4
+  passages are smooth slippery ice. The big halls get 2–6 ice pillars (cover).
+- **The walls are one distance field** (`NelvarCaveData.sdf`, a sample every 8 units,
+  exact near the outline, a distance transform further in). Walls thinner than a south
+  face needs are cut into the floor first, crumbs of ice and cut-off pockets of floor go.
+  The collision is its zero line by marching squares (`NelvarCaveWalls`, chunks of 512, on
+  World and on layer 9 «Walls»), the logic reads it bilinearly (`wall_depth`), and so does
+  the floor shader per art pixel: one boundary for all three. The flight does not pass
+  over the walls.
+- **Zones:** sunny spots (160–320) with snow round them and in tongues into the passages,
+  cold halls with soft edges (120), geysers' warmth (170–240), the icy passages, the grottos.
+- **Lakes:** 2–4 frozen (thin patches as on the valley, creatures frozen in, some watch),
+  1–2 melting (300–400 across) and 1–3 of open water (a band of melting ice round it,
+  bodies floating on it). Melting ice and open water are never on the only way anywhere:
+  after each of them, each chasm and each crevasse the floor is searched from the start.
+- **Chasms** (2–3): one splits a hall (one end runs into the ice, the other tapers out on
+  the floor), the others cross passages. Ice arches (50–80 wide, at most 300 long) carry
+  every needed way over them; narrow places (`leaps`) are crossed at a run (up to 34) or
+  in flight (up to 100). 2–4 short crevasses with snow bridges, as on the valley.
+- **Creatures:** 14–24 frozen in the walls 40–220 from the floor, seen from the passages
+  through the ice (~30% open an eye as the player walks by), one or two giants running
+  through the ice from one passage to another, 6–10 caught in ice flows at the foot of
+  the south faces (some heads watch), the winged and the crawler besides the valley's
+  beast, fish and serpent.
+- **Things:** crystals (shards, druses, hexagonal columns, slabs, fans; clear blue, deep
+  blue, now and then violet; about 30% glow), boulders with snow caps on the snow and frost
+  caps in the dark, smooth stones of ice, stalagmites round the geysers and under the sun,
+  bones, pines and drifts on the snow, blocks of ice on the frozen lakes, statues in the
+  grottos. Solid things keep off the passages' ways, the halls' middles and the start.
+
+Playing it (`NelvarCaveMain`; the falls, the thin ice and the holes are the valley's own,
+now `NelvarIceHazards`):
+
+- The dark is an overlay multiplied over everything (`cave_shade.gdshader`): a cold blue
+  dusk, the sun leaves things as they are, the player carries a soft light of 190. The
+  light is added on top (`cave_shine.gdshader`): shafts from the holes in the roof to the
+  upper left with motes in them, the glow of the crystals and of the ice by the sun, the
+  geysers' warmth and eruptions, the mist of the cold halls. Both read a coarse light map
+  (`NelvarCaveField`: sun, glow, warmth, cold); there is no mini-map — the sun, the steam
+  and the glowing crystals are the landmarks.
+- **Melting ice** gives even under a walker: the strain grows to 1 in 1 s on the move,
+  2.5 times faster standing, and eases twice as fast off it; at 0.5 cracks run under the
+  player, at 0.8 the water seeps up, at 1 a hole opens and they fall into the water. A walk
+  does not get across, a run does, the flight passes over. **Open water**, **chasms** and
+  **crevasses** are falls (0.09 s on the edge, then back on safe ground with 12 HP less).
+- **Geysers** (1–3 per cold hall) go round every 14–22 s: 1.5 s of bubbling, 1.2 s of
+  eruption (a column of water and steam, a flash of warm light), the warmth wider for 4 s.
+  The blast throws hoppers back from the mouth; the player is never hurt or thrown. Steam
+  (`NelvarSmoke` in white) hangs over them and is blown away by the wind.
+- **Snow** takes the marks of the valley (`NelvarSnowMarks`, now asking `is_snow()`); snow
+  falls through each hole in the roof while it is near the screen.
+- **Enemies:** the spawner only puts a hopper where the way on foot from the player is
+  short (`path_distance`, a grid of 32 searched again when the player moves on), not in
+  the next passage behind a wall; hoppers never jump into a drop or onto thin or melting
+  ice, and die when blown into one; the wind wave and the compression stop at the walls
+  (`NelvarPlayer.sight_mask`, 0 on every other map).
+
+The floor (`scripts/cave/cave_ground.gdshader`) draws the walls' south faces (layers of
+blue ice, light running down, icicles, frost and shards at their foot), the translucent
+tops of the ice (slabs with cracks; `NelvarIceDepths` shows deep ice with bubbles and the
+frozen creatures under them), stone in frost with frost flowers and pebbles, wet stone,
+puddles and travertine by the geysers, snow, smooth ice, the three kinds of lake, and the
+chasms — the far wall of ice dropping into the dark, the abyss under them
+(`cave_abyss.gdshader`: ledges, mist, settling snow dust, very rarely something enormous),
+the arches with their shadow on it. Snow, lake ice, crevasses, bridges, holes, cracks and
+marks come from `scripts/ice/ice_common.gdshaderinc`, shared with the valley. F3 shows the
+walls' collision, the halls by kind and the passages (icy ones in aquamarine), the chasms
+with their arches, the crevasses with their bridges, the lakes by kind with their thin
+ice, the geysers' warmth and blast, the edges of the cold, the sunny spots, the holes and
+the spawner's path grid round the player.
+
 The earth map contains 2–3 large floating islands and 6–7 small ones, connected
 by narrow wooden bridges. Shorelines and bridge sides are on their own physics
 layer 8 («Edges», `NelvarWorldData.EDGE_LAYER`): they stop enemies, but not the
@@ -570,6 +660,7 @@ godot --headless --path . --script tests/test_earth.gd -- --seeds=30
 godot --headless --path . --script tests/test_fire.gd -- --seeds=30
 godot --headless --path . --script tests/test_ice.gd -- --seeds=30
 godot --headless --path . --script tests/test_crater.gd -- --seeds=30
+godot --headless --path . --script tests/test_cave.gd -- --seeds=6
 godot --headless --path . --script tests/test_mutations.gd
 godot --headless --path . --script tests/test_whistler.gd
 godot --headless --path . --script tests/test_runner.gd
@@ -619,3 +710,16 @@ while a moment over the lava is not, a sinking floe takes the player down and sa
 a geyser hurts and throws (and a throw into the lava burns), a splash hurts and shoves,
 its fresh lava burns and slows and its crust does not, and hoppers die in the lava, off
 the edge and on a sinking floe.
+Cave checks cover the layout (halls of every kind, two ways out of every hall and one out
+of every grotto, at least three loops, the start on the snow of a sunny hall, geysers in
+the cold halls, snow only round the sun and the pines and drifts on it, things clear of the
+ice and the drops, creatures where they can be seen, bodies on open water), that every hall
+can be walked to without melting ice or water and through ways wider than a hopper, the
+wall over every south face, that the collision, the queries and the shader's field see one
+boundary, the floor and light maps against the queries, repeatable art for every kind,
+creature and crystal, the six start options, and in the real scene: the walls hold even in
+flight, melting ice gives under a walker and not under a runner and at once under a
+stander, open water and a chasm drop the player and bring them back hurt, a run crosses a
+narrow place of a chasm, thin ice breaks, an icy passage slides, snow takes marks and stone
+does not, hoppers blown into a drop die, the wave stops at a wall, an eruption throws a
+hopper and leaves the player be, and the spawner keeps to short ways on foot.

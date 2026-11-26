@@ -112,6 +112,7 @@ toggle_info_panel={
 2d_physics/layer_6="LowObstacles"
 2d_physics/layer_7="Lava"
 2d_physics/layer_8="Edges"
+2d_physics/layer_9="Walls"
 
 [physics]
 

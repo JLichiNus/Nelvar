@@ -14,6 +14,8 @@ const FIRE_SCENE := "res://scenes/fire.tscn"
 const ICE_SCENE := "res://scenes/ice.tscn"
 ## Developer setting "Запускать игру в Огне 2": the volcano.
 const FIRE2_SCENE := "res://scenes/fire2.tscn"
+## Developer setting "Запускать игру на Льду 2": the ice cave.
+const ICE2_SCENE := "res://scenes/ice2.tscn"
 const TRANSITION_TIME := 0.3
 ## Speed-up for a wave that is interrupted by another hover.
 const HURRY_SPEED := 2.5
@@ -469,6 +471,8 @@ func _on_play_pressed() -> void:
 		scene = ICE_SCENE
 	elif GameSettings.start_in_fire2:
 		scene = FIRE2_SCENE
+	elif GameSettings.start_on_ice2:
+		scene = ICE2_SCENE
 	get_tree().change_scene_to_file(scene)
 
 

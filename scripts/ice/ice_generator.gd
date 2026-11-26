@@ -561,7 +561,8 @@ func _frozen(rng: RandomNumberGenerator) -> void:
 			creature.lake = l
 			creature.position = point
 			creature.radius = radius
-			creature.variant = rng.randi_range(0, NelvarIceData.Creature.size() - 1)
+			# The valley's own three (the cave adds more after them).
+			creature.variant = rng.randi_range(0, NelvarIceData.Creature.SERPENT)
 			creature.appearance_seed = rng.randi()
 			creature.eye = rng.randf() < _config.watching_share
 			creature.facing_left = rng.randf() < 0.5

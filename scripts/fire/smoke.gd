@@ -8,7 +8,8 @@ extends Node2D
 ## a dispersed bank grows back from its vents in a few seconds.
 ##
 ## Puffs are pixel discs lit from the upper right, baked once per size and drawn on the
-## world's art pixel grid.
+## world's art pixel grid. The palettes are parameters: the ice cave draws white steam
+## over its geysers with it.
 
 const STEP := NelvarFireData.PIXEL
 const WIND := NelvarEmbers.WIND
@@ -35,6 +36,9 @@ class Puff:
 	var thinning := 0.0
 
 
+## The puffs' colours, dark to light: the wisps' and banks', the plumes'. Set before setup().
+var palette: Array[Color] = GREY
+var plume_palette: Array[Color] = PLUME
 ## Points smoke rises from: vents and smouldering tops (wisps), craters (plumes).
 var wisps := PackedVector2Array()
 var plumes := PackedVector2Array()
@@ -49,11 +53,14 @@ var _timers := PackedFloat32Array()
 var _bank_timers := PackedFloat32Array()
 
 
-func setup(fire: NelvarFireData, wisp_points: PackedVector2Array, plume_points: PackedVector2Array) -> void:
-	_rng.seed = ("%d:smoke" % fire.world_seed).hash()
+## `source`: the map's data — its world_seed, and its smoke_banks if it has any.
+func setup(source: Object, wisp_points: PackedVector2Array, plume_points: PackedVector2Array) -> void:
+	_rng.seed = ("%d:smoke" % int(source.get("world_seed"))).hash()
 	wisps = wisp_points
 	plumes = plume_points
-	_banks = fire.smoke_banks
+	_banks.clear()
+	if "smoke_banks" in source:
+		_banks.assign(source.get("smoke_banks"))
 	_timers.resize(wisps.size() + plumes.size())
 	for i in _timers.size():
 		_timers[i] = _rng.randf()
@@ -61,7 +68,7 @@ func setup(fire: NelvarFireData, wisp_points: PackedVector2Array, plume_points: 
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	for palette_index in 2:
 		for r in range(2, MAX_RADIUS + 1):
-			_textures[Vector2i(palette_index, r)] = _bake(r, GREY if palette_index == 0 else PLUME)
+			_textures[Vector2i(palette_index, r)] = _bake(r, palette if palette_index == 0 else plume_palette)
 	# The banks lie there from the start.
 	for b in _banks.size():
 		for i in _bank_target(b):

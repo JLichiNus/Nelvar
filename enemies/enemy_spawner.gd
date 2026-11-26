@@ -25,6 +25,11 @@ extends Node2D
 @export var world_spawn_attempts: int = 30
 # Свободное место вокруг точки появления (радиус тела врага + запас).
 @export var spawn_clearance: float = 28.0
+# Лабиринт (у карты есть path_distance(point)): путь пешком от игрока не длиннее
+# прямой во столько раз и не длиннее max_path_distance — иначе прыгун окажется
+# за стеной в соседнем ходе и не дойдёт.
+@export var max_path_ratio: float = 1.6
+@export var max_path_distance: float = 1700.0
 
 @export_category("Visual")
 @export var appear_duration: float = 0.3
@@ -149,6 +154,10 @@ func _pick_world_spawn_point() -> Variant:
 			continue
 		if _ground != null and not _ground.call("has_clearance", point, spawn_clearance):
 			continue
+		if _ground != null and _ground.has_method("path_distance") and is_instance_valid(player):
+			var walk: float = _ground.call("path_distance", point)
+			if walk > max_path_distance or walk > point.distance_to(player.global_position) * max_path_ratio:
+				continue
 		if _forest != null and not _forest.has_clearance(point, spawn_clearance):
 			continue
 		if _props != null and not _props.has_clearance(point, spawn_clearance):

@@ -53,6 +53,9 @@ const FROZEN_PALE := Color8(150, 172, 188)
 const BUBBLE := Color8(140, 178, 198)
 ## Ground shadow on the snow: cool and translucent.
 const SHADOW := Color(0.4, 0.45, 0.58, 0.26)
+## Rime on stones in the cave's dark: pale blue frost instead of snow.
+const RIME: Array[Color] = [Color8(150, 176, 198), Color8(182, 206, 224), Color8(212, 230, 242),
+	Color8(238, 248, 252)]
 
 
 func paint(thing: NelvarIceData.Thing) -> NelvarIceArt:
@@ -64,7 +67,7 @@ func paint(thing: NelvarIceData.Thing) -> NelvarIceArt:
 		Kind.DEAD_TREE:
 			return _dead_tree(thing, rng)
 		Kind.ROCK:
-			return _rock(thing.position, thing.radius, thing.accent, rng)
+			return _rock(thing.position, thing.radius, thing.accent, rng, thing.variant == 1)
 		Kind.STATUE:
 			return _statue(thing, rng)
 		Kind.DRIFT:
@@ -130,9 +133,9 @@ static func _surface(canvas: NelvarEarthCanvas, x: int) -> int:
 
 ## Snow lying over the top of everything painted, `depth` pixels at most; its upper
 ## edge is pale on the shaded left and bright on the lit right. Icicles hang from its
-## lower edge now and then (their tips glint).
+## lower edge now and then (their tips glint). `cap`: the snow's palette (RIME: frost).
 func _snow_cap(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, depth: float, icicles: bool,
-		art_sparkles: Array) -> void:
+		art_sparkles: Array, cap: Array[Color] = SNOWCAP) -> void:
 	var salt := rng.randi() & 0xffff
 	var left := canvas.size.x
 	var right := -1
@@ -155,9 +158,9 @@ func _snow_cap(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, depth: flo
 			var open_left := not canvas.is_body(x - 1, y)
 			var level := 0.74 - (0.3 if open_left else 0.0) - float(rows) / maxf(1.0, limit) * 0.16 \
 				+ canvas.grain(x, y, 0.5, salt + 3) * 0.3
-			var color := canvas.ramp(SNOWCAP, level, x, y)
+			var color := canvas.ramp(cap, level, x, y)
 			if rows == 0:
-				color = SNOWCAP[0] if float(x) < split else SNOWCAP[3]
+				color = cap[0] if float(x) < split else cap[3]
 			canvas.image.set_pixel(x, y, color)
 			canvas.levels[y * canvas.size.x + x] = level
 			rows += 1
@@ -300,8 +303,9 @@ func _dead_tree(thing: NelvarIceData.Thing, rng: RandomNumberGenerator) -> Nelva
 # --- Stone ---------------------------------------------------------------------------
 
 ## A boulder of cool grey stone with a snow cap (`big`: a deep one), sometimes a lower
-## shoulder behind it, and snow banked against its foot.
-func _rock(origin: Vector2, radius: float, big: bool, rng: RandomNumberGenerator) -> NelvarIceArt:
+## shoulder behind it, and snow banked against its foot. `rime`: in the cave's dark, a
+## thin cap of frost instead, frost glittering on the stone, no snow at the foot.
+func _rock(origin: Vector2, radius: float, big: bool, rng: RandomNumberGenerator, rime: bool = false) -> NelvarIceArt:
 	var r := radius / STEP
 	var canvas := NelvarEarthCanvas.new(origin, Rect2(-r * 1.4 - 3.0, -r * 2.0 - 4.0,
 		r * 2.8 + 6.0, r * 2.4 + 6.0))
@@ -321,6 +325,10 @@ func _rock(origin: Vector2, radius: float, big: bool, rng: RandomNumberGenerator
 	if r >= 5.0:
 		_cracks(canvas, rng, rng.randi_range(1, 2))
 	var glints := []
+	if rime:
+		_snow_cap(canvas, rng, clampf(r * (0.22 if big else 0.12), 1.0, 4.0), r >= 6.0, glints, RIME)
+		_frost(canvas, rng, 0.08)
+		return _finish(canvas, glints.slice(0, 3))
 	_snow_cap(canvas, rng, clampf(r * (0.42 if big else 0.2), 1.5, 9.0), r >= 6.0, glints)
 	if r >= 4.0 and rng.randf() < 0.65:
 		var bank := NelvarEarthCanvas.make_blob(rng, Vector2(side * r * 0.45, -r * 0.12),
@@ -329,6 +337,13 @@ func _rock(origin: Vector2, radius: float, big: bool, rng: RandomNumberGenerator
 		bank.rim_level = 0.42
 		canvas.blob(bank, SNOW)
 	return _finish(canvas, glints.slice(0, 3))
+
+
+## Specks of frost on the lit parts of everything painted.
+func _frost(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, share: float) -> void:
+	for p in canvas.interior():
+		if canvas.levels[p.y * canvas.size.x + p.x] > 0.45 and rng.randf() < share:
+			canvas.image.set_pixelv(p, RIME[2] if rng.randf() < 0.6 else RIME[3])
 
 
 func _cracks(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, count: int) -> void:
@@ -466,9 +481,12 @@ func _ice_block(thing: NelvarIceData.Thing, rng: RandomNumberGenerator) -> Nelva
 
 ## One block: a base polygon round `center` (art pixels, on the ground) rising `height`
 ## to a smaller top shifted sideways by `tilt`. Facets back to front, then the top.
+## `palette`: the ice's (the cave's crystals have their own); `dust`: snow on the top;
+## `corners`: of the base (5–7 at random when 0).
 func _block(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, center: Vector2, axes: Vector2,
-		height: float, taper: float, tilt: float, glints: Array[Vector2]) -> void:
-	var count := rng.randi_range(5, 7)
+		height: float, taper: float, tilt: float, glints: Array[Vector2], palette: Array[Color] = ICE,
+		dust: bool = true, corners: int = 0) -> void:
+	var count := rng.randi_range(5, 7) if corners <= 0 else corners
 	var start := rng.randf() * TAU
 	var base := PackedVector2Array()
 	var top := PackedVector2Array()
@@ -490,8 +508,8 @@ func _block(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, center: Vecto
 	for side: Array in sides:
 		var normal: Vector2 = side[1]
 		var level := 0.38 + 0.36 * normal.dot(sun) + 0.06 * normal.y
-		_facet(canvas, side[0], level, height, salt, false)
-	_facet(canvas, top, 0.86, height, salt, true)
+		_facet(canvas, side[0], level, height, salt, false, palette)
+	_facet(canvas, top, 0.86, height, salt, dust, palette)
 	# Bright edges where the top meets the facets facing the camera; they glint.
 	for i in count:
 		var j := (i + 1) % count
@@ -499,7 +517,7 @@ func _block(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, center: Vecto
 		var normal := Vector2(edge.y, -edge.x).normalized()
 		if normal.y <= 0.1:
 			continue
-		var pixels := _line(canvas, top[i], top[j], ICE[4], 0.95)
+		var pixels := _line(canvas, top[i], top[j], palette[palette.size() - 1], 0.95)
 		if not pixels.is_empty() and normal.dot(sun) > -0.4:
 			glints.append(_corner(canvas, pixels[pixels.size() / 2]))
 
@@ -507,7 +525,7 @@ func _block(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, center: Vecto
 ## Fills a facet of a block: the ice brighter towards its top, with upright streaks
 ## where the light runs through; the top facet carries a dusting of snow.
 func _facet(canvas: NelvarEarthCanvas, polygon: PackedVector2Array, level: float, height: float,
-		salt: int, upper: bool) -> void:
+		salt: int, upper: bool, palette: Array[Color] = ICE) -> void:
 	var low := polygon[0]
 	var high := polygon[0]
 	for point in polygon:
@@ -523,7 +541,7 @@ func _facet(canvas: NelvarEarthCanvas, polygon: PackedVector2Array, level: float
 			var v := clampf((p.y - low.y) / maxf(1.0, high.y - low.y), 0.0, 1.0)
 			var shade := level + (1.0 - v) * 0.1 \
 				+ (NelvarPixelArt.value_noise((canvas.grid.x + x) * 0.55, (canvas.grid.y + y) * 0.07, salt) - 0.5) * 0.24
-			var color := canvas.ramp(ICE, shade, x, y)
+			var color := canvas.ramp(palette, shade, x, y)
 			if upper and NelvarPixelArt.value_noise((canvas.grid.x + x) * 0.4, (canvas.grid.y + y) * 0.4, salt + 5) > 0.42:
 				color = canvas.ramp(SNOWCAP, shade, x, y)
 			canvas.put(x, y, color, shade)
@@ -634,6 +652,10 @@ func paint_frozen(creature: NelvarIceData.Frozen) -> NelvarIceArt:
 			eye = _fish(canvas, rng, r, facing)
 		Creature.SERPENT:
 			eye = _serpent(canvas, rng, r, facing)
+		Creature.WINGED:
+			eye = _winged(canvas, rng, r, facing)
+		Creature.CRAWLER:
+			eye = _crawler(canvas, rng, r, facing)
 		_:
 			eye = _beast(canvas, rng, r, facing)
 	canvas.outline_silhouette(FROZEN_OUTLINE, 0.55)
@@ -730,3 +752,61 @@ func _serpent(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, r: float, f
 	var head := Vector2(spots[0].x, spots[0].y)
 	_frozen_blob(canvas, rng, head + Vector2(0.06 * f, 0.0) * r, Vector2(0.24, 0.18) * r, 0.05)
 	return head + Vector2(0.08 * f, -0.05) * r
+
+
+## A winged one, wings spread as it froze: two broad wings of ribbed membrane, a slim
+## body, a long neck to a horned head, a whip of a tail.
+func _winged(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, r: float, f: float) -> Vector2:
+	var lift := rng.randf_range(-0.15, 0.1)
+	for side: float in [-1.0, 1.0]:
+		var root := Vector2(-0.05 * f, -0.05) * r
+		var tip := Vector2(-0.3 * f, side * 0.82 + lift) * r
+		var back := Vector2(-0.62 * f, side * 0.36) * r
+		# The membrane between the arm and the body, ribs fanning out from the root.
+		for k in 5:
+			var t := float(k) / 4.0
+			var edge := tip.lerp(back, t)
+			_line(canvas, root, edge, FROZEN[2 if k % 2 == 0 else 1], 0.5)
+			var mid := root.lerp(edge, 0.55)
+			_frozen_blob(canvas, rng, mid, Vector2.ONE * (r * 0.07 + 0.6), -0.04)
+		_line(canvas, root, tip, FROZEN[3], 0.7)
+	for k in 6:
+		var t := float(k) / 5.0
+		var spot := Vector2((-0.35 - t * 0.6) * f, sin(t * 3.0) * 0.08) * r
+		_frozen_blob(canvas, rng, spot, Vector2.ONE * r * (0.07 - t * 0.04) + Vector2.ONE * 0.6)
+	_frozen_blob(canvas, rng, Vector2(-0.12 * f, 0.0) * r, Vector2(0.3, 0.14) * r)
+	for k in 4:
+		var t := float(k) / 3.0
+		_frozen_blob(canvas, rng, Vector2((0.18 + t * 0.32) * f, -t * 0.12) * r, Vector2.ONE * (r * 0.07 + 0.6))
+	var head := Vector2(0.62 * f, -0.16) * r
+	_line(canvas, head + Vector2(-0.04 * f, -0.06) * r, head + Vector2(-0.18 * f, -0.26) * r, FROZEN[3], 0.7)
+	_frozen_blob(canvas, rng, head, Vector2(0.16, 0.11) * r + Vector2.ONE * 0.5, 0.04)
+	_frozen_blob(canvas, rng, head + Vector2(0.15 * f, 0.03) * r, Vector2(0.09, 0.05) * r + Vector2.ONE * 0.5, 0.02)
+	return head + Vector2(0.03 * f, -0.03) * r
+
+
+## A crawler: a long segmented body, many thin legs bent at the knee, feelers.
+func _crawler(canvas: NelvarEarthCanvas, rng: RandomNumberGenerator, r: float, f: float) -> Vector2:
+	var count := rng.randi_range(6, 9)
+	var curve := rng.randf_range(-0.25, 0.25)
+	var spots: Array[Vector2] = []
+	for k in count:
+		var t := float(k) / (count - 1)
+		spots.append(Vector2(lerpf(0.62, -0.9, t) * f, sin(t * PI) * curve) * r)
+	for k in count:
+		var spot := spots[k]
+		for side: float in [-1.0, 1.0]:
+			var knee := spot + Vector2(rng.randf_range(-0.08, 0.08) * f, side * 0.26) * r
+			var foot := knee + Vector2(-0.1 * f, side * 0.14) * r
+			_line(canvas, spot, knee, FROZEN[2], 0.5)
+			_line(canvas, knee, foot, FROZEN[1], 0.4)
+	for k in range(count - 1, -1, -1):
+		var size := lerpf(0.13, 0.1, float(k) / count) * r + 0.7
+		_frozen_blob(canvas, rng, spots[k], Vector2(size * 1.1, size), 0.03 if k % 2 == 0 else -0.03)
+		var p := canvas.pixel(spots[k] + Vector2(0.0, -size * 0.8))
+		canvas.put(p.x, p.y, FROZEN[4], 0.8)
+	var head := spots[0] + Vector2(0.12 * f, 0.0) * r
+	_frozen_blob(canvas, rng, head, Vector2(0.14, 0.12) * r + Vector2.ONE * 0.5, 0.05)
+	for side: float in [-1.0, 1.0]:
+		_line(canvas, head + Vector2(0.08 * f, side * 0.04) * r, head + Vector2(0.4 * f, side * 0.22) * r, FROZEN[3], 0.7)
+	return head + Vector2(0.03 * f, -0.04) * r

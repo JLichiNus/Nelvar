@@ -238,7 +238,8 @@ func _check_art(data: NelvarIceData) -> void:
 			_check(art.eye.is_finite(), "A petrified creature has no eye")
 	_check(images.size() == seen.values().reduce(func(a: int, b: int) -> int: return a + b, 0),
 		"Two things share identical art")
-	for kind in Kind.size():
+	# The kinds after SHRUB are the cave's: the valley never makes them.
+	for kind in Kind.SHRUB + 1:
 		_check(seen.has("%d:0" % kind) or seen.has("%d:1" % kind) or seen.has("%d:2" % kind),
 			"No %s to paint" % Kind.keys()[kind])
 	for creature in data.frozen.slice(0, 3):
@@ -289,14 +290,14 @@ func _check_field(data: NelvarIceData) -> void:
 
 # --- The start setting -------------------------------------------------------------
 
-## The five start options exclude each other; «Играть» opens the ice valley when its
+## The six start options exclude each other; «Играть» opens the ice valley when its
 ## option is on. The saved settings are put back as they were.
 func _check_settings() -> void:
 	var settings: Node = root.get_node("GameSettings")
 	var path: String = settings.PATH
 	var saved := FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else PackedByteArray()
 	var was := [settings.start_in_void, settings.start_on_earth, settings.start_in_fire, settings.start_on_ice,
-		settings.start_in_fire2]
+		settings.start_in_fire2, settings.start_on_ice2]
 	settings.set_start_in_fire(true)
 	settings.set_start_on_ice(true)
 	_check(settings.start_on_ice and not settings.start_in_fire and not settings.start_on_earth
@@ -309,14 +310,19 @@ func _check_settings() -> void:
 	_check(settings.start_in_fire2 and not settings.start_on_ice, "The volcano did not replace the ice at start")
 	settings.set_start_on_ice(true)
 	_check(settings.start_on_ice and not settings.start_in_fire2, "The ice did not replace the volcano at start")
+	settings.set_start_on_ice2(true)
+	_check(settings.start_on_ice2 and not settings.start_on_ice, "The ice cave did not replace the ice valley at start")
+	settings.set_start_on_ice(true)
+	_check(settings.start_on_ice and not settings.start_on_ice2, "The ice valley did not replace the ice cave at start")
 	settings.set_start_on_ice(false)
 	_check(not (settings.start_on_ice or settings.start_in_void or settings.start_on_earth or settings.start_in_fire
-		or settings.start_in_fire2), "Turning the ice off left another start on")
+		or settings.start_in_fire2 or settings.start_on_ice2), "Turning the ice off left another start on")
 	settings.start_in_void = was[0]
 	settings.start_on_earth = was[1]
 	settings.start_in_fire = was[2]
 	settings.start_on_ice = was[3]
 	settings.start_in_fire2 = was[4]
+	settings.start_on_ice2 = was[5]
 	if saved.is_empty():
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	else:

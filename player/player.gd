@@ -134,6 +134,9 @@ var aim_direction := Vector2.RIGHT
 ## The map sets it every physics frame; it scales how fast the player speeds up and
 ## slows down.
 var traction := 1.0
+## Physics layers that block the player's sight (the ice cave's walls): the wind wave and
+## the compression only reach enemies the player can see. 0 (every other map): no check.
+static var sight_mask := 0
 ## Shared modifiers (the ice valley's blizzard; mutations later): a multiplier of the
 ## movement speed, and of the rate of attacks (cooldowns, animations, projectiles).
 var move_scale := 1.0
@@ -753,6 +756,8 @@ func _try_wave_attack() -> void:
 	if attack_rate != 1.0:
 		wave.set("duration", float(wave.get("duration")) / maxf(attack_rate, 0.05))
 	var wave_origin := get_aim_origin() + aim_direction * wave_spawn_distance
+	if sight_mask != 0:
+		wave.set("sight_from", global_position)
 	wave.call("launch", wave_origin, aim_direction)
 
 
@@ -803,7 +808,7 @@ func _find_compression_target() -> Node2D:
 		if range_sq > max_range_sq:
 			continue
 		var distance_sq := cursor.distance_squared_to(enemy.global_position)
-		if distance_sq <= best_distance_sq:
+		if distance_sq <= best_distance_sq and can_see(enemy.global_position):
 			best_distance_sq = distance_sq
 			best = enemy
 	return best
@@ -881,3 +886,17 @@ func _is_over_low_obstacle() -> bool:
 
 func _on_boost_cooldown_timeout() -> void:
 	_speed_boost_state = SpeedBoostState.READY
+
+
+## True when nothing on sight_mask stands between the player and `point` (always true
+## without a sight_mask).
+func can_see(point: Vector2) -> bool:
+	return sight_clear(get_world_2d(), global_position, point)
+
+
+## The same check from any point (the wind wave asks from where it was cast).
+static func sight_clear(world: World2D, from: Vector2, to: Vector2) -> bool:
+	if sight_mask == 0 or world == null:
+		return true
+	var query := PhysicsRayQueryParameters2D.create(from, to, sight_mask)
+	return world.direct_space_state.intersect_ray(query).is_empty()
