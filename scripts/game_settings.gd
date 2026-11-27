@@ -6,6 +6,7 @@ extends Node
 signal info_panel_changed(shown: bool)
 signal start_in_void_changed(enabled: bool)
 signal start_on_earth_changed(enabled: bool)
+signal start_on_earth2_changed(enabled: bool)
 signal start_in_fire_changed(enabled: bool)
 signal start_on_ice_changed(enabled: bool)
 signal start_in_fire2_changed(enabled: bool)
@@ -29,6 +30,8 @@ var damage_vignette_directional := false
 var start_in_void := false
 ## Developer menu: "Играть" opens the earth valley (scenes/earth.tscn).
 var start_on_earth := false
+## Developer menu: "Играть" opens the giant forest (scenes/earth2.tscn).
+var start_on_earth2 := false
 ## Developer menu: "Играть" opens the fire forge (scenes/fire.tscn).
 var start_in_fire := false
 ## Developer menu: "Играть" opens the ice valley (scenes/ice.tscn).
@@ -52,14 +55,16 @@ func _ready() -> void:
 		show_info_panel = config.get_value("hud", "show_info_panel", show_info_panel)
 		start_in_void = config.get_value("dev", "start_in_void", start_in_void)
 		start_on_earth = config.get_value("dev", "start_on_earth", start_on_earth) and not start_in_void
+		start_on_earth2 = config.get_value("dev", "start_on_earth2", start_on_earth2) and not start_in_void \
+			and not start_on_earth
 		start_in_fire = config.get_value("dev", "start_in_fire", start_in_fire) \
-			and not start_in_void and not start_on_earth
+			and not start_in_void and not start_on_earth and not start_on_earth2
 		start_on_ice = config.get_value("dev", "start_on_ice", start_on_ice) \
-			and not start_in_void and not start_on_earth and not start_in_fire
+			and not start_in_void and not start_on_earth and not start_on_earth2 and not start_in_fire
 		start_in_fire2 = config.get_value("dev", "start_in_fire2", start_in_fire2) \
-			and not start_in_void and not start_on_earth and not start_in_fire and not start_on_ice
+			and not start_in_void and not start_on_earth and not start_on_earth2 and not start_in_fire and not start_on_ice
 		start_on_ice2 = config.get_value("dev", "start_on_ice2", start_on_ice2) \
-			and not start_in_void and not start_on_earth and not start_in_fire and not start_on_ice \
+			and not start_in_void and not start_on_earth and not start_on_earth2 and not start_in_fire and not start_on_ice \
 			and not start_in_fire2
 		damage_vignette_level = clampi(config.get_value("hud", "damage_vignette_level",
 			damage_vignette_level), 0, VIGNETTE_LEVELS.size() - 1)
@@ -104,6 +109,16 @@ func set_start_on_earth(enabled: bool) -> void:
 		_turn_off_other_starts(&"earth")
 	_save()
 	start_on_earth_changed.emit(enabled)
+
+
+func set_start_on_earth2(enabled: bool) -> void:
+	if enabled == start_on_earth2:
+		return
+	start_on_earth2 = enabled
+	if enabled:
+		_turn_off_other_starts(&"earth2")
+	_save()
+	start_on_earth2_changed.emit(enabled)
 
 
 func set_start_in_fire(enabled: bool) -> void:
@@ -154,6 +169,9 @@ func _turn_off_other_starts(kept: StringName) -> void:
 	if kept != &"earth" and start_on_earth:
 		start_on_earth = false
 		start_on_earth_changed.emit(false)
+	if kept != &"earth2" and start_on_earth2:
+		start_on_earth2 = false
+		start_on_earth2_changed.emit(false)
 	if kept != &"fire" and start_in_fire:
 		start_in_fire = false
 		start_in_fire_changed.emit(false)
@@ -222,6 +240,7 @@ func _save() -> void:
 	config.set_value("hud", "show_info_panel", show_info_panel)
 	config.set_value("dev", "start_in_void", start_in_void)
 	config.set_value("dev", "start_on_earth", start_on_earth)
+	config.set_value("dev", "start_on_earth2", start_on_earth2)
 	config.set_value("dev", "start_in_fire", start_in_fire)
 	config.set_value("dev", "start_on_ice", start_on_ice)
 	config.set_value("dev", "start_in_fire2", start_in_fire2)

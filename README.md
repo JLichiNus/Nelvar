@@ -295,6 +295,100 @@ with the same gusts in whole art pixels. Cloud shadows drift over everything
 and butterflies flutter between flowers and scatter from the player
 (`NelvarButterflies`). F3 shows the colliders, the mountain foot and the shores.
 
+### The giant forest, Earth 2 (developer menu)
+
+Settings → «Меню разработчика» → «Запускать игру на Земле 2» (right under «на Земле»)
+makes «Играть» open `scenes/earth2.tscn`: the floor of a forest of giants with the player
+the size of a beetle. Trunks wider than the screen rise out of the top of the view into
+the dark of the crowns; grass blades are taller than the player, an acorn is a boulder, a
+mushroom's cap a roof, a fallen leaf a raft. The sun comes through the crowns in flecks
+and in slanting rays over the clearings. The plants are alive and dangerous, and the
+player's wind turns them against the enemies. The earth valley (Earth 1) stays as it is;
+both maps live side by side.
+
+`NelvarThicketGenerator` lays it out from the seed (parameters in
+`resources/earth_thicket_config.tres`; the data is `NelvarThicketData`, built on the
+valley's `NelvarEarthData`, so its things, the butterflies and the spawner work with it):
+
+- **The floor** is a bent oval of about 4600×3800. A ring of 10–14 giants stands
+  shoulder to shoulder beyond its edge (none on the south side, where they would stand
+  between the camera and the floor: a low bank of roots and ferns there instead).
+- **The start** is on a southern clearing with a giant 500–700 to the north, so its foot
+  fills the top of the first view.
+- **Giants inside** (4–6 including that one, radius 220–420, at least 700 of ground
+  between their bark): oaks, pines and birches, each with a skirt of 5–9 roots of
+  300–900. A root is a wall for its first 40–60% (layer 1), low after that (layer 6: the
+  flight passes over, hoppers bounce off), lifts into an arch here and there where it runs
+  across the screen (60–110 of free ground under it) and dips under every trail it
+  crosses. Roots of different giants never meet, and any two solid things keep a passage
+  wider than a hopper. The ring is mixed with two dead trunks.
+- **Clearings** (6–8, radius 220–420) are the arenas; ant trails join them (a spanning
+  tree plus 2–3 loops, found by A* round the trunks, the ponds and the fallen giant).
+- **Ponds** (1–2): the water is a fall, not a wall. Lily pads hold; fallen leaves drift
+  round each pond on a slow loop and carry whoever stands on them (where a raft is depends
+  on the time only); small ones sink under a standing player after 1.2 s. A crossing by
+  pads and rafts always exists at some moment (`NelvarThicketData.crossable`), and the
+  trails go round.
+- **The fallen giant** (one, 1300–2200 long, at most 20° off the horizontal) with its root
+  plate standing on edge at one end and a tunnel through it, open at the broken end and
+  through 1–3 breaches in its south side.
+- **Hazards and things:** flytraps in groups at the clearings' edges and by the ponds and
+  the garden (one clearing planted in rows, a petrified creature in the middle, no
+  butterflies), puffballs on the damp ground, resin pools at the pines' feet, loose earth
+  by the roots, amber with creatures caught in it (some watch), acorns under the oaks,
+  giant mushrooms, grass blades, clover, dandelions, bluebells and daisies, fallen leaves,
+  twigs, snail shells, feathers, dew drops, bones, now and then a ribcage with roots grown
+  through it, statues half grown into the roots, glowing mushrooms and a petrified
+  wanderer in the tunnel.
+
+Playing it (`NelvarThicketMain`):
+
+- **Trunks** (`NelvarGiantTrunk`) sort by the middle of their base; while the player is
+  behind one, everything above its foot thins out to 30% in a dither (0.25 s, back in
+  0.4 s; `giant_trunk.gdshader`). The fallen giant and the giant mushrooms' caps do the
+  same, the fallen giant also while the player is in its tunnel. Roots, the fallen giant
+  and its plate are painted whole and cut into pieces of 64 that each sort by their own
+  lowest point; the player's outline shows through the roots.
+- **Flytraps** (`NelvarFlytraps`) tremble for 0.45 s under the player or a hopper, then snap
+  (18 damage and a throw; an enemy inside is eaten and counts as the player's kill), stay
+  shut 5 s as a low obstacle and open in 1 s. A shot snaps an open trap from afar; the wave
+  throws hoppers in. A flier never sets one off.
+- **Puffballs** (`NelvarPuffballs`) burst from a shot, the wave, a falling acorn or a walk
+  into them: a cloud of 120–170 swells for 0.6 s and thins out over 5 s (3 damage every
+  0.5 s to the player, 8 to enemies). The wave drives the whole cloud its way, a shot blows
+  a hole in it (the spores are `NelvarSmoke` in the spores' palette). They grow back after
+  20 s.
+- **Acorns and branches** (`NelvarFalling`) fall only under an oak (never over a clearing):
+  a shadow grows for 1.1 s (40% aimed where the player is going), then the acorn strikes
+  within 46 (14 damage, 30 to enemies), bursts puffballs and lies 25 s as a low obstacle.
+  Now and then a branch: a long shadow for 1.6 s, 20 damage, solid cover for 40 s, never
+  across a trail.
+- **Resin** halves the speed and grips; a hopper landing in it sticks for 1.5 s.
+- **Loose earth** holds a moving player, not a standing one: 0.6 s in one spot and cracks
+  run, 0.5 s more and a pit opens (it stays; 12 damage, back on safe ground).
+- **The water:** a step in holds 0.12 s, then the player goes under (10 damage, back on safe
+  ground). Hoppers blown into the water, a pit or a trap die; they never jump into them.
+- **Enemies:** hoppers and whistlers (at most 3); the whistlers' bubbles burst on trunks and
+  high roots and float over the low ones.
+
+The light: the crowns' shade is multiplied over everything (`canopy_shade.gdshader`: a
+green-brown dusk, full light on the clearings, flecks of sun trembling with the wind far
+above), the light is added on top (`canopy_shine.gdshader`: rays from the openings towards
+the upper right with pollen in them, sparks on the resin, the glow of the tunnel's
+mushrooms). Both read a coarse light map (`NelvarThicketField`: sun, damp, loose earth and
+resin as signed distances), which the logic's queries match. The floor
+(`thicket_ground.gdshader`) draws the litter of each kind of giant, moss and mycelium on
+the damp, the ant trails, the ponds with a clay north bank, resin, loose earth, cracks and
+pits, the giants' long shadows and the roots' shade, the tunnel's rotten floor, the ring's
+roots beyond the edge. Ants march along the trails and step round the player, big leaves
+glide down with their shadows, huge butterflies (`NelvarButterflies.wing_scale`) fly high
+and settle on the giant flowers. F3 shows the ring and the trunks, the roots by part, the
+clearings and trails, the oaks' reach, resin, loose earth and pits, the traps, the spore
+clouds, the rafts and lily pads, the tunnel's walls. Beetles crawl up the bark; eyes
+glint now and then in a trunk's hollow. The warnings are heard as well as seen
+(`tools/gen_sfx.py`: `flytrap_click`, `flytrap_snap`, `acorn_rustle`, `acorn_thud`,
+`branch_crack`, `puffball_pop`, `earth_crumble`).
+
 ### The fire forge (developer menu)
 
 Settings → «Меню разработчика» → «Запускать игру в Огне» makes «Играть» open
@@ -408,11 +502,13 @@ and their thin ice, the crevasses with their bridges and the holes.
 
 Settings → «Меню разработчика» → «Запускать игру в Огне 2» makes «Играть» open
 `scenes/fire2.tscn`: the top of one huge volcano. A broad rim of basalt and ash runs
-right round the crater; the crater is a lake of lava filled almost to the brim, crowded
-with floes of magma crust; past the rim's outer edge there is
-nothing but a drop into clouds of ash far below. The camera looks down from the south, so under the southern edge the
-mountain's front slope runs down the screen until the clouds swallow it. The forge
-(«Огонь») stays as it is; both maps live side by side.
+right round the crater; the crater is a lake of lava filled almost to the brim, most of
+it taken by broad floes of magma crust; past the rim's outer edge the mountain's side
+falls away into clouds of ash far below. The camera looks down from the south, so the
+side shows only where it faces the camera: tall under the south edge, narrowing round
+the east and west flanks, hidden behind the top in the north, where the edge looks
+straight down onto the clouds. The forge («Огонь») stays as it is; both maps live side
+by side.
 
 `NelvarCraterGenerator` lays it out from the seed (parameters in
 `resources/fire_crater_config.tres`):
@@ -423,21 +519,32 @@ mountain's front slope runs down the screen until the clouds swallow it. The for
   lava runs all the way round the rim (solid things keep off it, so the way round is never
   blocked), with spurs to the capes and out onto the terraces.
 - **Capes** (3–5): tongues of rock reaching 150–320 into the lake from the shore.
-- **Floes of magma crust** (about 180–230, radius 44–230; `NelvarCraterData.floes`) are
-  the only ground on the lake: dark plates with glowing seams covering much of it, of
-  every size (more small than broad) and shape — round, oval, long slabs,
-  three-cornered, lobed. They grow out from the shore, each a step of lava (16–26) from
-  the one it grew from, until there is no room left; any floe that cannot be reached
-  from the shore in steps of at most a run is dropped, so one can walk from the rim to
-  the vent's moat. All of them sway together on one slow swell (6–10 out on each axis,
-  one sway in 50–100 s, its wave 7000 long), so the steps between neighbours hold.
-  Wherever the swell takes it, a floe stays in the lava, clear of the shore, the capes,
-  the vent's moat, the boiling patches and the other floes. A floe holds whoever walks
-  on it, unharmed, and carries them along. About a third of them (more of the small
-  ones) **sink** by themselves every 30–55 s for 5–8 s: 3 s of warning (the seams
-  flare, lava bubbles along the edge), 1.2 s going down from the edge in, then up again
-  red-hot, cooling in 2 s. Where a floe is and whether it is under depends on the time
-  only, so every layout is reproducible.
+- **Floes of magma crust** (`NelvarCraterData.floes`) are the only ground on the lake:
+  dark plates with glowing seams, cooled darker deep inside the broad ones. This is a
+  roguelike, so the ground to fight on comes in whole pieces:
+  - **Broad floes** (13–18, `Isle.broad`, ~800–1200 across) cover about two thirds of
+    the lake. It is shared out between places scattered over it, the bigger taking more
+    (a power diagram), along lines bent by a slow warp, with rounded corners and a soft
+    bound round each place, so they come out as blobs. Between neighbours winds a
+    channel of lava 22–150 wide, a step (22) at its **ford** where the two meet in the
+    middle, and the floe reaches out to the ford in a round tongue. Along the shore lies
+    a ring of open lava 12–360 wide, a step from the shore at its 4–6 fords. Each floe
+    is a table of 128 radii round its place. A broad floe no step reaches swells out
+    towards the nearest one that is, or the shore. They never sink.
+  - **Stones** (18–30, radius 48–120: round, oval, long slabs, three-cornered, lobed)
+    lie in the open lava, each a step (16–26) from the shore or a floe: stepping stones
+    where the ring along the shore is wide and in the pools between broad floes.
+
+  Any floe that cannot be reached from the shore in steps of at most a run is dropped,
+  so one can walk from the rim to the vent's moat. All of them sway together on one slow
+  swell (6–10 out on each axis, one sway in 50–100 s, its wave 7000 long), so the steps
+  between neighbours hold. Wherever the swell takes it, a floe stays in the lava, clear
+  of the shore, the capes, the vent's moat, the boiling patches and the other floes. A
+  floe holds whoever walks on it, unharmed, and carries them along. About half of the
+  stones (more of the small ones) **sink** by themselves every 30–55 s for 5–8 s: 3 s of
+  warning (the seams flare, lava bubbles along the edge), 1.2 s going down from the edge
+  in, then up again red-hot, cooling in 2 s. Where a floe is and whether it is under
+  depends on the time only, so every layout is reproducible.
 - **The vent** churns white-hot in the middle of the lake under a heavy plume, spitting
   fountains of lava; 3–5 **boiling patches** bubble brighter. The air shimmers only over
   these and over the smoke banks (`heat_haze.gdshader`'s `use_haze_mask`), not over the
@@ -472,12 +579,22 @@ radii), and reads roads and sulfur from `NelvarCraterField`. It shares the forge
 and surfaces through `scripts/fire/fire_common.gdshaderinc`. The lava lies still in broad
 flat swirls (no dithering, nothing to shimmer); everything that floats on it is a sprite
 on whole art pixels; the crater's inner wall shows under the north shore, only a few art
-pixels high; the front slope (its top row per column baked into a 1D texture) has ribs
-and gullies spreading like a cone, short ledges, ash drifts and lava trickling down a few
-gullies, and darkens into the clouds. Past the edge the floor is transparent and the
-clouds of ash show through from the layer below (`crater_below.gdshader` on
-`NelvarCloudSea`, parallax 0.6), with dark land and rivers of lava in their gaps. The
-floes are sprites (`NelvarCraterIsland`, a baked mask and `crater_island.gdshader`)
+pixels high. Past the edge the mountain's side falls away, seen from the south: a point
+`d` art pixels below the summit shows `d` pixels lower on screen, and the side flares
+out `0.42 d`, so it shows only where it faces the camera — under the south edge and
+round the flanks; in the north it lies behind the top. For each pixel the shader marches
+down from the edge to the first outline that takes it in (a conservative step, so it
+never jumps past the nearest side), with ribs and gullies spreading round it, lit from
+the upper right (the east flank bright, the south face and the west in shade), short
+ledges, ash drifts and lava trickling down a few gullies. It darkens into the haze in
+dithered colour, never in see-through pixels, and sinks into the clouds of ash of the
+layer below (`crater_below.gdshader` on `NelvarCloudSea`, parallax 0.6), with
+dark land and rivers of lava in their gaps: the floor finds the same puffs
+(`crater_clouds.gdshaderinc`, placed by the layer's `view_updated` signal) and hides the
+side's foot behind those in front of it. Each puff is in front or behind as a whole, by
+where the middle of its base stands, so the foot sinks into the clouds along the puffs'
+round outlines; one drifting under the edge shrinks away behind the side from its rim
+inwards instead of popping. Through the gaps the side goes on down into the dark. The floes are sprites (`NelvarCraterIsland`, a baked mask and `crater_island.gdshader`)
 on whole art pixels; geyser columns and the vent's fountains are `NelvarGeysers`; tongues of flame
 lick up along the shores, over the boils and the splashes (`NelvarEmbers.flame`), ash falls
 thicker than in the forge. F3 shows the edge, the shore and the capes, the floes as they are
@@ -699,11 +816,10 @@ standing player and not under a running one, a hole freezes over, hoppers blown 
 crevasse or a hole die, a blizzard slows the player and lets go, walking leaves marks in
 the snow and a frozen creature opens its eye.
 Volcano checks cover the layout (the rim never narrower than its minimum, capes as long
-as asked, geysers and things on rock, passages, the ring road on rock all the way round,
-the front slope's table on the summit's edge), that floes never run aground or touch
-each other, drift slowly, make a way on foot from the shore to every floe and to the
-vent's moat, and about the asked share of them sink, determinism, the light and haze
-maps, the floes' masks, the five start options, and in the real scene: a floe holds the
+as asked, geysers and things on rock, passages, the ring road on rock all the way round),
+that floes never run aground or touch each other, drift slowly, make a way on foot from
+the shore to every floe and to the vent's moat, and about the asked share of them sink,
+determinism, the light and haze maps, the floes' masks, the five start options, and in the real scene: a floe holds the
 player unharmed and carries them exactly as far as it drifts, a fall from it comes back
 onto it, a step into the lava and off the edge are falls that throw the player back hurt
 while a moment over the lava is not, a sinking floe takes the player down and says why,

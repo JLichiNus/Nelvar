@@ -360,12 +360,13 @@ func _check_art(data: NelvarCaveData) -> void:
 
 # --- The start setting -------------------------------------------------------------------
 
-## The six start options exclude each other; «Играть» opens the cave when its option is on.
+## The start options exclude each other; «Играть» opens the cave when its option is on.
 func _check_settings() -> void:
 	var settings: Node = root.get_node("GameSettings")
 	var path: String = settings.PATH
 	var saved := FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else PackedByteArray()
-	var flags := ["start_in_void", "start_on_earth", "start_in_fire", "start_on_ice", "start_in_fire2", "start_on_ice2"]
+	var flags := ["start_in_void", "start_on_earth", "start_on_earth2", "start_in_fire", "start_on_ice", "start_in_fire2",
+		"start_on_ice2"]
 	var was := []
 	for flag in flags:
 		was.append(settings.get(flag))

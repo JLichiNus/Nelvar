@@ -169,6 +169,21 @@ func puff(at: Vector2, count: int) -> void:
 		_puffs.append(cloud)
 
 
+## One puff drifting from `at` with `velocity` (the giant forest's spores): `radius` in art
+## pixels, gone in `life` seconds; `plume`: in the plume palette (the spores' jet).
+func drift(at: Vector2, velocity: Vector2, radius: float, life: float, alpha: float, plume: bool) -> void:
+	var cloud := Puff.new()
+	cloud.source = Source.PLUME if plume else Source.WISP
+	cloud.position = at
+	cloud.phase = _rng.randf() * TAU
+	cloud.radius = radius
+	cloud.grow = _rng.randf_range(0.6, 1.2)
+	cloud.velocity = velocity
+	cloud.alpha = alpha
+	cloud.life = life
+	_puffs.append(cloud)
+
+
 func _emit(at: Vector2, plume: bool) -> void:
 	var puff := Puff.new()
 	puff.position = at + Vector2(_rng.randf_range(-4.0, 4.0), 0.0)

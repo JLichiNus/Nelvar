@@ -8,6 +8,8 @@ const GAME_SCENE := "res://scenes/main.tscn"
 const VOID_SCENE := "res://scenes/void.tscn"
 ## Developer setting "Запускать игру на Земле": the earth valley.
 const EARTH_SCENE := "res://scenes/earth.tscn"
+## Developer setting "Запускать игру на Земле 2": the giant forest.
+const EARTH2_SCENE := "res://scenes/earth2.tscn"
 ## Developer setting "Запускать игру в Огне": the fire forge.
 const FIRE_SCENE := "res://scenes/fire.tscn"
 ## Developer setting "Запускать игру на Льду": the ice valley.
@@ -465,6 +467,8 @@ func _on_play_pressed() -> void:
 		scene = VOID_SCENE
 	elif GameSettings.start_on_earth:
 		scene = EARTH_SCENE
+	elif GameSettings.start_on_earth2:
+		scene = EARTH2_SCENE
 	elif GameSettings.start_in_fire:
 		scene = FIRE_SCENE
 	elif GameSettings.start_on_ice:

@@ -1,10 +1,11 @@
 extends SceneTree
-## The volcano (Огонь 2): layout rules (the rim, the capes, floes of crust that never
-## touch the shore or each other, drift slowly and make a way on foot from the shore to
-## the middle, some of them sinking; geysers and things on the rock, the front slope's
-## table), the ground and light maps, the floes' masks, the start setting, and the real
-## scene: a step into the lava or off the edge is a fall that throws the player back hurt
-## (onto the floe they last stood on safely, if it never sinks), a floe holds and carries
+## The volcano (Огонь 2): layout rules (the rim, the capes, broad floes of crust sharing
+## out most of the lake and stones between them, never touching the shore or each other,
+## drifting slowly and making a way on foot from the shore to the middle, some stones
+## sinking; geysers and things on the rock), the ground and light maps, the floes' masks,
+## the start setting, and the real
+## scene: a step into the lava is a fall that throws the player back hurt (onto the floe
+## they last stood on safely, if it never sinks), the summit's edge holds them, a floe holds and carries
 ## them unharmed, a sinking floe takes them down, geysers throw them, splashes burn,
 ## hoppers die in the lava, off the edge and on a sinking floe.
 ## Run: godot --headless --path . --script tests/test_crater.gd -- --seeds=6
@@ -129,27 +130,26 @@ func _check_layout(data: NelvarCraterData, config: NelvarCraterConfig) -> void:
 		for point in flow.points:
 			_check(data.lava_depth(point) < -flow.half_width * 0.5 and data.rim_depth(point) > flow.half_width,
 				context + "a road leaves the rock")
-	# The front slope's table follows the summit's south edge.
-	var field := NelvarCraterField.new()
-	field.call("_slope", data)
-	var checked := 0
-	for c in range(0, field.slope.size(), 7):
-		var top := field.slope[c]
-		if top < 0.0:
-			continue
-		var x := (field.slope_origin + c + 0.5) * STEP
-		checked += 1
-		_check(data.rim_depth(Vector2(x, (top - 1.5) * STEP)) > -3.0 and data.rim_depth(Vector2(x, (top + 1.5) * STEP)) < 3.0,
-			context + "the slope's table misses the edge at column %d" % c)
-	_check(checked > 50, context + "the slope's table is empty")
 
 
-## Floes stay in the lava wherever their sway takes them, never touch each other, drift
-## slowly, and make a way on foot: from the shore to every floe and to the middle, no step
-## wider than a run. Some of them sink.
+## Broad floes cover most of the lake, stones lie between; floes stay in the lava
+## wherever their sway takes them, never touch each other, drift slowly, and make a way on
+## foot: from the shore to every floe and to the middle, no step wider than a run. Some
+## stones sink, broad floes never do.
 func _check_floes(data: NelvarCraterData, config: NelvarCraterConfig) -> void:
 	var context := "Seed %d: " % data.world_seed
-	_check(data.floes.size() >= 120, context + "%d floes" % data.floes.size())
+	var broad := 0
+	var area := 0.0
+	for floe in data.floes:
+		if floe.broad:
+			broad += 1
+			for r in floe.radii:
+				area += 0.5 * r * r * TAU / floe.radii.size()
+	var lake := 0.0
+	for i in 360:
+		lake += 0.5 * pow(data.lake.radius_at(TAU * i / 360.0), 2.0) * TAU / 360.0
+	_check(broad >= 8 and area > lake * 0.45 and data.floes.size() - broad <= config.stones.y,
+		context + "%d broad floes covering %.2f of the lake, %d stones" % [broad, area / lake, data.floes.size() - broad])
 	var aground := 0
 	var touching := 0
 	var fastest := 0.0
@@ -165,9 +165,8 @@ func _check_floes(data: NelvarCraterData, config: NelvarCraterConfig) -> void:
 			var time := 13.7 * s
 			var at := floe.position_at(time)
 			fastest = maxf(fastest, at.distance_to(floe.position_at(time + 0.1)) / 0.1)
-			for k in 8:
-				var angle := TAU * k / 8.0
-				if data.lava_depth(at + Vector2.from_angle(angle) * floe.shape.radius_at(angle)) <= 0.0:
+			for k in range(0, floe.outline.size(), 4):
+				if data.lava_depth(at + floe.outline[k]) <= 0.0:
 					aground += 1
 			for j: int in near[i]:
 				if j > i and NelvarCraterData.floe_gap(floe, data.floes[j], time) <= 0.0:
@@ -190,23 +189,24 @@ func _check_floes(data: NelvarCraterData, config: NelvarCraterConfig) -> void:
 				queue.append(j)
 	var middle := INF
 	var sinking := 0
+	var broad_sinking := 0
 	for i in data.floes.size():
 		if reached.has(i):
 			middle = minf(middle, data.floes[i].center.distance_to(data.vent) - data.floes[i].outer)
 		if data.floes[i].sinks():
 			sinking += 1
+			if data.floes[i].broad:
+				broad_sinking += 1
 	_check(reached.size() == data.floes.size() and middle < data.vent_radius + config.vent_moat + 200.0,
 		context + "on foot: %d of %d floes, nearest the vent %.0f" % [reached.size(), data.floes.size(), middle])
-	var share := float(sinking) / data.floes.size()
-	_check(share > config.sinking_share * 0.5 and share < config.sinking_share * 1.6, context + "%.2f of the floes sink" % share)
+	_check(sinking > 0 and broad_sinking == 0, context + "%d stones sink, %d broad floes sink" % [sinking - broad_sinking, broad_sinking])
 
 
 ## Whether a point of the floe's outline at time 0 passes `test`.
-func _floe_reaches(data: NelvarCraterData, floe: NelvarCraterData.Isle, test: Callable) -> bool:
+func _floe_reaches(_data: NelvarCraterData, floe: NelvarCraterData.Isle, test: Callable) -> bool:
 	var at := floe.position_at(0.0)
-	for k in 40:
-		var angle := TAU * k / 40.0
-		if test.call(at + Vector2.from_angle(angle) * floe.shape.radius_at(angle)):
+	for point in floe.outline:
+		if test.call(at + point):
 			return true
 	return false
 
@@ -214,7 +214,7 @@ func _floe_reaches(data: NelvarCraterData, floe: NelvarCraterData.Isle, test: Ca
 func _fingerprint(data: NelvarCraterData) -> int:
 	var parts: Array = [data.spawn_position, data.summit.radii, data.flows.size(), data.capes.size()]
 	for floe in data.floes:
-		parts.append([floe.center, floe.drift, floe.shape.axes, floe.sink_period, floe.sink_phase])
+		parts.append([floe.center, floe.drift, floe.radii, floe.sink_period, floe.sink_phase])
 	for geyser in data.geysers:
 		parts.append([geyser.position, geyser.period, geyser.phase])
 	for thing in data.things:
@@ -266,23 +266,28 @@ func _check_field(data: NelvarCraterData) -> void:
 
 
 func _check_art(data: NelvarCraterData) -> void:
-	for isle in data.floes.slice(0, 24):
+	var some: Array[NelvarCraterData.Isle] = data.floes.filter(func(isle: NelvarCraterData.Isle) -> bool: return isle.broad).slice(0, 2)
+	some.append_array(data.floes.filter(func(isle: NelvarCraterData.Isle) -> bool: return not isle.broad).slice(0, 6))
+	var bad := 0
+	for isle in some:
 		var mask := NelvarCraterIsland.bake_mask(isle)
 		var inside := 0
 		var core := 0
 		var faces := 0
+		# The mask's R is quarters of an art pixel in from the edge.
+		var deep := minf(isle.inner / STEP, 60.0) * 0.5 * 4.0 / 255.0
 		for y in mask.get_height():
 			for x in mask.get_width():
 				var pixel := mask.get_pixel(x, y)
 				if pixel.a > 0.5:
 					inside += 1
-					if pixel.r > 0.75:
+					if pixel.r > deep:
 						core += 1
 					if roundi(pixel.g * 255.0) == 1:
 						faces += 1
-		var expected := PI * pow(isle.inner / STEP, 2.0)
-		_check(inside > expected * 0.9, "Floe %d's mask is too small" % isle.id)
-		_check(core > 0 and faces > 4, "Floe %d's mask has no core or no south face" % isle.id)
+		if inside < PI * pow(isle.inner / STEP, 2.0) * 0.9 or core == 0 or faces <= 4:
+			bad += 1
+	_check(bad == 0, "%d floe masks are too small, have no core or no south face" % bad)
 	var painter := NelvarFirePainter.new()
 	var seen := {}
 	for thing in data.things:
@@ -299,16 +304,17 @@ func _check_art(data: NelvarCraterData) -> void:
 
 # --- The start setting -------------------------------------------------------------
 
-## The six start options exclude each other. The saved settings are put back as they were.
+## The start options exclude each other. The saved settings are put back as they were.
 func _check_settings() -> void:
 	var settings: Node = root.get_node("GameSettings")
 	var path: String = settings.PATH
 	var saved := FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else PackedByteArray()
 	var was := [settings.start_in_void, settings.start_on_earth, settings.start_in_fire, settings.start_on_ice,
-		settings.start_in_fire2, settings.start_on_ice2]
+		settings.start_in_fire2, settings.start_on_ice2, settings.start_on_earth2]
 	var setters := ["set_start_in_void", "set_start_on_earth", "set_start_in_fire", "set_start_on_ice",
-		"set_start_in_fire2", "set_start_on_ice2"]
-	var flags := ["start_in_void", "start_on_earth", "start_in_fire", "start_on_ice", "start_in_fire2", "start_on_ice2"]
+		"set_start_in_fire2", "set_start_on_ice2", "set_start_on_earth2"]
+	var flags := ["start_in_void", "start_on_earth", "start_in_fire", "start_on_ice", "start_in_fire2", "start_on_ice2",
+		"start_on_earth2"]
 	for i in setters.size():
 		settings.call(setters[i], true)
 		for j in flags.size():
@@ -455,16 +461,14 @@ func _check_falls(game: Node, data: NelvarCraterData, player: NelvarPlayer) -> v
 	_check(data.lava_depth(player.global_position) < -NelvarPlayer.BODY_RADIUS and data.rim_depth(player.global_position) > 0.0,
 		"The player did not come back on the rim")
 	_check(not player.is_falling(), "The player did not come back from the lava")
-	# Off the edge: the same, into the clouds.
+	# The edge holds: walking out leaves the player on the rim, unhurt.
 	_reset(player, _rim(data, angle, 0.6))
 	for i in 8:
 		await physics_frame
-	var drops: int = game.drops
 	await _walk(player, -inward, 90)
-	await create_timer(1.3).timeout
-	_check(game.drops == drops + 1, "Walking off the edge was not a fall")
-	_check(player.health <= player.max_health - _rule("CLIFF_DAMAGE") + 0.5, "The fall did no damage")
-	_check(data.rim_depth(player.global_position) > NelvarPlayer.BODY_RADIUS, "The player did not come back on the rim")
+	await create_timer(0.5).timeout
+	_check(not player.is_falling() and player.health == player.max_health and data.rim_depth(player.global_position) >= 0.0,
+		"The player walked off the edge")
 	# A step over the lava and straight back holds.
 	_reset(player, _rim(data, angle, 0.0) - inward * (NelvarPlayer.BODY_RADIUS + 2.0))
 	await physics_frame
@@ -479,7 +483,7 @@ func _check_falls(game: Node, data: NelvarCraterData, player: NelvarPlayer) -> v
 func _check_sinking(game: Node, data: NelvarCraterData, player: NelvarPlayer) -> void:
 	var floe: NelvarCraterData.Isle = null
 	for candidate in data.floes:
-		if candidate.sinks() and candidate.inner > 50.0:
+		if candidate.sinks() and candidate.inner > 40.0:
 			floe = candidate
 			break
 	if floe == null:
@@ -612,7 +616,7 @@ func _check_hoppers(game: Node, data: NelvarCraterData) -> void:
 	_check(not is_instance_valid(edge) or edge.call("is_dead"), "A hopper blown off the edge did not die")
 	var floe: NelvarCraterData.Isle = null
 	for candidate in data.floes:
-		if candidate.sinks() and candidate.inner > 50.0:
+		if candidate.sinks() and candidate.inner > 40.0:
 			floe = candidate
 			break
 	if floe != null:

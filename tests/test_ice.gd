@@ -290,14 +290,14 @@ func _check_field(data: NelvarIceData) -> void:
 
 # --- The start setting -------------------------------------------------------------
 
-## The six start options exclude each other; «Играть» opens the ice valley when its
+## The start options exclude each other; «Играть» opens the ice valley when its
 ## option is on. The saved settings are put back as they were.
 func _check_settings() -> void:
 	var settings: Node = root.get_node("GameSettings")
 	var path: String = settings.PATH
 	var saved := FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else PackedByteArray()
 	var was := [settings.start_in_void, settings.start_on_earth, settings.start_in_fire, settings.start_on_ice,
-		settings.start_in_fire2, settings.start_on_ice2]
+		settings.start_in_fire2, settings.start_on_ice2, settings.start_on_earth2]
 	settings.set_start_in_fire(true)
 	settings.set_start_on_ice(true)
 	_check(settings.start_on_ice and not settings.start_in_fire and not settings.start_on_earth
@@ -314,15 +314,20 @@ func _check_settings() -> void:
 	_check(settings.start_on_ice2 and not settings.start_on_ice, "The ice cave did not replace the ice valley at start")
 	settings.set_start_on_ice(true)
 	_check(settings.start_on_ice and not settings.start_on_ice2, "The ice valley did not replace the ice cave at start")
+	settings.set_start_on_earth2(true)
+	_check(settings.start_on_earth2 and not settings.start_on_ice, "The giant forest did not replace the ice valley at start")
+	settings.set_start_on_ice(true)
+	_check(settings.start_on_ice and not settings.start_on_earth2, "The ice valley did not replace the giant forest at start")
 	settings.set_start_on_ice(false)
 	_check(not (settings.start_on_ice or settings.start_in_void or settings.start_on_earth or settings.start_in_fire
-		or settings.start_in_fire2 or settings.start_on_ice2), "Turning the ice off left another start on")
+		or settings.start_in_fire2 or settings.start_on_ice2 or settings.start_on_earth2), "Turning the ice off left another start on")
 	settings.start_in_void = was[0]
 	settings.start_on_earth = was[1]
 	settings.start_in_fire = was[2]
 	settings.start_on_ice = was[3]
 	settings.start_in_fire2 = was[4]
 	settings.start_on_ice2 = was[5]
+	settings.start_on_earth2 = was[6]
 	if saved.is_empty():
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	else:

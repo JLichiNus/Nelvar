@@ -1,7 +1,9 @@
 shader_type canvas_item;
 // Disabled blending: the viewport keeps the floor's own alpha, so where there is no
-// mountain (past the summit's edge, round the front slope) the clouds far below
-// (crater_below.gdshader, on the layer under this one) show through.
+// mountain (in the north past the summit's edge, past the flanks, under the clouds) the
+// clouds far below (crater_below.gdshader, on the layer under this one) show through.
+// Every pixel is either opaque or fully clear: nothing of the clouds below shows through
+// the mountain.
 render_mode unshaded, blend_disabled;
 
 // The top of the volcano in the palette of the "Огонь" menu (fire_common): the rim of
@@ -9,10 +11,13 @@ render_mode unshaded, blend_disabled;
 // geysers' mouths; the lava lake, swirled brighter and darker, bright along its shores,
 // boiling in patches and churning white-hot in the vent (the floes of crust on it are
 // sprites); the crater's inner wall under the north shore (a few art pixels of basalt
-// strata lit red from below), the faces of the capes. Under the summit's south edge
-// hangs the front slope of the mountain: strata
-// of basalt and ash, gullies and ribs running down and spreading like a cone, lava
-// trickling down some gullies; it darkens and dissolves into the clouds.
+// strata lit red from below), the faces of the capes. Under the summit's edge the
+// mountain's side falls away, seen only where it faces the camera (which looks from the
+// south): tall under the south edge, narrowing round the east and west flanks, hidden
+// behind the top in the north. Ribs and gullies of basalt and ash run down it, lit from
+// the upper right, lava trickling down some gullies; it darkens into the haze and sinks
+// into the clouds far below: the puffs in front of it hide its foot, through their gaps
+// it goes on down into the dark.
 //
 // Runs through NelvarCloudSea with parallax 1: one fragment per art pixel of the world
 // grid. The lake, the capes and the summit's edge are computed here exactly
@@ -54,23 +59,45 @@ uniform int boil_count = 0;
 // warning, 2..3 erupting).
 uniform vec4 geysers[10];
 uniform int geyser_count = 0;
-// The front slope: per art pixel column from slope_origin, the row where the summit ends
-// in the south (-1: none); the first and last such columns and their rows; the
-// crater's centre column and half width, art pixels.
-uniform sampler2D slope_tex : filter_nearest, repeat_disable;
-uniform float slope_origin = 0.0;
-uniform vec4 slope_ends = vec4(0.0);
-uniform float summit_mid = 0.0;
-uniform float summit_half = 420.0;
+// The clouds far below (the "Below" NelvarCloudSea, crater_below): their pixel at a world
+// art pixel's place on screen is that pixel + below_shift; how torn their cover is and
+// their breath time.
+uniform vec2 below_shift;
+uniform float below_holes = 0.24;
+uniform float below_breath = 0.0;
 
 #include "res://scripts/fire/fire_common.gdshaderinc"
+#include "res://scripts/crater/crater_clouds.gdshaderinc"
 
-// Art pixels of slope seen before the clouds swallow it, and how its sides spread
-// (pixels down per pixel out).
-const float SLOPE_DEPTH = 240.0;
-const float CONE = 2.4;
-// What the slope fades into: the ash clouds' shadowed tone.
+// The mountain's side. The camera looks down from the south: a point of the side d art
+// pixels below the summit is drawn d pixels lower on screen, and the side flares out
+// FLARE pixels for each pixel down. FLARE < 1, so the side shows only where it faces
+// the camera (sin of its direction above -FLARE): in the north it lies behind the top.
+const float FLARE = 0.42;
+// How far down (art pixels) the top of the clouds far below lies; it wanders by
+// CLOUD_WANDER either way round the mountain. Through the clouds' gaps the side goes on
+// DEEP_RUN further, into the dark.
+const float CLOUD_DROP = 150.0;
+const float CLOUD_WANDER = 0.2;
+const float DEEP_RUN = 110.0;
+// Each puff is in front of the side or behind it as a whole, by where the middle of its
+// base stands: past the mountain's foot (where the side seen there is already under the
+// clouds' top) all of it hides the side, its round top too, so the foot sinks into the
+// clouds along the puffs' outlines. A puff whose base lies behind the side by `sink`
+// still shows where its bulge towards the camera (PUFF_BULGE of its half height in its
+// middle, none at its rim) is more than that: one drifting under the edge shrinks away
+// behind the side instead of popping.
+const float PUFF_BULGE = 0.8;
+// How far up the screen a puff reaches at most above its base: the biggest puff's
+// (1 + FLAT) half heights, with the wobble of its rim and its breathing.
+const float PUFF_HEIGHT = 28.0;
+// Ribs round the whole mountain (the seam of their noise is in the north, out of sight).
+const float RIBS = 104.0;
+// Light from the upper right (the menu art's sun), as in crater_below.
+const vec3 SUN = vec3(0.4194, -0.5792, 0.6990);
+// What the side fades into: the ash clouds' shadowed tone, and the dark far below.
 const vec3 DEPTHS = vec3(58.0, 46.0, 50.0) / 255.0;
+const vec3 ABYSS = vec3(26.0, 18.0, 22.0) / 255.0;
 const vec3 PIT = vec3(20.0, 14.0, 18.0) / 255.0;
 
 float smooth_max(float a, float b, float k) {
@@ -117,16 +144,21 @@ float lava_depth(vec2 world) {
 	return -ground;
 }
 
-// NelvarCraterData.rim_depth: positive on the summit, world units.
-float summit_sd(vec2 world) {
-	vec2 offset = world - lake_center;
-	float t = mod(atan(offset.y, offset.x), 6.2831853) / 6.2831853 * float(edge_count);
+// The summit's radius in a direction from lake_center (NelvarCraterData.Profile).
+float summit_radius(float angle) {
+	float t = mod(angle, TAU) / TAU * float(edge_count);
 	int i = int(t);
 	float f = t - float(i);
 	i = i % edge_count;
 	float a = texelFetch(edge_tex, ivec2(i, 0), 0).r;
 	float b = texelFetch(edge_tex, ivec2((i + 1) % edge_count, 0), 0).r;
-	return mix(a, b, f) - length(offset);
+	return mix(a, b, f);
+}
+
+// NelvarCraterData.rim_depth: positive on the summit, world units.
+float summit_sd(vec2 world) {
+	vec2 offset = world - lake_center;
+	return summit_radius(atan(offset.y, offset.x)) - length(offset);
 }
 
 vec4 field_at(vec2 pixel) {
@@ -137,59 +169,133 @@ vec4 field_at(vec2 pixel) {
 	return texelFetch(field_tex, ivec2(f), 0);
 }
 
-// Row (art pixels) where the mountain's front begins under column x: the summit's south
-// edge, and past its sides the cone's flanks running down and out.
-float slope_top(float x) {
-	if (x < slope_ends.x) {
-		return slope_ends.z + (slope_ends.x - x) * CONE;
+// The point of the mountain's side seen at q (art pixels from the crater's centre, past
+// the summit's edge): how far below the summit it lies (x, art pixels; -1 where the line
+// of sight misses the mountain: in the north, past the flanks, or deeper than `reach`)
+// and its direction from the crater's centre (y). The side d below the summit is the
+// summit's outline grown by FLARE * d and moved d down; the first d whose outline takes
+// in q is the side nearest the camera. Marched down from the edge: while q is outside
+// the outline by g (along the radius, a little more than across the bends of the edge),
+// no outline within g / (1 + FLARE) further down reaches it, so no step jumps past the
+// side. Grazing lines of sight at the flanks' outer rim close in slowly; those not found
+// in time count as misses (they lie deep, mostly behind the clouds).
+vec2 side_point(vec2 q, float reach) {
+	float angle = atan(q.y, q.x);
+	if (q.y + summit_radius(angle) / texel_size * FLARE <= 0.0) {
+		// The outlines below only move away from q: the north, behind the top.
+		return vec2(-1.0, angle);
 	}
-	if (x > slope_ends.y) {
-		return slope_ends.w + (x - slope_ends.y) * CONE;
+	float d = 0.0;
+	for (int i = 0; i < 28; i++) {
+		vec2 o = q - vec2(0.0, d);
+		angle = atan(o.y, o.x);
+		float g = summit_radius(angle) / texel_size + FLARE * d - length(o);
+		if (g > -0.25) {
+			return vec2(d, angle);
+		}
+		d -= g * 0.85 / (1.0 + FLARE);
+		if (d > reach) {
+			break;
+		}
 	}
-	float top = texelFetch(slope_tex, ivec2(int(x - slope_origin), 0), 0).r;
-	return top < 0.0 ? 1.0e6 : top;
+	return vec2(-1.0, angle);
 }
 
-// The mountain's front below the summit: x is the art pixel column, depth how far below
-// the edge. Transparent above it and once it has dissolved into the clouds.
-vec4 front_slope(vec2 pixel, vec2 np) {
-	float depth = pixel.y + 0.5 - slope_top(pixel.x);
-	if (depth <= 0.0) {
+// The lane round the mountain for an angle: 0..RIBS, growing eastwards along the south
+// side (westwards along the north); the seam is in the north.
+float lane_of(float angle) {
+	return (1.0 - mod(angle + TAU * 0.25, TAU) / TAU) * RIBS;
+}
+
+// value_noise over (lane, y), closed round the mountain: it runs into itself at the seam.
+float lane_noise(float lane, float y, float scale, float seed) {
+	float a = value_noise(vec2(lane * scale, y) + seed);
+	float b = value_noise(vec2((lane - RIBS) * scale, y) + seed);
+	return mix(a, b, smoothstep(RIBS - 8.0, RIBS, lane));
+}
+
+// How far below the summit (art pixels) the top of the clouds lies round the mountain.
+float cloud_top(float lane) {
+	return CLOUD_DROP * (1.0 + (lane_noise(lane, 3.0, 0.14, 31.0) - 0.5) * 2.0 * CLOUD_WANDER);
+}
+
+// Whether the clouds far below hide the side at this pixel, `drop` below the summit
+// where their top lies `top` below it: a puff in front of the side (PUFF_BULGE), the
+// cover between the puffs where the side goes on under it, and through a gap the side
+// past DEEP_RUN, lost in the dark.
+bool behind_clouds(vec2 pixel, float drop, float top) {
+	vec2 p = floor(pixel + 0.5 + below_shift) + 0.5;
+	vec2 foot;
+	vec4 puff = puff_with_foot(p, below_holes, below_breath, foot);
+	if (puff.z > 0.5) {
+		// The side seen at the puff's base: a miss is past the flank or deep under the
+		// clouds' top, both in front of the mountain.
+		vec2 at = side_point(foot - below_shift - lake_center / texel_size, CLOUD_DROP * (1.0 + CLOUD_WANDER));
+		if (at.x < 0.0) {
+			return true;
+		}
+		float sink = cloud_top(lane_of(at.y)) - at.x;
+		float bulge = sqrt(max(0.0, 1.0 - dot(puff.xy, puff.xy))) * puff.w * PUFF_BULGE;
+		return sink < bulge || drop > top + DEEP_RUN;
+	}
+	if (density(p) > below_holes + 0.03) {
+		return drop > top;
+	}
+	return drop > top + DEEP_RUN;
+}
+
+// The mountain's side past the summit's edge where it faces the camera; fully clear where
+// it is not seen: behind the top, past the flanks, behind the clouds and far down
+// through their gaps.
+vec4 mountain_side(vec2 pixel, vec2 np) {
+	vec2 at = side_point(pixel + 0.5 - lake_center / texel_size, CLOUD_DROP * (1.0 + CLOUD_WANDER) + DEEP_RUN);
+	float drop = at.x;
+	if (drop < 0.0) {
 		return vec4(0.0);
 	}
-	float fade = 1.0 - smoothstep(SLOPE_DEPTH * 0.45, SLOPE_DEPTH, depth + (value_noise(np * 0.08) - 0.5) * 34.0);
-	if (fade * 16.0 <= bayer(pixel) + 0.5) {
+	float angle = at.y;
+	vec2 out_dir = vec2(cos(angle), sin(angle));
+	float lane = lane_of(angle);
+	float top = cloud_top(lane);
+	// A puff reaches at most PUFF_HEIGHT pixels above its base, the side drops at most a
+	// pixel for each pixel down the screen, and a puff in front has its base at most its
+	// bulge (about 12) above the clouds' top, which wanders a little round the mountain:
+	// no need to look nearer the summit.
+	if (drop > top - PUFF_HEIGHT - 26.0 && behind_clouds(pixel, drop, top)) {
 		return vec4(0.0);
 	}
-	float half_width = summit_half + depth / CONE;
-	float across = (pixel.x + 0.5 - summit_mid) / half_width;
-	// Ribs and gullies run down the slope, uneven, spreading as the cone widens. Each rib
-	// is lit on its right side and shaded on its left (the light is from the upper right).
-	float warp = (value_noise(vec2(across * 6.0, depth * 0.025) + 5.0) - 0.5) * 1.8
-		+ (value_noise(vec2(across * 23.0, depth * 0.06) + 9.0) - 0.5) * 0.5;
-	float lane = across * 26.0 + warp;
-	float gully = floor(lane);
-	float side = fract(lane);
-	float lit = 0.5 + across * 0.16 - across * across * 0.22
-		+ (side - 0.5) * 0.34
-		- smoothstep(0.0, SLOPE_DEPTH, depth) * 0.42
+	// Screen pixels down the side, along a rib.
+	float depth = drop * length(out_dir * FLARE + vec2(0.0, 1.0));
+	// Ribs and gullies run down, uneven, spreading as the mountain widens.
+	float warp = (lane_noise(lane, depth * 0.025, 0.23, 5.0) - 0.5) * 1.8
+		+ (lane_noise(lane, depth * 0.06, 0.88, 9.0) - 0.5) * 0.5;
+	float ribs = lane + warp;
+	float gully = floor(ribs);
+	float side = fract(ribs);
+	// Lit from the upper right: the east flank bright, the south face and the west in
+	// shade. Each rib is lit on the side that faces the light.
+	float sun = dot(normalize(vec3(out_dir, 0.45)), SUN);
+	float facing = clamp(dot(vec2(out_dir.y, -out_dir.x), normalize(SUN.xy)) / 0.586, -1.2, 1.2);
+	float lit = 0.46 + sun * 0.3
+		+ (side - 0.5) * 0.34 * facing
+		- smoothstep(0.0, top, drop) * 0.22
 		+ (value_noise(np * 0.13) - 0.5) * 0.14;
 	vec3 color = ramp(BASALT, 5, lit, pixel);
 	// Ash lies in drifts, thickest near the top.
-	float ash = value_noise(vec2(pixel.x * 0.035, depth * 0.05) + 17.0) - smoothstep(0.0, SLOPE_DEPTH * 0.7, depth) * 0.3;
+	float ash = lane_noise(lane, depth * 0.05, 1.26, 17.0) - smoothstep(0.0, top * 0.8, drop) * 0.3;
 	if ((ash - 0.6) * 90.0 > bayer(pixel) + 0.5) {
 		color = ramp(ASH, 4, lit - 0.12, pixel);
-	} else if (value_noise(vec2(pixel.x * 0.05, depth * 0.04) + 61.0) > 0.78) {
+	} else if (lane_noise(lane, depth * 0.04, 1.8, 61.0) > 0.78) {
 		color = ramp(CINDER, 3, lit - 0.05, pixel);
 	}
 	// The gully floor: a dark line between ribs, lost here and there under ash.
 	if (side < 0.06 && value_noise(vec2(gully * 3.7, depth * 0.05)) > 0.3) {
 		color = PAL[BASALT];
 	}
-	// Ledges of harder rock across the slope: a lit top over a shadow, short and few.
-	float ledge = depth + (value_noise(vec2(pixel.x * 0.06, 2.0)) - 0.5) * 12.0;
+	// Ledges of harder rock across the side: a lit top over a shadow, short and few.
+	float ledge = depth + (lane_noise(lane, 2.0, 2.2, 0.0) - 0.5) * 12.0;
 	float step_row = fract(ledge / 23.0) * 23.0;
-	if (value_noise(vec2(pixel.x * 0.045, floor(ledge / 23.0) * 3.1)) > 0.64) {
+	if (lane_noise(lane, floor(ledge / 23.0) * 3.1, 1.6, 0.0) > 0.64) {
 		if (step_row < 1.0) {
 			color = PAL[BASALT + 3];
 		} else if (step_row < 2.0) {
@@ -199,9 +305,9 @@ vec4 front_slope(vec2 pixel, vec2 np) {
 	// Lava trickling down a few gullies, from under the edge.
 	if (hash12(vec2(gully, 11.3)) < 0.12) {
 		float start = 2.0 + hash12(vec2(gully, 2.1)) * 24.0;
-		float run = 30.0 + hash12(vec2(gully, 7.9)) * 80.0;
-		float width = 0.045 * (1.0 - smoothstep(start + run * 0.5, start + run, depth)) + 0.02;
-		if (depth > start && depth < start + run) {
+		float length_run = 40.0 + hash12(vec2(gully, 7.9)) * 110.0;
+		float width = 0.045 * (1.0 - smoothstep(start + length_run * 0.5, start + length_run, depth)) + 0.02;
+		if (depth > start && depth < start + length_run) {
 			float off = abs(side - 0.08);
 			if (off < width) {
 				float streak = fract((depth - time * 5.0) / 7.0 + hash12(vec2(gully, 4.7)));
@@ -211,13 +317,26 @@ vec4 front_slope(vec2 pixel, vec2 np) {
 			}
 		}
 	}
-	color = mix(color, DEPTHS, smoothstep(SLOPE_DEPTH * 0.15, SLOPE_DEPTH, depth) * 0.6);
-	// The lip where the flat top breaks into the slope.
-	float lip = pixel.x < slope_ends.x || pixel.x > slope_ends.y ? CONE : 1.0;
-	if (depth < lip) {
-		color = PAL[BASALT + 3];
-	} else if (depth < lip + 1.0) {
+	// Into the haze towards the clouds, in dithered steps (nothing is see-through), and
+	// on down into the dark through their gaps.
+	float haze = smoothstep(top * 0.3, top, drop);
+	if (haze * 16.0 > bayer(pixel) + 0.5) {
+		color = mix(color, DEPTHS, 0.3 + haze * 0.35);
+	} else {
+		color = mix(color, DEPTHS, haze * 0.4);
+	}
+	float deep = clamp((drop - top) / DEEP_RUN, 0.0, 1.0);
+	if (deep > 0.0) {
+		color = mix(color, ABYSS, deep * deep * (3.0 - 2.0 * deep) * 0.6 + (deep * 16.0 > bayer(pixel) + 0.5 ? 0.4 * deep : 0.0));
+	}
+	// The lip where the flat top breaks into the side: lit where it faces the camera, the
+	// side just under it in its shadow.
+	if (depth < 1.0) {
+		color = out_dir.y > 0.2 ? PAL[BASALT + 3] : PAL[BASALT + 1];
+	} else if (depth < 2.0 && out_dir.y > 0.2) {
 		color = PAL[BASALT];
+	} else if (depth < 6.0 && (6.0 - depth) * 4.0 > bayer(pixel) + 0.5) {
+		color *= 0.78;
 	}
 	return vec4(color, 1.0);
 }
@@ -334,7 +453,7 @@ void fragment() {
 	vec2 np = pixel + noise_offset;
 	float edge = summit_sd(world) / texel_size;
 	if (edge < 0.0) {
-		COLOR = front_slope(pixel, np);
+		COLOR = mountain_side(pixel, np);
 	} else {
 		float lava = lava_depth(world) / texel_size;
 		vec3 color;

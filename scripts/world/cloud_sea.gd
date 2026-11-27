@@ -10,6 +10,12 @@ extends CanvasLayer
 
 const SEA_SHADER := preload("res://scripts/world/cloud_sea.gdshader")
 
+## The sea has followed the camera this frame. `shift`: what to add to a world art pixel
+## (world / texel_size) to get the sea's pixel at the same place on screen, seed offset
+## included; `breath`: its breath_time. Another layer's shader can find what this sea
+## shows there (the volcano's floor hides the mountain's foot behind the clouds below).
+signal view_updated(shift: Vector2, breath: float)
+
 ## 1 = moves together with the islands, 0 = fixed on screen.
 @export_range(0.0, 1.0, 0.01) var parallax: float = 0.6
 ## Drift of the sea, world units per second. The wind blows to the right.
@@ -30,6 +36,7 @@ var _sprite: Sprite2D
 var _material: ShaderMaterial
 var _drift := Vector2.ZERO
 var _time := 0.0
+var _seed_offset := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -63,8 +70,8 @@ func _ready() -> void:
 func set_world_seed(world_seed: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = ("%d:clouds" % world_seed).hash()
-	_material.set_shader_parameter("seed_offset",
-		Vector2(rng.randi_range(-8192, 8192), rng.randi_range(-8192, 8192)))
+	_seed_offset = Vector2(rng.randi_range(-8192, 8192), rng.randi_range(-8192, 8192))
+	_material.set_shader_parameter("seed_offset", _seed_offset)
 
 
 ## The backdrop's ShaderMaterial, for shader-specific parameters.
@@ -106,3 +113,4 @@ func _update_view() -> void:
 	_material.set_shader_parameter("sea_size", Vector2(pixels))
 	_material.set_shader_parameter("breath_time", _time)
 	_material.set_shader_parameter("hole_amount", hole_amount)
+	view_updated.emit(corner - top_left / texel_size + _seed_offset, _time)

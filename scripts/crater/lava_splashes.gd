@@ -202,7 +202,7 @@ func _on_floe(time: float, around: Vector2) -> Splash:
 	var angle := _rng.randf() * TAU
 	var splash := Splash.new()
 	splash.isle = isle
-	splash.origin = Vector2.from_angle(angle) * (isle.shape.radius_at(angle) - 2.0)
+	splash.origin = Vector2.from_angle(angle) * (isle.radius_at(angle) - 2.0)
 	splash.direction = -Vector2.from_angle(angle)
 	splash.width = minf(_rng.randf_range(WIDTH.x, WIDTH.y), isle.inner * 1.1)
 	splash.reach = minf(_rng.randf_range(REACH.x, REACH.y), isle.inner * 0.7)

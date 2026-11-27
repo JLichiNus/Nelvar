@@ -5,13 +5,12 @@ extends Node2D
 ## lava crowded with floes of magma crust; below the summit's edge clouds of ash drift
 ## far down.
 ##
-## Nothing here is a wall. The floes drift slowly on the lava; they hold the player,
+## Nothing here but the summit's edge is a wall. The floes drift slowly on the lava; they hold the player,
 ## unharmed, and carry them along; some sink now and then (their seams flare first) and
-## come up again. A step into the lava or off the edge holds for a moment
-## (NelvarCraterData.COYOTE_TIME, sparks hiss under the player over the lava), then the
-## player falls: into the lava they burn, off the edge they drop into the clouds; either
-## way they come back where they last stood safely (on the rim or on a floe that never
-## sinks), hurt.
+## come up again. A step into the lava holds for a moment (NelvarCraterData.COYOTE_TIME,
+## sparks hiss under the player), then the player burns and comes back where they last
+## stood safely (on the rim or on a floe that never sinks), hurt. The summit's outer edge
+## holds the player: they walk along it but never off it.
 ## Geysers erupt and throw whoever stands in them up and along their run-up. Lava
 ## splashes over the shores: the fresh lava burns and slows, then sets into a safe crust.
 ## Hoppers burn in the lava and die off the edge, the wind can blow them either way.
@@ -23,13 +22,12 @@ const STEP := NelvarFireData.PIXEL
 ## Floes this far outside the view are still kept in place on screen.
 const FLOE_VIEW_MARGIN := 400.0
 const MOLTEN_SHADER := preload("res://scripts/fire/fire_molten.gdshader")
-## Burning in the lava, and dropping off the edge.
+## Burning in the lava.
 const LAVA_DAMAGE := 20.0
 const SINK_TIME := 0.45
 const LAVA_TINT := Color(1.0, 0.45, 0.12, 0.0)
-const CLIFF_DAMAGE := 15.0
-const CLIFF_TIME := 0.8
-const ASH_TINT := Color(0.2, 0.15, 0.17, 0.0)
+## The player's centre stays this far in from the summit's edge.
+const EDGE_INSET := 4.0
 ## Safe ground keeps this much to spare from the lava, the edge and the geysers.
 const SAFE_MARGIN := 18.0
 ## Geysers: damage (before the throw: in the air nothing hurts), the throw.
@@ -56,9 +54,8 @@ const MAX_FLARES := 8
 var data: NelvarCraterData
 var thing_nodes: Array[NelvarFireThing] = []
 var isle_nodes: Array[NelvarCraterIsland] = []
-## Falls so far: into the lava and off the edge; eruptions.
+## Falls into the lava so far; eruptions.
 var burns := 0
-var drops := 0
 var eruptions := 0
 
 ## The shared clock: the floes' places and sinking and the geysers' cycles follow it.
@@ -157,7 +154,7 @@ func _ready() -> void:
 
 func _update_status() -> void:
 	status_label.text = "%d плит магмы · %d гейзеров · выплесков: %d · падений: %d" % [
-		data.floes.size(), data.geysers.size(), splashes.count, burns + drops]
+		data.floes.size(), data.geysers.size(), splashes.count, burns]
 
 
 # --- Building -------------------------------------------------------------------
@@ -197,9 +194,9 @@ func _draw_outlines() -> void:
 		var at := isle.position_at(clock)
 		var sink := isle.sink_at(clock) * isle.sink_depth()
 		var outline := PackedVector2Array()
-		for i in 41:
-			var angle := TAU * i / 40.0
-			outline.append(at + Vector2.from_angle(angle) * maxf(0.0, isle.shape.radius_at(angle) - sink))
+		for i in isle.radii.size() + 1:
+			var k := i % isle.radii.size()
+			outline.append(at + Vector2.from_angle(TAU * k / isle.radii.size()) * maxf(0.0, isle.radii[k] - sink))
 		_outlines.draw_polyline(outline, Color.CYAN if isle.sinks() else Color.ORANGE_RED, 2.0)
 	for geyser in data.geysers:
 		_outlines.draw_arc(geyser.position, geyser.radius + NelvarPlayer.BODY_RADIUS, 0.0, TAU, 24,
@@ -315,21 +312,15 @@ func _setup_ground() -> void:
 		boils.append(Vector3(0.0, 0.0, 1.0))
 	material.set_shader_parameter("boils", boils.slice(0, 6))
 	material.set_shader_parameter("geyser_count", mini(data.geysers.size(), MAX_GEYSERS))
-	material.set_shader_parameter("slope_tex", _field.slope_texture())
-	material.set_shader_parameter("slope_origin", float(_field.slope_origin))
-	var first := 0
-	while first < _field.slope.size() - 1 and _field.slope[first] < 0.0:
-		first += 1
-	var last := _field.slope.size() - 1
-	while last > 0 and _field.slope[last] < 0.0:
-		last -= 1
-	material.set_shader_parameter("slope_ends", Vector4(_field.slope_origin + first, _field.slope_origin + last,
-		_field.slope[first], _field.slope[last]))
-	material.set_shader_parameter("summit_mid", data.lake.center.x / STEP)
-	material.set_shader_parameter("summit_half", (last - first) * 0.5)
 	ground.texel_size = STEP
 	below.texel_size = STEP
 	below.set_world_seed(data.world_seed)
+	# The floor finds the clouds below where they are on screen, to hide the mountain's
+	# foot behind them.
+	material.set_shader_parameter("below_holes", below.hole_amount)
+	below.view_updated.connect(func(shift: Vector2, breath: float) -> void:
+		material.set_shader_parameter("below_shift", shift)
+		material.set_shader_parameter("below_breath", breath))
 	var light := glow.backdrop_material()
 	light.set_shader_parameter("texel_size", float(STEP))
 	light.set_shader_parameter("noise_offset", noise_offset)
@@ -380,6 +371,8 @@ func _process(delta: float) -> void:
 	if data == null:
 		return
 	_time += delta
+	# After the player's own move this frame: never drawn past the edge.
+	_hold_on_summit()
 	var viewport := get_viewport()
 	var to_world := viewport.get_canvas_transform().affine_inverse()
 	var view := Rect2(to_world * Vector2.ZERO, to_world.basis_xform(viewport.get_visible_rect().size)).grow(200.0)
@@ -446,6 +439,7 @@ func _physics_process(delta: float) -> void:
 	if data == null:
 		return
 	var next := clock + delta
+	_hold_on_summit()
 	_carry(next)
 	clock = next
 	data.now = clock
@@ -462,19 +456,14 @@ func _physics_process(delta: float) -> void:
 		_over_time = 0.0
 		return
 	var point := player.global_position
-	var off_edge := data.rim_depth(point) < 0.0
-	var in_lava := data.lava_depth_at(point, clock) > 0.0
-	if off_edge or in_lava:
+	if data.lava_depth_at(point, clock) > 0.0:
 		_over_time += delta
-		if in_lava and Engine.get_physics_frames() % 3 == 0:
+		if Engine.get_physics_frames() % 3 == 0:
 			# Sparks hiss under the player: a step too far.
 			embers.burst(point, 1, 0.35)
 		if _over_time > NelvarCraterData.COYOTE_TIME:
 			_over_time = 0.0
-			if off_edge:
-				_drop()
-			else:
-				_burn()
+			_burn()
 		return
 	_over_time = 0.0
 	if _is_safe(point):
@@ -483,6 +472,21 @@ func _physics_process(delta: float) -> void:
 	elif _riding != null and _is_safe_on(_riding, point):
 		_safe_floe = _riding
 		_safe_position = point - _riding.position_at(clock)
+
+
+## The summit's edge is a wall for the player (on foot and in the air): pulled back in
+## along the radius, the push outward is dropped, the run along the edge kept.
+func _hold_on_summit() -> void:
+	var summit := data.summit
+	var offset := player.global_position - summit.center
+	var limit := summit.radius_at(offset.angle()) - EDGE_INSET
+	if offset.length() <= limit:
+		return
+	var out := offset.normalized()
+	player.global_position = summit.center + out * limit
+	var outward := player.velocity.dot(out)
+	if outward > 0.0:
+		player.velocity -= out * outward
 
 
 ## Floes carry whoever stands on them from `clock` to `next`.
@@ -537,7 +541,7 @@ func _sinking(delta: float) -> void:
 			if randf() < delta * 6.0:
 				var angle := randf() * TAU
 				var edge := floe.position_at(clock) + Vector2.from_angle(angle) \
-					* maxf(0.0, floe.shape.radius_at(angle) - sink * floe.sink_depth())
+					* maxf(0.0, floe.radius_at(angle) - sink * floe.sink_depth())
 				embers.flame(edge, 1, 4.0)
 
 
@@ -668,20 +672,6 @@ func _burn() -> void:
 	player.take_damage(LAVA_DAMAGE)
 	if not hint.is_empty():
 		say(hint)
-
-
-## Off the edge: the player drops into the clouds far below and comes back, hurt.
-func _drop() -> void:
-	_falling = true
-	drops += 1
-	_update_status()
-	player.fall_into_abyss(CLIFF_TIME, ASH_TINT)
-	await get_tree().create_timer(CLIFF_TIME + 0.3, false).timeout
-	_falling = false
-	if not is_instance_valid(player):
-		return
-	player.recover_at(_safe_spot())
-	player.take_damage(CLIFF_DAMAGE)
 
 
 ## A line in the middle of the screen, faded in and out.

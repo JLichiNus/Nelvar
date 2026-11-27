@@ -11,8 +11,12 @@ const WATER_LAYER := 16
 ## Harmonics bending the valley and the ponds: k = 2 .. HARMONICS + 1.
 const HARMONICS := 6
 
+## The kinds after PEAK belong to the giant forest (Земля 2, NelvarThicketData); the
+## valley never makes them.
 enum Kind { TREE, ROCK, STATUE, STUMP, LOG, BUSH, TALL_GRASS, FERN, FLOWERS, MUSHROOMS,
-	REEDS, LILY, PEAK }
+	REEDS, LILY, PEAK,
+	GIANT, ROOT, FALLEN_GIANT, ROOT_PLATE, ACORN, GIANT_MUSHROOM, PUFFBALL, FLYTRAP, GRASS_BLADES,
+	CLOVER, GIANT_FLOWER, LEAF, TWIG, SHELL, FEATHER, DEW, AMBER, BONES, RIB }
 enum Species { OAK, BIRCH, PINE, BLOSSOM, APPLE, WILLOW, MAPLE }
 ## Look of a peak (Thing.variant of Kind.PEAK). The ring round the valley mixes the
 ## first five; crags and boulders lie on the plateau beyond it.

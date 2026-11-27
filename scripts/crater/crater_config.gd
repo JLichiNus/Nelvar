@@ -37,14 +37,26 @@ extends Resource
 @export var boils: Vector2i = Vector2i(3, 5)
 
 @export_group("Magma crust")
-## Floes of crust grown out from the shore across the lake, each a step from the one it
-## grew from: one can walk to the middle on them. They hold whoever walks on them (no
-## harm) and carry them along. They grow until there is no room left; this is only a
-## bound.
-@export var floe_limit: int = 400
-## Radius before the bends; more small ones than broad.
-@export var floe_radius: Vector2 = Vector2(44.0, 230.0)
-## Lava between a floe and the one it grew from (or the shore): a step.
+## Broad floes: the lake is shared out between places scattered over it, the bigger
+## ones taking more, along winding lines; they are the ground to fight on and never
+## sink. Each place keeps this far (drawn per place) from the others, roughly.
+@export var isle_reach: Vector2 = Vector2(320.0, 480.0)
+## The channel of lava between two broad floes: down to channel.x (a step) at its fords,
+## at least one between any two neighbours, up to channel.y elsewhere.
+@export var channel: Vector2 = Vector2(22.0, 150.0)
+## How far the lines between the broad floes wander from straight.
+@export var isle_wander: float = 100.0
+## Open lava between the broad floes and the shore: from shore_ring.x (a step) at the
+## shore's fords, `shore_fords` of them, to shore_ring.y.
+@export var shore_ring: Vector2 = Vector2(12.0, 360.0)
+@export var shore_fords: Vector2i = Vector2i(4, 6)
+## Small floes: stepping stones in the open lava where the ring along the shore is wide and
+## in the pools between the broad floes, each a step from the shore or from a floe; a
+## bound on how many.
+@export var stones: Vector2i = Vector2i(18, 30)
+## A stone's radius before the bends.
+@export var floe_radius: Vector2 = Vector2(48.0, 120.0)
+## Lava between a stone and the floe it grew from (or the shore): a step.
 @export var floe_gap: Vector2 = Vector2(16.0, 26.0)
 ## The swell they all sway on: reach on each axis (small: a floe at the shore stays
 ## within a run of it) and seconds of one sway.
@@ -54,9 +66,9 @@ extends Resource
 @export var floe_swell: float = 7000.0
 ## Open lava kept round the vent.
 @export var vent_moat: float = 140.0
-## Share of the floes that sink by themselves now and then (more of the small ones): seconds
-## between, and how long they stay under. They warn first: their seams flare.
-@export_range(0.0, 0.8, 0.05) var sinking_share: float = 0.3
+## Share of the stones that sink by themselves now and then (more of the small ones):
+## seconds between, and how long they stay under. They warn first: their seams flare.
+@export_range(0.0, 0.8, 0.05) var sinking_share: float = 0.45
 @export var sink_period: Vector2 = Vector2(30.0, 55.0)
 @export var sink_time: Vector2 = Vector2(5.0, 8.0)
 
@@ -97,6 +109,13 @@ func validation_error() -> String:
 		return "Invalid floes."
 	if floe_gap.x < 12.0 or floe_gap.y > 30.0 or floe_gap.y < floe_gap.x:
 		return "Floes must stay a step apart."
+	if isle_reach.x < 200.0 or isle_reach.y < isle_reach.x or stones.y < stones.x:
+		return "Invalid broad floes or stones."
+	# The fords stay a step however the swell moves the floes, and never close.
+	if channel.x < 20.0 or channel.x > 30.0 or channel.y < channel.x:
+		return "Channels between the broad floes must be a step at their fords."
+	if shore_ring.x < 10.0 or shore_ring.x > 16.0 or shore_ring.y < shore_ring.x or shore_fords.x < 2:
+		return "The broad floes must come a step from the shore at its fords."
 	if capes.x < 1 or capes.y < capes.x:
 		return "Invalid cape count."
 	if cape_length.x < 60.0 or cape_length.y < cape_length.x:

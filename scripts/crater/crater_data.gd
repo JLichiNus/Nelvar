@@ -3,17 +3,19 @@ extends NelvarFireData
 ## The volcano (Огонь 2): the top of one huge mountain. A broad rim of rock runs round
 ## the crater; the crater is a lake of lava filled almost to the brim, with the vent in
 ## its middle. Beyond the rim's outer edge is a sheer drop into clouds of ash far below;
-## the camera, looking down from the south, sees the mountain's front slope under the
-## southern edge.
+## the camera, looking down from the south, sees the mountain's side under the southern
+## edge and round the flanks (crater_ground.gdshader), not in the north.
 ##
-## Floes of magma crust of every size and shape cover much of the lake, a step apart
-## from the shore to the vent's moat; they sway together on one slow swell, hold whoever
-## walks on them and carry them along. Some of them sink now and then (they warn first)
-## and come up again red-hot; their place and their sinking depend on the time only, so
-## every layout is reproducible.
+## Broad floes of magma crust cover most of the lake, the ground to fight on: the lake is
+## shared out between them, with winding channels of lava between neighbours (a step wide
+## at their fords) and a ring of open lava along the shore (a step at its fords). Small
+## floes, stepping stones, lie in the open lava. All of them sway together on one slow
+## swell, hold whoever walks on them and carry them along. Some of the stones sink now
+## and then (they warn first) and come up again red-hot; where a floe is and whether it is
+## under depend on the time only, so every layout is reproducible.
 ##
-## Nothing here is a wall. The lava and the edge are falls: a step over either holds for
-## a moment (COYOTE_TIME), then the player goes down.
+## The summit's edge holds the player like a wall. The lava is a fall: a step over it
+## holds for a moment (COYOTE_TIME), then the player goes down.
 ##
 ## NelvarCraterGenerator builds it; crater_ground.gdshader draws the same geometry: the
 ## lake and the capes are computed the same way there (lava_depth), the summit's edge is
@@ -29,9 +31,10 @@ const CAPE_BLEND := 48.0
 const RUN_GAP := 44.0
 ## Floes never come closer than this to each other.
 const MIN_GAP := 8.0
-## Floes: samples of an outline for floe_gap, the cells they are filed by, and how far
-## past a floe's reach a query still finds it.
-const FLOE_GAP_SAMPLES := 48
+## Floes: samples round the outline of a broad one and of a stone, the cells they are
+## filed by, and how far past a floe's reach a query still finds it.
+const ISLE_SAMPLES := 128
+const STONE_SAMPLES := 64
 const FLOE_CELL := 256.0
 const FLOE_QUERY_MARGIN := 80.0
 ## Sinking: the floe comes up red-hot (RISE), cools (COOL); warns (WARN) and goes down
@@ -88,10 +91,13 @@ class Cape:
 		return tip + base.direction_to(tip) * width_at(1.0)
 
 
-## A floe of magma crust swaying round its own place. Its shape lies round that place.
+## A floe of magma crust swaying round its own place. Its outline is a table of radii
+## round that place, evenly round the circle and straight in between: the logic, the
+## art and the gaps between floes all read the same table.
 class Isle:
 	var id := 0
-	var shape := NelvarEarthData.Radial.new()
+	## One of the broad floes the lake is shared out into (they never sink); else a stone.
+	var broad := false
 	var center := Vector2.ZERO
 	## Its sway round `center`: reach on x and y, radians per second on each, phases.
 	var drift := Vector4.ZERO
@@ -118,20 +124,30 @@ class Isle:
 	func drift_reach() -> float:
 		return Vector2(drift.x, drift.y).length()
 
-	## The outline sampled once (FLOE_GAP_SAMPLES round its place), for floe_gap.
+	## The outline's points from `radii`, its smallest and largest radius.
 	func tabulate() -> void:
-		outline.resize(FLOE_GAP_SAMPLES)
-		radii.resize(FLOE_GAP_SAMPLES)
-		for i in FLOE_GAP_SAMPLES:
-			var angle := TAU * i / FLOE_GAP_SAMPLES
-			radii[i] = shape.radius_at(angle)
-			outline[i] = Vector2.from_angle(angle) * radii[i]
+		var count := radii.size()
+		outline.resize(count)
+		inner = INF
+		outer = 0.0
+		for i in count:
+			outline[i] = Vector2.from_angle(TAU * i / count) * radii[i]
+			inner = minf(inner, radii[i])
+			outer = maxf(outer, radii[i])
 
-	## The shape's radius read from the table.
-	func table_radius(angle: float) -> float:
-		var t := fposmod(angle, TAU) / TAU * FLOE_GAP_SAMPLES
-		var i := int(t) % FLOE_GAP_SAMPLES
-		return lerpf(radii[i], radii[(i + 1) % FLOE_GAP_SAMPLES], t - floorf(t))
+	## The outline's radius in a direction from its place.
+	func radius_at(angle: float) -> float:
+		var count := radii.size()
+		var t := fposmod(angle, TAU) / TAU * count
+		var i := int(t) % count
+		return lerpf(radii[i], radii[(i + 1) % count], t - floorf(t))
+
+	## Positive inside, world units, from its place: along the ray from it (exact on the
+	## outline, close to it nearby).
+	func signed_distance(local: Vector2) -> float:
+		if local.length_squared() < 0.0001:
+			return radii[0]
+		return radius_at(local.angle()) - local.length()
 
 	## How far under it is, 0..1: the lava eats it from the edge inwards.
 	func sink_at(time: float) -> float:
@@ -156,7 +172,7 @@ class Isle:
 		var far := local.length_squared()
 		if far > (outer + 200.0) * (outer + 200.0):
 			return outer - sqrt(far)
-		return shape.signed_distance(local) - sink_at(time) * sink_depth()
+		return signed_distance(local) - sink_at(time) * sink_depth()
 
 	## (sink, warning, heat) of the cycle at `time`.
 	func _cycle(time: float) -> Vector3:
@@ -327,17 +343,22 @@ static func smooth_max(a: float, b: float, k: float) -> float:
 	return maxf(a, b) + h * h * k * 0.25
 
 
-## Narrowest lava between two floes at `time` (tabulated), measured from each one's
-## outline along rays from the other's place: never less than the true gap, exact in
-## sign (negative once they overlap). Fit for long and lobed shapes.
+## Narrowest lava between two floes at `time`, measured from each one's outline along rays
+## from the other's place: never less than the true gap, exact in sign (negative once
+## they overlap). Fit for long and lobed shapes.
 static func floe_gap(a: Isle, b: Isle, time: float) -> float:
-	var offset := b.position_at(time) - a.position_at(time)
+	return gap_at(a, b, b.position_at(time) - a.position_at(time))
+
+
+## floe_gap with b's place `offset` from a's.
+static func gap_at(a: Isle, b: Isle, offset: Vector2) -> float:
 	var best := INF
-	for i in FLOE_GAP_SAMPLES:
-		var p := a.outline[i] - offset
-		best = minf(best, p.length() - b.table_radius(p.angle()))
-		var q := b.outline[i] + offset
-		best = minf(best, q.length() - a.table_radius(q.angle()))
+	for point in a.outline:
+		var p := point - offset
+		best = minf(best, p.length() - b.radius_at(p.angle()))
+	for point in b.outline:
+		var q := point + offset
+		best = minf(best, q.length() - a.radius_at(q.angle()))
 	return best
 
 

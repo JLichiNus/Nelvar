@@ -14,10 +14,8 @@ extends NelvarFireField
 ##   G — the boiling patches' and the vent's glow;
 ##   B — where the air shimmers (heat_haze.gdshader with use_haze_mask): over the vent,
 ##       the boiling patches and the smoke banks only; the open lake stays still.
-## Two lookup tables:
-##   edge  — the summit's radius in each of its profile's directions (R), world units;
-##   slope — per art pixel column, the art pixel row (fractional) where the summit ends
-##           on its south side: the front slope hangs below it. -1 where it has none.
+## A lookup table, `edge`: the summit's radius in each of its profile's directions (R),
+## world units; the shader finds the edge and the mountain's side under it from it.
 ## Built on a worker thread; the textures are made on the main thread.
 
 ## Light over the open lake (the shores and the vent get the full light).
@@ -26,9 +24,6 @@ const LAKE_LIGHT := 0.5
 const SHORE_GLOW := 150.0
 
 var edge: PackedFloat32Array
-## World art pixel column of slope[0].
-var slope_origin := 0
-var slope: PackedFloat32Array
 
 
 static func build_crater(crater: NelvarCraterData) -> NelvarCraterField:
@@ -46,17 +41,11 @@ static func build_crater(crater: NelvarCraterData) -> NelvarCraterField:
 	field._geysers(crater)
 	field._crater_light(crater)
 	field._edge(crater)
-	field._slope(crater)
 	return field
 
 
 func edge_texture() -> ImageTexture:
 	var image := Image.create_from_data(edge.size(), 1, false, Image.FORMAT_RF, edge.to_byte_array())
-	return ImageTexture.create_from_image(image)
-
-
-func slope_texture() -> ImageTexture:
-	var image := Image.create_from_data(slope.size(), 1, false, Image.FORMAT_RF, slope.to_byte_array())
 	return ImageTexture.create_from_image(image)
 
 
@@ -121,34 +110,3 @@ static func _light_at(crater: NelvarCraterData, point: Vector2) -> Vector3:
 ## The summit's radii as its profile has them (the shader interpolates them the same way).
 func _edge(crater: NelvarCraterData) -> void:
 	edge = crater.summit.radii.duplicate()
-
-
-## Per column: the lowest point of the summit's outline on screen (its south side).
-func _slope(crater: NelvarCraterData) -> void:
-	var outline := crater.summit.polygon(crater.summit.radii.size())
-	var left := INF
-	var right := -INF
-	for point in outline:
-		left = minf(left, point.x / STEP)
-		right = maxf(right, point.x / STEP)
-	slope_origin = floori(left) - 1
-	var columns := ceili(right) - slope_origin + 2
-	slope = PackedFloat32Array()
-	slope.resize(columns)
-	slope.fill(-1.0)
-	for i in outline.size():
-		var a := outline[i] / STEP
-		var b := outline[(i + 1) % outline.size()] / STEP
-		if a.x > b.x:
-			var swap := a
-			a = b
-			b = swap
-		for column in range(ceili(a.x - 0.5), floori(b.x - 0.5) + 1):
-			var x := column + 0.5
-			if x < a.x or x > b.x:
-				continue
-			var t := 0.0 if is_equal_approx(a.x, b.x) else (x - a.x) / (b.x - a.x)
-			var y := lerpf(a.y, b.y, t)
-			var c := column - slope_origin
-			if c >= 0 and c < columns:
-				slope[c] = maxf(slope[c], y)

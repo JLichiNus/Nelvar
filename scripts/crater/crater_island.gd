@@ -2,8 +2,9 @@ class_name NelvarCraterIsland
 extends Node2D
 ## A floe of magma crust on the volcano's lake on screen: dark plates with glowing seams
 ## drawn by crater_island.gdshader from a mask baked once:
-##   R — how far in from the edge over Isle.sink_depth(), 0 at the edge (sinking eats
-##       it from 0 up: the same rule as NelvarCraterData.Isle.depth_at);
+##   R — how far in from the edge, in quarters of an art pixel (255 from about 64 in);
+##       sinking eats it from the edge up to Isle.sink_depth() (the same rule as
+##       NelvarCraterData.Isle.depth_at);
 ##   G — the south face: 1 on the lowest row above the lava, 2 on the one above it;
 ##   A — 255 on the floe.
 ## The pattern belongs to the floe and floats with it. The node sits on whole art
@@ -34,6 +35,7 @@ func setup(spec: NelvarCraterData.Isle, image: Image) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = spec.appearance_seed
 	_material.set_shader_parameter("seed_offset", Vector2(rng.randi_range(-4096, 4096), rng.randi_range(-4096, 4096)))
+	_material.set_shader_parameter("sink_px", spec.sink_depth() / STEP)
 	material = _material
 	sync(0.0, 0.0)
 
@@ -48,7 +50,7 @@ static func bake_mask(spec: NelvarCraterData.Isle) -> Image:
 	for y in size:
 		for x in size:
 			var local := (Vector2(x - r, y - r) + Vector2(0.5, 0.5)) * STEP
-			inside[y * size + x] = spec.shape.signed_distance(local)
+			inside[y * size + x] = spec.signed_distance(local)
 	for y in size:
 		for x in size:
 			var depth := inside[y * size + x]
@@ -59,7 +61,7 @@ static func bake_mask(spec: NelvarCraterData.Isle) -> Image:
 				face = 1
 			elif y + 2 >= size or inside[(y + 2) * size + x] <= 0.0:
 				face = 2
-			image.set_pixel(x, y, Color8(clampi(roundi(depth / spec.sink_depth() * 255.0), 1, 255), face, 0, 255))
+			image.set_pixel(x, y, Color8(clampi(roundi(depth / STEP * 4.0), 1, 255), face, 0, 255))
 	return image
 
 

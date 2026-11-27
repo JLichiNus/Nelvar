@@ -281,13 +281,13 @@ func _check_field(data: NelvarFireData) -> void:
 
 # --- The start setting -------------------------------------------------------------
 
-## The six start options exclude each other. The saved settings are put back as they were.
+## The start options exclude each other. The saved settings are put back as they were.
 func _check_settings() -> void:
 	var settings: Node = root.get_node("GameSettings")
 	var path: String = settings.PATH
 	var saved := FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else PackedByteArray()
 	var was := [settings.start_in_void, settings.start_on_earth, settings.start_in_fire, settings.start_on_ice,
-		settings.start_in_fire2, settings.start_on_ice2]
+		settings.start_in_fire2, settings.start_on_ice2, settings.start_on_earth2]
 	settings.set_start_on_earth(true)
 	settings.set_start_in_fire(true)
 	_check(settings.start_in_fire and not settings.start_on_earth and not settings.start_in_void,
@@ -310,12 +310,17 @@ func _check_settings() -> void:
 	_check(settings.start_on_ice2 and not settings.start_in_fire, "The ice cave did not replace the forge at start")
 	settings.set_start_in_fire(true)
 	_check(settings.start_in_fire and not settings.start_on_ice2, "The forge did not replace the ice cave at start")
+	settings.set_start_on_earth2(true)
+	_check(settings.start_on_earth2 and not settings.start_in_fire, "The giant forest did not replace the forge at start")
+	settings.set_start_in_fire(true)
+	_check(settings.start_in_fire and not settings.start_on_earth2, "The forge did not replace the giant forest at start")
 	settings.start_in_void = was[0]
 	settings.start_on_earth = was[1]
 	settings.start_in_fire = was[2]
 	settings.start_on_ice = was[3]
 	settings.start_in_fire2 = was[4]
 	settings.start_on_ice2 = was[5]
+	settings.start_on_earth2 = was[6]
 	if saved.is_empty():
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	else:

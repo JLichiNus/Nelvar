@@ -11,6 +11,7 @@ const SCREEN_MARGIN := 12.0
 
 @onready var start_in_void_check: CheckButton = %StartInVoid
 @onready var start_on_earth_check: CheckButton = %StartOnEarth
+@onready var start_on_earth2_check: CheckButton = %StartOnEarth2
 @onready var start_in_fire_check: CheckButton = %StartInFire
 @onready var start_on_ice_check: CheckButton = %StartOnIce
 @onready var start_in_fire2_check: CheckButton = %StartInFire2
@@ -27,6 +28,9 @@ func _ready() -> void:
 	start_on_earth_check.set_pressed_no_signal(GameSettings.start_on_earth)
 	start_on_earth_check.toggled.connect(GameSettings.set_start_on_earth)
 	GameSettings.start_on_earth_changed.connect(start_on_earth_check.set_pressed_no_signal)
+	start_on_earth2_check.set_pressed_no_signal(GameSettings.start_on_earth2)
+	start_on_earth2_check.toggled.connect(GameSettings.set_start_on_earth2)
+	GameSettings.start_on_earth2_changed.connect(start_on_earth2_check.set_pressed_no_signal)
 	start_in_fire_check.set_pressed_no_signal(GameSettings.start_in_fire)
 	start_in_fire_check.toggled.connect(GameSettings.set_start_in_fire)
 	GameSettings.start_in_fire_changed.connect(start_in_fire_check.set_pressed_no_signal)
@@ -42,6 +46,7 @@ func _ready() -> void:
 	# The start options exclude each other; the hint names what "Играть" opens.
 	GameSettings.start_in_void_changed.connect(_update_hint.unbind(1))
 	GameSettings.start_on_earth_changed.connect(_update_hint.unbind(1))
+	GameSettings.start_on_earth2_changed.connect(_update_hint.unbind(1))
 	GameSettings.start_in_fire_changed.connect(_update_hint.unbind(1))
 	GameSettings.start_on_ice_changed.connect(_update_hint.unbind(1))
 	GameSettings.start_in_fire2_changed.connect(_update_hint.unbind(1))
@@ -54,6 +59,8 @@ func _update_hint() -> void:
 		start_hint.text = "«Играть» откроет Пустоту"
 	elif GameSettings.start_on_earth:
 		start_hint.text = "«Играть» откроет земляную долину"
+	elif GameSettings.start_on_earth2:
+		start_hint.text = "«Играть» откроет исполинский лес (Земля 2)"
 	elif GameSettings.start_in_fire:
 		start_hint.text = "«Играть» откроет огненную кузню"
 	elif GameSettings.start_on_ice:

@@ -2,18 +2,20 @@ shader_type canvas_item;
 render_mode unshaded;
 
 // A floe of magma crust on the volcano's lake (NelvarCraterIsland): dark plates whose
-// seams glow and dim slowly, a red-hot edge where the lava laps at it. Its south face
-// shows as a dark row lit red from below. A floe that sinks warns first (its seams
-// flare, lava bubbles along its edge), sinks from the edge inwards with a seam of lava
-// eating in, comes up red-hot and cools.
+// seams glow and dim slowly, a red-hot edge where the lava laps at it. Deep inside a
+// broad floe the crust has cooled more: thinner, dimmer seams. Its south face shows as
+// a dark row lit red from below. A floe that sinks warns first (its seams flare, lava
+// bubbles along its edge), sinks from the edge inwards with a seam of lava eating in,
+// comes up red-hot and cools.
 //
-// TEXTURE is its mask (R: in from the edge, G: south face, A: floe), one texel per art
-// pixel; the pattern is the floe's own and floats with it.
+// TEXTURE is its mask (R: in from the edge in quarters of an art pixel, G: south face,
+// A: floe), one texel per art pixel; the pattern is the floe's own and floats with it.
 
 uniform float time = 0.0;
 uniform vec2 seed_offset;
-// 0..1: under the lava from the edge in.
+// 0..1: under the lava from the edge in, of sink_px (art pixels).
 uniform float sink = 0.0;
+uniform float sink_px = 30.0;
 // 0..1 in the seconds before it sinks by itself.
 uniform float warn = 0.0;
 // 1 just come up, 0 cooled.
@@ -28,17 +30,24 @@ void fragment() {
 	}
 	vec2 px = floor(UV / TEXTURE_PIXEL_SIZE);
 	vec2 np = px + seed_offset;
-	float inside = m.r;
+	// Art pixels in from the edge, and the same as a share of how deep sinking eats.
+	float depth = m.r * 255.0 / 4.0;
+	float inside = depth / sink_px;
 	float face = floor(m.g * 255.0 + 0.5);
 	if (inside <= sink) {
 		discard;
 	}
+	float cooled = smoothstep(8.0, 40.0, depth);
 	// Flat dark plates (no dithering: it drifts as one), seams at least a pixel wide.
 	vec3 cell = cells(np / 8.0);
 	float tone = cell.z + (value_noise(np / 6.0 + cell.z * 13.0) - 0.5) * 0.4;
 	vec3 color = tone < 0.3 ? PAL[CRUST] : (tone < 0.72 ? PAL[CRUST + 1] : PAL[CRUST + 2]);
-	if (cell.y < 0.16) {
-		color = sin(time * 1.4 + cell.z * 23.0) > 0.4 ? PAL[LAVA + 2] : PAL[LAVA + 1];
+	if (cell.y < 0.16 - cooled * 0.05) {
+		color = sin(time * 1.4 + cell.z * 23.0) > 0.4 + cooled * 0.5 ? PAL[LAVA + 2] : PAL[LAVA + 1];
+		// Deep in, many seams have gone out: dark cracks between the plates.
+		if (hash12(floor(np / 8.0) + floor(cell.z * 7.0)) < cooled * 0.7) {
+			color = PAL[CRUST] * 0.55;
+		}
 	}
 	// The lake lights everything round it (fire_glow): the stone is kept darker so the
 	// floes stay dark under that light; seams keep their glow.
@@ -64,7 +73,7 @@ void fragment() {
 		}
 	}
 	// The edge: red-hot where the lava laps at it; the south face lit from below.
-	if (inside < 0.035) {
+	if (depth < 1.0) {
 		color = PAL[LAVA];
 	}
 	if (sink > 0.0 && inside < sink + 0.06) {
