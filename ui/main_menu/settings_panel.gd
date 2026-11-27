@@ -15,13 +15,17 @@ signal hint_changed(text: String)
 
 const HINT_META := &"hint"
 
+## Step ticks closer together than this are skipped: dragging a slider
+## crosses many 1% steps a frame, held arrows repeat fast.
+const STEP_SOUND_GAP_MS := 45
+
 ## Next/previous category (physical keys, so they work in any layout).
 const NEXT_KEY := KEY_E
 const PREVIOUS_KEY := KEY_Q
 
 @onready var fullscreen_check: CheckButton = %Fullscreen
 @onready var info_panel_check: CheckButton = %InfoPanel
-@onready var vignette_level: NelvarOptionRow = %VignetteLevel
+@onready var vignette_level: NelvarSlider = %VignetteLevel
 @onready var vignette_direction_check: CheckButton = %VignetteDirection
 @onready var start_in_void_check: CheckButton = %StartInVoid
 @onready var categories: VBoxContainer = %Categories
@@ -30,6 +34,8 @@ const PREVIOUS_KEY := KEY_Q
 @onready var body: HBoxContainer = %Body
 @onready var footer: HBoxContainer = %Footer
 @onready var divider: ColorRect = %Body/Divider
+## Ticks on every step of a slider or a value row (the menu's hover sound).
+@onready var step_sound: AudioStreamPlayer = %StepSound
 
 var _tabs: Array[Button] = []
 var _pages: Array[Control] = []
@@ -38,6 +44,7 @@ var _focused_row: Control
 var _hovered_row: Control
 ## Off while the panel grows or shrinks: nothing in it takes focus or input.
 var _interactive := true
+var _last_step_sound_ms := -STEP_SOUND_GAP_MS
 
 
 func _ready() -> void:
@@ -68,6 +75,8 @@ func _ready() -> void:
 		if not rows.is_empty():
 			tab.focus_neighbor_right = tab.get_path_to(rows[0])
 		for row in rows:
+			if row is NelvarSlider:
+				(row as NelvarSlider).value_changed.connect(_play_step.unbind(1))
 			row.focus_neighbor_left = row.get_path_to(tab)
 			row.focus_entered.connect(_set_focused_row.bind(row))
 			row.focus_exited.connect(_set_focused_row.bind(null))
@@ -80,8 +89,8 @@ func _ready() -> void:
 	info_panel_check.set_pressed_no_signal(GameSettings.show_info_panel)
 	info_panel_check.toggled.connect(GameSettings.set_show_info_panel)
 	GameSettings.info_panel_changed.connect(info_panel_check.set_pressed_no_signal)
-	vignette_level.options = PackedStringArray(GameSettings.VIGNETTE_NAMES)
-	vignette_level.index_changed.connect(GameSettings.set_damage_vignette_level)
+	vignette_level.step = GameSettings.VIGNETTE_STEP
+	vignette_level.value_changed.connect(GameSettings.set_damage_vignette)
 	vignette_direction_check.toggled.connect(GameSettings.set_damage_vignette_directional)
 	GameSettings.damage_vignette_changed.connect(_show_vignette_settings)
 	_show_vignette_settings()
@@ -175,8 +184,16 @@ func begin_hide() -> void:
 	_stop()
 
 
+func _play_step() -> void:
+	var now := Time.get_ticks_msec()
+	if now - _last_step_sound_ms < STEP_SOUND_GAP_MS:
+		return
+	_last_step_sound_ms = now
+	step_sound.play()
+
+
 func _show_vignette_settings() -> void:
-	vignette_level.index = GameSettings.damage_vignette_level
+	vignette_level.set_value_no_signal(GameSettings.damage_vignette)
 	vignette_direction_check.set_pressed_no_signal(GameSettings.damage_vignette_directional)
 
 

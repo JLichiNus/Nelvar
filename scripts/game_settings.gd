@@ -12,12 +12,13 @@ const PATH := "user://settings.cfg"
 
 ## In-game panel with the seed, world stats and controls. Hidden by default.
 var show_info_panel := false
-## Red vignette when the player is hurt: strength per level, the first is off.
-const VIGNETTE_LEVELS: Array[float] = [0.0, 0.4, 0.7, 1.0]
-const VIGNETTE_NAMES: Array[String] = ["выкл.", "слабая", "средняя", "сильная"]
+## Red vignette when the player is hurt: its strength 0..1 (0 is off), set
+## in steps of VIGNETTE_STEP.
+const VIGNETTE_STEP := 0.1
+## Older settings files kept a level (index into these) instead.
+const LEGACY_VIGNETTE_LEVELS: Array[float] = [0.0, 0.4, 0.7, 1.0]
 
-## Index into VIGNETTE_LEVELS.
-var damage_vignette_level := 2
+var damage_vignette := 0.7
 ## Show only the side of the vignette facing whatever hurt the player.
 var damage_vignette_directional := false
 ## Developer menu: "Играть" opens the Void (scenes/void.tscn) instead of the usual world.
@@ -35,8 +36,12 @@ func _ready() -> void:
 	if config.load(PATH) == OK:
 		show_info_panel = config.get_value("hud", "show_info_panel", show_info_panel)
 		start_in_void = config.get_value("dev", "start_in_void", start_in_void)
-		damage_vignette_level = clampi(config.get_value("hud", "damage_vignette_level",
-			damage_vignette_level), 0, VIGNETTE_LEVELS.size() - 1)
+		if config.has_section_key("hud", "damage_vignette"):
+			damage_vignette = _snap_vignette(float(config.get_value("hud", "damage_vignette")))
+		elif config.has_section_key("hud", "damage_vignette_level"):
+			var level := clampi(int(config.get_value("hud", "damage_vignette_level")), 0,
+				LEGACY_VIGNETTE_LEVELS.size() - 1)
+			damage_vignette = LEGACY_VIGNETTE_LEVELS[level]
 		damage_vignette_directional = config.get_value("hud", "damage_vignette_directional",
 			damage_vignette_directional)
 		for bus in VOLUME_BUSES:
@@ -69,16 +74,21 @@ func set_start_in_void(enabled: bool) -> void:
 
 
 func damage_vignette_strength() -> float:
-	return VIGNETTE_LEVELS[damage_vignette_level]
+	return damage_vignette
 
 
-func set_damage_vignette_level(level: int) -> void:
-	level = clampi(level, 0, VIGNETTE_LEVELS.size() - 1)
-	if level == damage_vignette_level:
+func set_damage_vignette(strength: float) -> void:
+	strength = _snap_vignette(strength)
+	if is_equal_approx(strength, damage_vignette):
 		return
-	damage_vignette_level = level
+	damage_vignette = strength
 	_save()
 	damage_vignette_changed.emit()
+
+
+## Whole steps, divided rather than multiplied back so 0.7 is saved as 0.7.
+func _snap_vignette(strength: float) -> float:
+	return clampf(roundf(strength / VIGNETTE_STEP) / roundf(1.0 / VIGNETTE_STEP), 0.0, 1.0)
 
 
 func set_damage_vignette_directional(enabled: bool) -> void:
@@ -121,7 +131,9 @@ func _save() -> void:
 	config.load(PATH)  # keep any other sections already saved
 	config.set_value("hud", "show_info_panel", show_info_panel)
 	config.set_value("dev", "start_in_void", start_in_void)
-	config.set_value("hud", "damage_vignette_level", damage_vignette_level)
+	config.set_value("hud", "damage_vignette", damage_vignette)
+	if config.has_section_key("hud", "damage_vignette_level"):
+		config.erase_section_key("hud", "damage_vignette_level")
 	config.set_value("hud", "damage_vignette_directional", damage_vignette_directional)
 	for bus in VOLUME_BUSES:
 		config.set_value("audio", String(bus).to_lower(), volumes[bus])

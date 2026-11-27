@@ -1,8 +1,9 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://ui/main_menu/settings_panel.gd" id="1"]
-[ext_resource type="Script" path="res://ui/main_menu/option_row.gd" id="2"]
+[ext_resource type="Script" path="res://ui/main_menu/slider.gd" id="2"]
 [ext_resource type="Script" path="res://ui/main_menu/volume_slider.gd" id="3"]
+[ext_resource type="AudioStream" uid="uid://cirqysvg3ccq2" path="res://assets/audio/sfx/ui_hover.wav" id="4"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_tabs"]
 
@@ -142,14 +143,17 @@ metadata/hint = "Сид мира, статистика и управление. 
 unique_name_in_owner = true
 layout_mode = 2
 script = ExtResource("2")
-title = "Сила"
-metadata/hint = "Красный край экрана при получении урона. Стрелки влево и вправо — изменить"
+title = "Виньетка урона"
+step = 0.1
+zero_text = "выкл."
+fill_color = Color(0.86, 0.3, 0.3, 1)
+metadata/hint = "Красный край экрана при получении урона. Стрелки или колесико мыши — изменить"
 
 [node name="VignetteDirection" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/InterfacePage"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
-text = "Со стороны удара"
+text = "Виньетка со стороны удара"
 metadata/hint = "Краснеет только тот край, с которого пришёл удар"
 
 [node name="AudioPage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
@@ -163,7 +167,7 @@ layout_mode = 2
 script = ExtResource("3")
 bus = &"Master"
 title = "Общая громкость"
-metadata/hint = "Громкость всей игры. Стрелки влево и вправо — изменить"
+metadata/hint = "Громкость всей игры. Стрелки или колесико мыши — изменить"
 
 [node name="MusicVolume" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/AudioPage"]
 unique_name_in_owner = true
@@ -171,7 +175,7 @@ layout_mode = 2
 script = ExtResource("3")
 bus = &"Music"
 title = "Музыка"
-metadata/hint = "Музыка меню и забегов. Стрелки влево и вправо — изменить"
+metadata/hint = "Музыка меню и забегов. Стрелки или колесико мыши — изменить"
 
 [node name="SfxVolume" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/AudioPage"]
 unique_name_in_owner = true
@@ -179,7 +183,7 @@ layout_mode = 2
 script = ExtResource("3")
 bus = &"SFX"
 title = "Звуки"
-metadata/hint = "Удары, шаги, интерфейс. Стрелки влево и вправо — изменить"
+metadata/hint = "Удары, шаги, интерфейс. Стрелки или колесико мыши — изменить"
 
 [node name="DevPage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
 unique_name_in_owner = true
@@ -211,3 +215,10 @@ theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
 theme_override_font_sizes/font_size = 22
 text = "Q / E — раздел    Esc — назад"
 horizontal_alignment = 2
+
+[node name="StepSound" type="AudioStreamPlayer" parent="."]
+unique_name_in_owner = true
+stream = ExtResource("4")
+volume_db = -6.0
+max_polyphony = 4
+bus = &"SFX"
