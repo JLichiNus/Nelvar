@@ -97,7 +97,7 @@ var _from_checkpoint := false
 
 
 func _ready() -> void:
-	GameMusic.start()
+	GameMusic.start(&"void")
 	info_panel.visible = GameSettings.show_info_panel
 	GameSettings.info_panel_changed.connect(info_panel.set_visible)
 	var rng := RandomNumberGenerator.new()
