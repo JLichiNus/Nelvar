@@ -167,7 +167,6 @@ script = ExtResource("2")
 title = "Виньетка урона"
 step = 0.1
 min_text = "выкл."
-fill_color = Color(0.86, 0.3, 0.3, 1)
 metadata/hint = "Красный край экрана при получении урона"
 
 [node name="VignetteDirection" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/InterfacePage"]
