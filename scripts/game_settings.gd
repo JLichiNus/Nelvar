@@ -7,8 +7,19 @@ signal info_panel_changed(shown: bool)
 signal start_in_void_changed(enabled: bool)
 signal damage_vignette_changed()
 signal volume_changed(bus: StringName, value: float)
+signal display_changed()
 
 const PATH := "user://settings.cfg"
+
+## Frame rate cap set by the game, frames per second; 0 is no cap. Separate
+## from VSync: VSync holds frames to the monitor's refresh, the cap limits
+## how many the game draws (the lower of the two wins). The defaults are
+## Godot's: no cap, VSync on.
+const MAX_FPS_MIN := 30
+const MAX_FPS_MAX := 240
+const MAX_FPS_STEP := 10
+var max_fps := 0
+var vsync := true
 
 ## In-game panel with the seed, world stats and controls. Hidden by default.
 var show_info_panel := false
@@ -47,8 +58,11 @@ func _ready() -> void:
 		for bus in VOLUME_BUSES:
 			volumes[bus] = clampf(float(config.get_value("audio", String(bus).to_lower(),
 				volumes[bus])), 0.0, 1.0)
+		max_fps = _snap_max_fps(int(config.get_value("display", "max_fps", max_fps)))
+		vsync = bool(config.get_value("display", "vsync", vsync))
 	for bus in VOLUME_BUSES:
 		_apply_volume(bus)
+	_apply_display()
 
 
 func _input(event: InputEvent) -> void:
@@ -63,6 +77,39 @@ func set_show_info_panel(shown: bool) -> void:
 	show_info_panel = shown
 	_save()
 	info_panel_changed.emit(shown)
+
+
+## `fps` 0 is no cap; anything else is kept within MAX_FPS_MIN..MAX_FPS_MAX.
+func set_max_fps(fps: int) -> void:
+	fps = _snap_max_fps(fps)
+	if fps == max_fps:
+		return
+	max_fps = fps
+	_apply_display()
+	_save()
+	display_changed.emit()
+
+
+func set_vsync(enabled: bool) -> void:
+	if enabled == vsync:
+		return
+	vsync = enabled
+	_apply_display()
+	_save()
+	display_changed.emit()
+
+
+func _snap_max_fps(fps: int) -> int:
+	if fps <= 0:
+		return 0
+	fps = roundi(float(fps) / MAX_FPS_STEP) * MAX_FPS_STEP
+	return clampi(fps, MAX_FPS_MIN, MAX_FPS_MAX)
+
+
+func _apply_display() -> void:
+	Engine.max_fps = max_fps
+	DisplayServer.window_set_vsync_mode(
+		DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
 
 
 func set_start_in_void(enabled: bool) -> void:
@@ -137,6 +184,8 @@ func _save() -> void:
 	config.set_value("hud", "damage_vignette_directional", damage_vignette_directional)
 	for bus in VOLUME_BUSES:
 		config.set_value("audio", String(bus).to_lower(), volumes[bus])
+	config.set_value("display", "max_fps", max_fps)
+	config.set_value("display", "vsync", vsync)
 	var error := config.save(PATH)
 	if error != OK:
 		push_warning("Не удалось сохранить настройки: %s" % error_string(error))

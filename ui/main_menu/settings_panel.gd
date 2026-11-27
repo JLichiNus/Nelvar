@@ -24,6 +24,9 @@ const NEXT_KEY := KEY_E
 const PREVIOUS_KEY := KEY_Q
 
 @onready var fullscreen_check: CheckButton = %Fullscreen
+@onready var vsync_check: CheckButton = %VSync
+## The frame rate cap; its last step, past GameSettings.MAX_FPS_MAX, is "no cap".
+@onready var fps_limit: NelvarSlider = %FpsLimit
 @onready var info_panel_check: CheckButton = %InfoPanel
 @onready var vignette_level: NelvarSlider = %VignetteLevel
 @onready var vignette_direction_check: CheckButton = %VignetteDirection
@@ -86,6 +89,13 @@ func _ready() -> void:
 	fullscreen_check.set_pressed_no_signal(FullscreenToggle.is_fullscreen())
 	fullscreen_check.toggled.connect(FullscreenToggle.set_fullscreen)
 	FullscreenToggle.fullscreen_changed.connect(fullscreen_check.set_pressed_no_signal)
+	vsync_check.toggled.connect(GameSettings.set_vsync)
+	fps_limit.min_value = GameSettings.MAX_FPS_MIN
+	fps_limit.max_value = GameSettings.MAX_FPS_MAX + GameSettings.MAX_FPS_STEP
+	fps_limit.step = GameSettings.MAX_FPS_STEP
+	fps_limit.value_changed.connect(_on_fps_limit_changed)
+	GameSettings.display_changed.connect(_show_display_settings)
+	_show_display_settings()
 	info_panel_check.set_pressed_no_signal(GameSettings.show_info_panel)
 	info_panel_check.toggled.connect(GameSettings.set_show_info_panel)
 	GameSettings.info_panel_changed.connect(info_panel_check.set_pressed_no_signal)
@@ -190,6 +200,16 @@ func _play_step() -> void:
 		return
 	_last_step_sound_ms = now
 	step_sound.play()
+
+
+func _on_fps_limit_changed(value: float) -> void:
+	GameSettings.set_max_fps(0 if value > GameSettings.MAX_FPS_MAX else roundi(value))
+
+
+func _show_display_settings() -> void:
+	vsync_check.set_pressed_no_signal(GameSettings.vsync)
+	var fps := GameSettings.max_fps
+	fps_limit.set_value_no_signal(fps_limit.max_value if fps == 0 else float(fps))
 
 
 func _show_vignette_settings() -> void:

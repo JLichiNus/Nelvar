@@ -1,11 +1,13 @@
 class_name NelvarSlider
 extends Control
-## One settings row with a value from 0 to 1: its name on the left, a pixel
-## bar and the value in percent on the right, drawn like the HUD bars (whole
-## art pixels, white frame). Click or drag on the bar, turn the mouse wheel
-## over the row, or press left/right while it is focused; every way moves by
-## whole `step`s. Emits `value_changed` only for the player's changes;
-## `set_value_no_signal` shows a value set elsewhere.
+## One settings row with a number: its name on the left, a pixel bar and the
+## value on the right, drawn like the HUD bars (whole art pixels, white
+## frame). The value runs from `min_value` to `max_value` (0..1 shown as a
+## percent by default; `percent` off shows the number with `suffix`). Click
+## or drag on the bar, turn the mouse wheel over the row, or press left/right
+## while it is focused; every way moves by whole `step`s. Emits
+## `value_changed` only for the player's changes; `set_value_no_signal` shows
+## a value set elsewhere.
 
 signal value_changed(value: float)
 
@@ -14,17 +16,24 @@ const FONT_SIZE := 22
 const BAR_HEIGHT := 18.0
 ## Widest the bar gets; narrower rows give it 45% of their width.
 const BAR_WIDTH := 330.0
-## Column right of the bar for the value ("100%", "выкл.").
-const VALUE_WIDTH := 72.0
 ## Same height as a CheckButton row (theme: 6 above and below the text).
 const PADDING := 6.0
 
 @export var title := ""
-## One click of the wheel or one arrow press; the value always stays a whole
-## number of steps.
-@export_range(0.01, 1.0, 0.01) var step := 0.01
-## Shown instead of "0%" when set.
-@export var zero_text := ""
+@export var min_value := 0.0
+@export var max_value := 1.0
+## One click of the wheel or one arrow press; the value always stays
+## `min_value` plus a whole number of steps.
+@export var step := 0.01
+## On: 0..1 reads "0%".."100%". Off: the number itself, with `suffix`.
+@export var percent := true
+@export var suffix := ""
+## Shown instead of the number at the ends of the range when set (e.g.
+## "выкл." at 0, "Без ограничения" at the top).
+@export var min_text := ""
+@export var max_text := ""
+## Column right of the bar for the value; wide enough for its longest text.
+@export var value_width := 72.0
 @export var text_color := Color(0.93, 0.9, 0.8)
 @export var frame_color := Color(0.93, 0.9, 0.8)
 @export var focus_color := Color.WHITE
@@ -56,7 +65,7 @@ func value() -> float:
 
 
 func set_value_no_signal(new_value: float) -> void:
-	_value = clampf(new_value, 0.0, 1.0)
+	_value = clampf(new_value, min_value, max_value)
 	queue_redraw()
 
 
@@ -89,14 +98,17 @@ func _gui_input(event: InputEvent) -> void:
 
 func _set_from_x(x: float) -> void:
 	var bar := _bar_rect()
-	_set_value((x - bar.position.x) / maxf(bar.size.x, 1.0))
+	var share := (x - bar.position.x) / maxf(bar.size.x, 1.0)
+	_set_value(lerpf(min_value, max_value, share))
 
 
-# Snapped to whole steps, so the percent always reads a multiple of the step.
+# Snapped to whole steps from `min_value`.
 func _set_value(new_value: float) -> void:
-	# Divided rather than multiplied back, so 97 steps of 0.01 are exactly
-	# 0.97 and not 0.9700000000000001 in the settings file.
-	new_value = clampf(roundf(new_value / step) / roundf(1.0 / step), 0.0, 1.0)
+	var steps := roundf((new_value - min_value) / step)
+	# Fractional steps are divided rather than multiplied back, so 97 steps of
+	# 0.01 are exactly 0.97 and not 0.9700000000000001 in the settings file.
+	var offset := steps / roundf(1.0 / step) if step < 1.0 else steps * step
+	new_value = clampf(min_value + offset, min_value, max_value)
 	if is_equal_approx(new_value, _value):
 		return
 	_value = new_value
@@ -110,14 +122,23 @@ func _set_hovered(hovered: bool) -> void:
 
 
 func _value_text() -> String:
-	if _value <= 0.0 and not zero_text.is_empty():
-		return zero_text
-	return "%d%%" % roundi(_value * 100.0)
+	if is_equal_approx(_value, min_value) and not min_text.is_empty():
+		return min_text
+	if is_equal_approx(_value, max_value) and not max_text.is_empty():
+		return max_text
+	if percent:
+		return "%d%%" % roundi(_value * 100.0)
+	return "%d%s" % [roundi(_value), suffix]
+
+
+## 0..1: how far along the range the value is.
+func _share() -> float:
+	return clampf((_value - min_value) / maxf(max_value - min_value, 0.0001), 0.0, 1.0)
 
 
 func _bar_rect() -> Rect2:
 	var width := snappedf(minf(BAR_WIDTH, size.x * 0.45), ART_PIXEL)
-	var left := snappedf(size.x - VALUE_WIDTH - width, ART_PIXEL)
+	var left := snappedf(size.x - value_width - width, ART_PIXEL)
 	var top := snappedf((size.y - BAR_HEIGHT) / 2.0, ART_PIXEL)
 	return Rect2(Vector2(left, top), Vector2(width, BAR_HEIGHT))
 
@@ -138,7 +159,7 @@ func _draw() -> void:
 	draw_rect(bar, back_color)
 	draw_rect(bar.grow(-ART_PIXEL / 2.0), focus_color if active else frame_color, false, ART_PIXEL)
 	var inner := bar.grow(-ART_PIXEL * 2.0)
-	var fill := snappedf(inner.size.x * _value, ART_PIXEL)
+	var fill := snappedf(inner.size.x * _share(), ART_PIXEL)
 	if fill > 0.0:
 		draw_rect(Rect2(inner.position, Vector2(fill, inner.size.y)), fill_color)
 	# A notch where the value is, so even 0% shows where the handle sits.

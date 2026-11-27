@@ -127,6 +127,27 @@ theme_override_font_sizes/font_size = 22
 text = "Полный экран"
 metadata/hint = "Игра на весь экран, без рамки окна"
 
+[node name="VSync" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Вертикальная синхронизация"
+metadata/hint = "Кадры подстраиваются под частоту монитора: картинка не рвётся, но отклик чуть медленнее"
+
+[node name="FpsLimit" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("2")
+title = "Частота кадров"
+min_value = 30.0
+max_value = 250.0
+step = 10.0
+percent = false
+suffix = " FPS"
+max_text = "Без ограничения"
+value_width = 201.0
+metadata/hint = "Сколько кадров в секунду игра рисует, не больше. Действует отдельно от синхронизации"
+
 [node name="InterfacePage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
 visible = false
 layout_mode = 2
@@ -145,7 +166,7 @@ layout_mode = 2
 script = ExtResource("2")
 title = "Виньетка урона"
 step = 0.1
-zero_text = "выкл."
+min_text = "выкл."
 fill_color = Color(0.86, 0.3, 0.3, 1)
 metadata/hint = "Красный край экрана при получении урона"
 
