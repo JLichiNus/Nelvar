@@ -13,8 +13,12 @@ const ICONS: Array[Texture2D] = [
 	preload("res://assets/textures/ui/ability_flight.png"),
 	preload("res://assets/textures/ui/ability_compression.png"),
 ]
-## One square: frame + one-pixel gap + 16x16 icon at 3x.
-const SQUARE := 60.0
+## Icons are 24x24 art pixels, stored already scaled by ICON_SCALE
+## (see tools/gen_ui.py) and drawn 1:1.
+const ICON_SCALE := 2.0
+const ICON_SIZE := 24.0 * ICON_SCALE
+## One square: frame + one-pixel gap (UI art pixels) around the icon.
+const SQUARE := ICON_SIZE + ART_PIXEL * 4.0
 const GAP := 12.0
 const FONT_SIZE := 33
 

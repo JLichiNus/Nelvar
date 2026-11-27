@@ -10,6 +10,9 @@ signal damage_vignette_changed()
 signal volume_changed(bus: StringName, value: float)
 signal display_changed()
 signal audio_changed()
+signal game_changed()
+## The game window gained or lost focus (see is_window_focused()).
+signal window_focus_changed(focused: bool)
 
 const PATH := "user://settings.cfg"
 
@@ -81,6 +84,12 @@ var _music_tween: Tween
 ## case a window manager drops one (some Linux WMs do), also polled this often.
 const FOCUS_POLL_INTERVAL := 0.25
 var _focus_poll_wait := 0.0
+## Set once the window has been focused at least once: a window manager can
+## leave a new window unfocused at start, which is not the player leaving.
+var _had_focus := false
+
+## The run pauses (the pause menu opens) when the window loses focus.
+var pause_on_focus_loss := true
 
 
 func _ready() -> void:
@@ -102,6 +111,8 @@ func _ready() -> void:
 				volumes[bus])), 0.0, 1.0)
 		mute_music_in_background = bool(config.get_value("audio", "mute_music_in_background",
 			mute_music_in_background))
+		pause_on_focus_loss = bool(config.get_value("game", "pause_on_focus_loss",
+			pause_on_focus_loss))
 		max_fps = _snap_max_fps(int(config.get_value("display", "max_fps", max_fps)))
 		vsync = bool(config.get_value("display", "vsync", vsync))
 		window_mode = clampi(int(config.get_value("display", "window_mode", window_mode)),
@@ -141,17 +152,34 @@ func _process(delta: float) -> void:
 
 
 ## Whether the player is looking at the game: drives the background frame
-## cap and the background music fade.
+## cap, the background music fade and the pause on focus loss.
 func is_window_focused() -> bool:
 	return _focused
 
 
+## The window has been focused since the game started: losing focus now
+## means the player went elsewhere.
+func window_had_focus() -> bool:
+	return _had_focus
+
+
 func _set_focused(focused: bool) -> void:
+	if focused:
+		_had_focus = true
 	if focused == _focused:
 		return
 	_focused = focused
 	_apply_display()
 	_fade_music()
+	window_focus_changed.emit(focused)
+
+
+func set_pause_on_focus_loss(enabled: bool) -> void:
+	if enabled == pause_on_focus_loss:
+		return
+	pause_on_focus_loss = enabled
+	_save()
+	game_changed.emit()
 
 
 func set_mute_music_in_background(enabled: bool) -> void:
@@ -377,6 +405,7 @@ func _save() -> void:
 	for bus in VOLUME_BUSES:
 		config.set_value("audio", String(bus).to_lower(), volumes[bus])
 	config.set_value("audio", "mute_music_in_background", mute_music_in_background)
+	config.set_value("game", "pause_on_focus_loss", pause_on_focus_loss)
 	config.set_value("display", "max_fps", max_fps)
 	config.set_value("display", "vsync", vsync)
 	config.set_value("display", "window_mode", window_mode)

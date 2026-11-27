@@ -10,7 +10,7 @@ extends Control
 ##   0.00 - 0.40  the owner's part, sent through `progress_changed`: the main
 ##                menu folds its other buttons away and lifts the logo
 ##   0.25 - 0.78  the button's frame grows into the panel's frame, its text
-##                flies to the panel's header
+##                flies to the panel's header and becomes it
 ##   0.78 - 1.00  the panel's content appears (NelvarSettingsPanel.set_reveal),
 ##                the hint frame last (NelvarHintBox; first to go on closing)
 ##
@@ -195,14 +195,15 @@ func _set_progress(value: float) -> void:
 	if hint_rect.is_valid():
 		hint_box.place(hint_rect.call())
 	hint_box.reveal = _phase(reveal, 0.6, 1.0)
-	# The button's text flies to the header and fades into it.
-	var title_alpha := 1.0 - panel.header.modulate.a
-	_title.visible = progress > GROW_FROM and title_alpha > 0.0
+	# The button's text flies to the header and, once there, becomes it: the
+	# two look the same (see _copy_title_style), so there is nothing to fade.
+	var landed := progress >= GROW_TO
+	panel.header.modulate.a = 1.0 if landed else 0.0
+	_title.visible = progress > GROW_FROM and not landed
 	if _title.visible:
 		var title_rect := _snapped_lerp(_button_text_rect(), panel.header.get_global_rect(), eased)
 		_title.global_position = title_rect.position
 		_title.size = title_rect.size
-		_title.modulate.a = title_alpha
 
 
 ## Where the panel goes: the owner's rect, but never smaller than the panel.
@@ -240,6 +241,15 @@ func _copy_title_style() -> void:
 		_title.add_theme_font_size_override("font_size", button.get_theme_font_size("font_size"))
 	_title.add_theme_color_override("font_color", Color.WHITE)
 	_title.add_theme_color_override("font_shadow_color", Color.TRANSPARENT)
+	# The header wears the button's lettering (the main menu's stylized ice
+	# font, the pause menu's plain one), so the flying text lands on an exact
+	# copy of itself and is swapped for it with no change of font.
+	var header := panel.header
+	header.add_theme_font_override("font", _title.get_theme_font("font"))
+	header.add_theme_font_size_override("font_size", _title.get_theme_font_size("font_size"))
+	header.add_theme_color_override("font_color", Color.WHITE)
+	header.add_theme_color_override("font_shadow_color", Color.TRANSPARENT)
+	header.material = _title.material
 
 
 ## Hides the button without moving it out of its container. self_modulate:

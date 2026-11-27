@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/world/world_view.gd" id="2"]
@@ -19,6 +19,7 @@
 [ext_resource type="PackedScene" path="res://enemies/whistler/whistler.tscn" id="whistler"]
 [ext_resource type="Script" path="res://enemies/enemy_kind.gd" id="enemy_kind"]
 [ext_resource type="PackedScene" path="res://enemies/runner/runner.tscn" id="runner"]
+[ext_resource type="Resource" path="res://ui/main_menu/elements/air.tres" id="reality_air"]
 
 [sub_resource type="Resource" id="Resource_kind_hopper"]
 script = ExtResource("enemy_kind")
@@ -125,6 +126,7 @@ theme_override_font_sizes/font_size = 22
 text = "WASD / стрелки — ходьба   ·   Ctrl — бег   ·   Shift — полёт\nЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)   ·   E — мутация\nКолесо — масштаб   ·   F3 — чанки и коллизии   ·   F12 — скрыть панель   ·   Esc — пауза"
 
 [node name="PauseMenu" parent="." instance=ExtResource("8")]
+reality = ExtResource("reality_air")
 
 [node name="LocationCursor" type="Node" parent="."]
 script = ExtResource("cursor_script")

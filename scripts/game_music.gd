@@ -9,6 +9,9 @@ extends Node
 ## loading the Void does not restart the track.
 ##
 ## Game scenes call start() when they open, the main menu calls stop().
+##
+## set_muffled() puts the Music bus "under water" (a low-pass filter sliding
+## down) while the pause menu is open, and lifts it again.
 
 ## Tracks to pick from; add new ones here.
 const PLAYLIST: Array[AudioStream] = [
@@ -30,6 +33,15 @@ var _silence_left := 0.0
 var _last := -1
 var _stop_tween: Tween
 
+## Low-pass on the Music bus while muffled; disabled (no cost) otherwise.
+const MUFFLED_CUTOFF := 650.0
+const OPEN_CUTOFF := 20000.0
+const MUFFLE_TIME := 0.35
+const UNMUFFLE_TIME := 0.45
+var _muffle: AudioEffectLowPassFilter
+var _muffle_index := -1
+var _muffle_tween: Tween
+
 
 func _ready() -> void:
 	# Keeps playing in the pause menu.
@@ -39,6 +51,44 @@ func _ready() -> void:
 	_player.volume_db = -80.0
 	add_child(_player)
 	_player.finished.connect(_on_track_finished)
+	var bus := AudioServer.get_bus_index(&"Music")
+	if bus >= 0:
+		_muffle = AudioEffectLowPassFilter.new()
+		_muffle.cutoff_hz = OPEN_CUTOFF
+		AudioServer.add_bus_effect(bus, _muffle)
+		_muffle_index = AudioServer.get_bus_effect_count(bus) - 1
+		AudioServer.set_bus_effect_enabled(bus, _muffle_index, false)
+
+
+## Muffles the music (the pause menu) or lifts it, sliding the filter;
+## `instant` jumps there (the scene is going away).
+func set_muffled(muffled: bool, instant := false) -> void:
+	if _muffle == null:
+		return
+	if _muffle_tween != null:
+		_muffle_tween.kill()
+	var bus := AudioServer.get_bus_index(&"Music")
+	var target := MUFFLED_CUTOFF if muffled else OPEN_CUTOFF
+	if muffled:
+		AudioServer.set_bus_effect_enabled(bus, _muffle_index, true)
+	if instant:
+		_set_cutoff(target)
+		AudioServer.set_bus_effect_enabled(bus, _muffle_index, muffled)
+		return
+	# Exponential slide: equal steps in pitch, not in hertz, so it sounds even.
+	_muffle_tween = create_tween()
+	_muffle_tween.tween_method(_set_cutoff_log, log(_muffle.cutoff_hz), log(target),
+		MUFFLE_TIME if muffled else UNMUFFLE_TIME).set_trans(Tween.TRANS_SINE)
+	if not muffled:
+		_muffle_tween.tween_callback(AudioServer.set_bus_effect_enabled.bind(bus, _muffle_index, false))
+
+
+func _set_cutoff_log(log_hz: float) -> void:
+	_set_cutoff(exp(log_hz))
+
+
+func _set_cutoff(hz: float) -> void:
+	_muffle.cutoff_hz = hz
 
 
 ## A run began: play music unless it already plays (a restart after death).

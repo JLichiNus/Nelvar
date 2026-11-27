@@ -28,6 +28,7 @@ const PREVIOUS_KEY := KEY_Q
 @onready var brightness: NelvarSlider = %Brightness
 @onready var show_fps_check: CheckButton = %ShowFps
 @onready var mute_music_check: CheckButton = %MuteMusicInBackground
+@onready var pause_on_focus_loss_check: CheckButton = %PauseOnFocusLoss
 @onready var vsync_check: CheckButton = %VSync
 ## The frame rate cap; its last step, past GameSettings.MAX_FPS_MAX, is "no cap".
 @onready var fps_limit: NelvarSlider = %FpsLimit
@@ -105,6 +106,10 @@ func _ready() -> void:
 	mute_music_check.toggled.connect(GameSettings.set_mute_music_in_background)
 	GameSettings.audio_changed.connect(func() -> void:
 		mute_music_check.set_pressed_no_signal(GameSettings.mute_music_in_background))
+	pause_on_focus_loss_check.set_pressed_no_signal(GameSettings.pause_on_focus_loss)
+	pause_on_focus_loss_check.toggled.connect(GameSettings.set_pause_on_focus_loss)
+	GameSettings.game_changed.connect(func() -> void:
+		pause_on_focus_loss_check.set_pressed_no_signal(GameSettings.pause_on_focus_loss))
 	vsync_check.toggled.connect(GameSettings.set_vsync)
 	fps_limit.min_value = GameSettings.MAX_FPS_MIN
 	fps_limit.max_value = GameSettings.MAX_FPS_MAX + GameSettings.MAX_FPS_STEP
@@ -188,10 +193,10 @@ func _on_tab_toggled(pressed: bool, index: int) -> void:
 
 
 ## Shows the content as the panel opens: 0 = only the frame, 1 = all of it.
-## The header fades in, the rule is drawn from its center, then the columns
-## and the footer follow one after another.
+## The rule is drawn from its center, then the columns and the footer follow
+## one after another. The header is NelvarPanelMorph's: the button's text
+## flies there and becomes it.
 func set_reveal(amount: float) -> void:
-	header.modulate.a = _phase(amount, 0.0, 0.45)
 	_set_rule_width(ease(_phase(amount, 0.1, 0.7), 0.4))
 	categories.modulate.a = _phase(amount, 0.2, 0.65)
 	divider.modulate.a = categories.modulate.a

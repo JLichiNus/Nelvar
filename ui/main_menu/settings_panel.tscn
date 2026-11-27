@@ -76,6 +76,14 @@ button_group = SubResource("ButtonGroup_tabs")
 text = "Аудио"
 alignment = 0
 
+[node name="GameTab" type="Button" parent="Rows/Body/Categories"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+toggle_mode = true
+button_group = SubResource("ButtonGroup_tabs")
+text = "Игра"
+alignment = 0
+
 [node name="DevRule" type="ColorRect" parent="Rows/Body/Categories"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 3)
@@ -235,6 +243,18 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "Выключать музыку в фоне"
 metadata/hint = "Музыка затихает, пока окно игры не активно, и возвращается вместе с вами"
+
+[node name="GamePage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 9
+
+[node name="PauseOnFocusLoss" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/GamePage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Пауза, когда окно не активно"
+metadata/hint = "Забег встаёт на паузу, если переключиться на другое окно или свернуть игру"
 
 [node name="DevPage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
 unique_name_in_owner = true
