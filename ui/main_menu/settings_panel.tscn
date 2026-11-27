@@ -229,6 +229,13 @@ bus = &"SFX"
 title = "Звуки"
 metadata/hint = "Удары, шаги, интерфейс"
 
+[node name="MuteMusicInBackground" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/AudioPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Выключать музыку в фоне"
+metadata/hint = "Музыка затихает, пока окно игры не активно, и возвращается вместе с вами"
+
 [node name="DevPage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
 unique_name_in_owner = true
 visible = false

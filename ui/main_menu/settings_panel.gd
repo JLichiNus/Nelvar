@@ -27,6 +27,7 @@ const PREVIOUS_KEY := KEY_Q
 @onready var background_fps: NelvarOptionRow = %BackgroundFps
 @onready var brightness: NelvarSlider = %Brightness
 @onready var show_fps_check: CheckButton = %ShowFps
+@onready var mute_music_check: CheckButton = %MuteMusicInBackground
 @onready var vsync_check: CheckButton = %VSync
 ## The frame rate cap; its last step, past GameSettings.MAX_FPS_MAX, is "no cap".
 @onready var fps_limit: NelvarSlider = %FpsLimit
@@ -100,6 +101,10 @@ func _ready() -> void:
 	brightness.step = GameSettings.BRIGHTNESS_STEP
 	brightness.value_changed.connect(GameSettings.set_brightness)
 	show_fps_check.toggled.connect(GameSettings.set_show_fps)
+	mute_music_check.set_pressed_no_signal(GameSettings.mute_music_in_background)
+	mute_music_check.toggled.connect(GameSettings.set_mute_music_in_background)
+	GameSettings.audio_changed.connect(func() -> void:
+		mute_music_check.set_pressed_no_signal(GameSettings.mute_music_in_background))
 	vsync_check.toggled.connect(GameSettings.set_vsync)
 	fps_limit.min_value = GameSettings.MAX_FPS_MIN
 	fps_limit.max_value = GameSettings.MAX_FPS_MAX + GameSettings.MAX_FPS_STEP

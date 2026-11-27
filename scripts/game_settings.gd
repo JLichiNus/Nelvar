@@ -9,6 +9,7 @@ signal start_in_void_changed(enabled: bool)
 signal damage_vignette_changed()
 signal volume_changed(bus: StringName, value: float)
 signal display_changed()
+signal audio_changed()
 
 const PATH := "user://settings.cfg"
 
@@ -67,6 +68,19 @@ var start_in_void := false
 const VOLUME_BUSES: Array[StringName] = [&"Master", &"Music", &"SFX"]
 const VOLUME_NAMES: Array[String] = ["Общая громкость", "Музыка", "Звуки"]
 var volumes := {&"Master": 1.0, &"Music": 1.0, &"SFX": 1.0}
+## Music fades out while the game window is not focused and back in when it is.
+var mute_music_in_background := false
+## Seconds for the music to fade out / back in.
+const MUSIC_FADE_OUT := 0.4
+const MUSIC_FADE_IN := 0.8
+## The Music bus is played at volumes[&"Music"] times this (0..1).
+var _music_gain := 1.0
+var _music_tween: Tween
+
+## The window's focus is followed through the engine's notifications and, in
+## case a window manager drops one (some Linux WMs do), also polled this often.
+const FOCUS_POLL_INTERVAL := 0.25
+var _focus_poll_wait := 0.0
 
 
 func _ready() -> void:
@@ -86,6 +100,8 @@ func _ready() -> void:
 		for bus in VOLUME_BUSES:
 			volumes[bus] = clampf(float(config.get_value("audio", String(bus).to_lower(),
 				volumes[bus])), 0.0, 1.0)
+		mute_music_in_background = bool(config.get_value("audio", "mute_music_in_background",
+			mute_music_in_background))
 		max_fps = _snap_max_fps(int(config.get_value("display", "max_fps", max_fps)))
 		vsync = bool(config.get_value("display", "vsync", vsync))
 		window_mode = clampi(int(config.get_value("display", "window_mode", window_mode)),
@@ -104,12 +120,64 @@ func _ready() -> void:
 
 func _notification(what: int) -> void:
 	match what:
-		NOTIFICATION_APPLICATION_FOCUS_OUT:
-			_focused = false
-			_apply_display()
-		NOTIFICATION_APPLICATION_FOCUS_IN:
-			_focused = true
-			_apply_display()
+		# The window's own notification comes first (the application's about
+		# 0.25 s later); either one is enough.
+		NOTIFICATION_WM_WINDOW_FOCUS_OUT, NOTIFICATION_APPLICATION_FOCUS_OUT:
+			_set_focused(false)
+		NOTIFICATION_WM_WINDOW_FOCUS_IN, NOTIFICATION_APPLICATION_FOCUS_IN:
+			_set_focused(true)
+
+
+func _process(delta: float) -> void:
+	# Headless runs (the tests) have no window to be focused.
+	if DisplayServer.get_name() == "headless":
+		return
+	_focus_poll_wait -= delta
+	if _focus_poll_wait > 0.0:
+		return
+	_focus_poll_wait = FOCUS_POLL_INTERVAL
+	var window := get_window()
+	_set_focused(DisplayServer.window_is_focused() and window.mode != Window.MODE_MINIMIZED)
+
+
+## Whether the player is looking at the game: drives the background frame
+## cap and the background music fade.
+func is_window_focused() -> bool:
+	return _focused
+
+
+func _set_focused(focused: bool) -> void:
+	if focused == _focused:
+		return
+	_focused = focused
+	_apply_display()
+	_fade_music()
+
+
+func set_mute_music_in_background(enabled: bool) -> void:
+	if enabled == mute_music_in_background:
+		return
+	mute_music_in_background = enabled
+	_fade_music()
+	_save()
+	audio_changed.emit()
+
+
+func _fade_music() -> void:
+	var target := 0.0 if mute_music_in_background and not _focused else 1.0
+	if _music_tween != null:
+		_music_tween.kill()
+	if is_equal_approx(target, _music_gain):
+		return
+	var time := MUSIC_FADE_OUT if target < _music_gain else MUSIC_FADE_IN
+	_music_tween = create_tween()
+	_music_tween.tween_method(_set_music_gain, _music_gain, target,
+		time * absf(target - _music_gain))
+
+
+func _set_music_gain(gain: float) -> void:
+	_music_gain = gain
+	_apply_volume(&"Music")
 
 
 func _input(event: InputEvent) -> void:
@@ -291,6 +359,8 @@ func _apply_volume(bus: StringName) -> void:
 		push_warning("Нет аудиошины %s." % bus)
 		return
 	var value: float = volumes[bus]
+	if bus == &"Music":
+		value *= _music_gain
 	AudioServer.set_bus_mute(index, value <= 0.0)
 	AudioServer.set_bus_volume_db(index, linear_to_db(value * value) if value > 0.0 else -80.0)
 
@@ -306,6 +376,7 @@ func _save() -> void:
 	config.set_value("hud", "damage_vignette_directional", damage_vignette_directional)
 	for bus in VOLUME_BUSES:
 		config.set_value("audio", String(bus).to_lower(), volumes[bus])
+	config.set_value("audio", "mute_music_in_background", mute_music_in_background)
 	config.set_value("display", "max_fps", max_fps)
 	config.set_value("display", "vsync", vsync)
 	config.set_value("display", "window_mode", window_mode)
