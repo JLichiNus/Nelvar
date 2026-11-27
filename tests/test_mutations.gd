@@ -202,6 +202,12 @@ func _check_hud() -> void:
 	await process_frame
 	var choice: Control = hud.get_node("Choice")
 	_check(choice.visible and paused, "E did not open the paused choice")
+	_check(choice.call("shown_card") == 0, "The choice opens without the first card's description")
+	var cards: Node = choice.get_node("%Cards")
+	if cards.get_child_count() > 1:
+		var second: Button = cards.get_child(1).get_child(0)
+		second.mouse_entered.emit()
+		_check(choice.call("shown_card") == 1, "Pointing at a card does not describe it")
 	_press_key(KEY_2)
 	await process_frame
 	_check(not choice.visible and not paused, "Choosing did not close the panel and unpause")
@@ -223,8 +229,17 @@ func _check_hud() -> void:
 	root.add_child(inventory)
 	inventory.refresh(director)
 	await process_frame
-	var list: Node = inventory.get("_list")
-	_check(list.get_child_count() == 1, "The inventory does not list the mutation")
+	var grid: Node = inventory.get("_grid")
+	_check(grid.get_child_count() == 1, "The inventory does not list the mutation")
+	if grid.get_child_count() == 1:
+		# Pointing at a tile shows its full description beside it.
+		var slot: Button = grid.get_child(0)
+		slot.mouse_entered.emit()
+		_check(inventory.shown_slot() == slot, "Hovering an inventory tile shows no description")
+		slot.mouse_exited.emit()
+		_check(inventory.shown_slot() == null, "The description stays after the mouse left")
+		slot.grab_focus()
+		_check(inventory.shown_slot() == slot, "Focusing an inventory tile shows no description")
 	inventory.queue_free()
 	hud.queue_free()
 	player.queue_free()

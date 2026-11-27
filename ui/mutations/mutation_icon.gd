@@ -15,6 +15,10 @@ const MutationText := preload("res://ui/mutations/mutation_text.gd")
 
 ## Take the mouse for a hover hint.
 @export var hint := true
+## Tile side and letter size; a bigger tile keeps the letter's font pixel
+## equal to the art pixel with font_size = 33 (3x the 11 px font).
+@export var side := SIDE
+@export var font_size := FONT_SIZE
 
 var mutation: NelvarMutation
 var stage := 1
@@ -23,7 +27,6 @@ var owners: Array[int] = []
 
 
 func _init() -> void:
-	custom_minimum_size = Vector2(SIDE, SIDE)
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 
@@ -31,6 +34,7 @@ func setup(entry_mutation: NelvarMutation, entry_stage: int, entry_owners: Array
 	mutation = entry_mutation
 	stage = entry_stage
 	owners.assign(entry_owners)
+	custom_minimum_size = Vector2(side, side)
 	mouse_filter = Control.MOUSE_FILTER_PASS if hint else Control.MOUSE_FILTER_IGNORE
 	queue_redraw()
 
@@ -44,7 +48,7 @@ func owner_color() -> Color:
 func _draw() -> void:
 	if mutation == null:
 		return
-	var rect := Rect2(Vector2.ZERO, Vector2(SIDE, SIDE))
+	var rect := Rect2(Vector2.ZERO, Vector2(side, side))
 	var color := owner_color()
 	draw_rect(rect.grow(ART_PIXEL), EDGE)
 	draw_rect(rect, BACK)
@@ -52,21 +56,21 @@ func _draw() -> void:
 	_draw_layer_mark(color)
 	# Stage pips along the bottom edge.
 	for i in stage:
-		var pip := Vector2(ART_PIXEL * 3.0 + i * ART_PIXEL * 2.0, SIDE - ART_PIXEL * 3.0)
+		var pip := Vector2(ART_PIXEL * 3.0 + i * ART_PIXEL * 2.0, side - ART_PIXEL * 3.0)
 		draw_rect(Rect2(pip, Vector2.ONE * ART_PIXEL), color)
 	var font := get_theme_font("font", "Label")
 	var letter := mutation.title.left(1)
-	var width := font.get_string_size(letter, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x
-	var baseline := SIDE / 2.0 + (font.get_ascent(FONT_SIZE) - font.get_descent(FONT_SIZE)) / 2.0
-	var origin := Vector2(snappedf((SIDE - width) / 2.0, ART_PIXEL), snappedf(baseline, ART_PIXEL))
+	var width := font.get_string_size(letter, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	var baseline := side / 2.0 + (font.get_ascent(font_size) - font.get_descent(font_size)) / 2.0
+	var origin := Vector2(snappedf((side - width) / 2.0, ART_PIXEL), snappedf(baseline, ART_PIXEL))
 	draw_string(font, origin + Vector2(0.0, ART_PIXEL), letter, HORIZONTAL_ALIGNMENT_LEFT,
-		-1.0, FONT_SIZE, EDGE)
-	draw_string(font, origin, letter, HORIZONTAL_ALIGNMENT_LEFT, -1.0, FONT_SIZE, Color.WHITE)
+		-1.0, font_size, EDGE)
+	draw_string(font, origin, letter, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size, Color.WHITE)
 
 
 # Top-right corner: a dot for body, a bar for ability, a cross for rule.
 func _draw_layer_mark(color: Color) -> void:
-	var corner := Vector2(SIDE - ART_PIXEL * 4.0, ART_PIXEL * 2.0)
+	var corner := Vector2(side - ART_PIXEL * 4.0, ART_PIXEL * 2.0)
 	var cells: Array[Vector2] = []
 	match mutation.layer:
 		NelvarMutation.Layer.STATS:

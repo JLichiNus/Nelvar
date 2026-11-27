@@ -81,45 +81,24 @@ anchor_bottom = 1.0
 mouse_filter = 2
 
 [node name="Panel" type="PanelContainer" parent="Choice/Center"]
-custom_minimum_size = Vector2(1140, 0)
 layout_mode = 2
 
 [node name="Rows" type="VBoxContainer" parent="Choice/Center/Panel"]
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 18
 
 [node name="Header" type="Label" parent="Choice/Center/Panel/Rows"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 33
 text = "Выбери мутацию"
 
-[node name="Controls" type="Label" parent="Choice/Center/Panel/Rows"]
-layout_mode = 2
-text = "1 / 2 / 3 — выбрать    ·    Esc / E — отложить"
-
-[node name="ChoiceScroll" type="ScrollContainer" parent="Choice/Center/Panel/Rows"]
+[node name="Cards" type="HBoxContainer" parent="Choice/Center/Panel/Rows"]
 unique_name_in_owner = true
 layout_mode = 2
-follow_focus = true
-horizontal_scroll_mode = 0
-vertical_scroll_mode = 0
+theme_override_constants/separation = 24
+alignment = 1
 
-[node name="Details" type="VBoxContainer" parent="Choice/Center/Panel/Rows/ChoiceScroll"]
-layout_mode = 2
-size_flags_horizontal = 3
-theme_override_constants/separation = 15
-
-[node name="Cards" type="GridContainer" parent="Choice/Center/Panel/Rows/ChoiceScroll/Details"]
+[node name="Details" type="MarginContainer" parent="Choice/Center/Panel/Rows"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_constants/h_separation = 12
-theme_override_constants/v_separation = 12
-columns = 3
-
-[node name="Owned" type="Label" parent="Choice/Center/Panel/Rows/ChoiceScroll/Details"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_colors/font_color = Color(0.75, 0.79, 0.85, 1)
-theme_override_font_sizes/font_size = 22
-autowrap_mode = 3
-text = "пока нет мутаций"
+mouse_filter = 2
