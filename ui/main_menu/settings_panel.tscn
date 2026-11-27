@@ -1,9 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://ui/main_menu/settings_panel.gd" id="1"]
 [ext_resource type="Script" path="res://ui/main_menu/slider.gd" id="2"]
 [ext_resource type="Script" path="res://ui/main_menu/volume_slider.gd" id="3"]
 [ext_resource type="AudioStream" uid="uid://cirqysvg3ccq2" path="res://assets/audio/sfx/ui_hover.wav" id="4"]
+[ext_resource type="Script" uid="uid://calolylcbdqph" path="res://ui/main_menu/option_row.gd" id="5"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_tabs"]
 
@@ -120,12 +121,12 @@ size_flags_horizontal = 3
 layout_mode = 2
 theme_override_constants/separation = 9
 
-[node name="Fullscreen" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+[node name="WindowMode" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
 unique_name_in_owner = true
 layout_mode = 2
-theme_override_font_sizes/font_size = 22
-text = "Полный экран"
-metadata/hint = "Игра на весь экран, без рамки окна"
+script = ExtResource("5")
+title = "Режим окна"
+metadata/hint = "Без рамки — на весь экран, но легко переключаться на другие окна. Полный экран — монитор целиком, чуть меньше задержка"
 
 [node name="VSync" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
 unique_name_in_owner = true
@@ -145,8 +146,31 @@ step = 10.0
 percent = false
 suffix = " FPS"
 max_text = "Без ограничения"
-value_width = 201.0
 metadata/hint = "Сколько кадров в секунду игра рисует, не больше. Действует отдельно от синхронизации"
+
+[node name="BackgroundFps" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("5")
+title = "Частота в фоне"
+metadata/hint = "Сколько кадров игра рисует, пока её окно не активно: меньше — тише и экономнее"
+
+[node name="Brightness" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("2")
+title = "Яркость"
+min_value = 0.5
+max_value = 1.5
+step = 0.05
+metadata/hint = "Светлее или темнее средние тона; чёрное и белое не меняются"
+
+[node name="ShowFps" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Показывать FPS"
+metadata/hint = "Счётчик кадров в секунду в правом верхнем углу"
 
 [node name="InterfacePage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
 visible = false

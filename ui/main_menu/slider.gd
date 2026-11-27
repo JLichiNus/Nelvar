@@ -32,8 +32,11 @@ const PADDING := 6.0
 ## "выкл." at 0, "Без ограничения" at the top).
 @export var min_text := ""
 @export var max_text := ""
-## Column right of the bar for the value; wide enough for its longest text.
-@export var value_width := 72.0
+## Column right of the bar for the value, the same for every slider so the
+## bars line up; wide enough for the longest text ("Без ограничения").
+const VALUE_WIDTH := 201.0
+## Between the bar and its value.
+const VALUE_GAP := 15.0
 @export var text_color := Color(0.93, 0.9, 0.8)
 @export var frame_color := Color(0.93, 0.9, 0.8)
 @export var focus_color := Color.WHITE
@@ -138,7 +141,7 @@ func _share() -> float:
 
 func _bar_rect() -> Rect2:
 	var width := snappedf(minf(BAR_WIDTH, size.x * 0.45), ART_PIXEL)
-	var left := snappedf(size.x - value_width - width, ART_PIXEL)
+	var left := snappedf(size.x - VALUE_WIDTH - width, ART_PIXEL)
 	var top := snappedf((size.y - BAR_HEIGHT) / 2.0, ART_PIXEL)
 	return Rect2(Vector2(left, top), Vector2(width, BAR_HEIGHT))
 
@@ -150,12 +153,10 @@ func _draw() -> void:
 	var baseline := (size.y - font.get_height(FONT_SIZE)) / 2.0 + font.get_ascent(FONT_SIZE)
 	draw_string(font, Vector2(PADDING, baseline), title, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
 		FONT_SIZE, label_color)
-	var text := _value_text()
-	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE).x
-	draw_string(font, Vector2(size.x - width - PADDING, baseline), text,
+	var bar := _bar_rect()
+	draw_string(font, Vector2(bar.end.x + VALUE_GAP, baseline), _value_text(),
 		HORIZONTAL_ALIGNMENT_LEFT, -1.0, FONT_SIZE, label_color)
 
-	var bar := _bar_rect()
 	draw_rect(bar, back_color)
 	draw_rect(bar.grow(-ART_PIXEL / 2.0), focus_color if active else frame_color, false, ART_PIXEL)
 	var inner := bar.grow(-ART_PIXEL * 2.0)

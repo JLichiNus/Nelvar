@@ -23,7 +23,10 @@ const STEP_SOUND_GAP_MS := 45
 const NEXT_KEY := KEY_E
 const PREVIOUS_KEY := KEY_Q
 
-@onready var fullscreen_check: CheckButton = %Fullscreen
+@onready var window_mode: NelvarOptionRow = %WindowMode
+@onready var background_fps: NelvarOptionRow = %BackgroundFps
+@onready var brightness: NelvarSlider = %Brightness
+@onready var show_fps_check: CheckButton = %ShowFps
 @onready var vsync_check: CheckButton = %VSync
 ## The frame rate cap; its last step, past GameSettings.MAX_FPS_MAX, is "no cap".
 @onready var fps_limit: NelvarSlider = %FpsLimit
@@ -80,15 +83,23 @@ func _ready() -> void:
 		for row in rows:
 			if row is NelvarSlider:
 				(row as NelvarSlider).value_changed.connect(_play_step.unbind(1))
+			elif row is NelvarOptionRow:
+				(row as NelvarOptionRow).index_changed.connect(_play_step.unbind(1))
 			row.focus_neighbor_left = row.get_path_to(tab)
 			row.focus_entered.connect(_set_focused_row.bind(row))
 			row.focus_exited.connect(_set_focused_row.bind(null))
 			row.mouse_entered.connect(_set_hovered_row.bind(row))
 			row.mouse_exited.connect(_set_hovered_row.bind(null))
 
-	fullscreen_check.set_pressed_no_signal(FullscreenToggle.is_fullscreen())
-	fullscreen_check.toggled.connect(FullscreenToggle.set_fullscreen)
-	FullscreenToggle.fullscreen_changed.connect(fullscreen_check.set_pressed_no_signal)
+	window_mode.options = PackedStringArray(GameSettings.WINDOW_MODE_NAMES)
+	window_mode.index_changed.connect(_on_window_mode_changed)
+	background_fps.options = PackedStringArray(GameSettings.BACKGROUND_FPS_NAMES)
+	background_fps.index_changed.connect(_on_background_fps_changed)
+	brightness.min_value = GameSettings.BRIGHTNESS_MIN
+	brightness.max_value = GameSettings.BRIGHTNESS_MAX
+	brightness.step = GameSettings.BRIGHTNESS_STEP
+	brightness.value_changed.connect(GameSettings.set_brightness)
+	show_fps_check.toggled.connect(GameSettings.set_show_fps)
 	vsync_check.toggled.connect(GameSettings.set_vsync)
 	fps_limit.min_value = GameSettings.MAX_FPS_MIN
 	fps_limit.max_value = GameSettings.MAX_FPS_MAX + GameSettings.MAX_FPS_STEP
@@ -206,7 +217,19 @@ func _on_fps_limit_changed(value: float) -> void:
 	GameSettings.set_max_fps(0 if value > GameSettings.MAX_FPS_MAX else roundi(value))
 
 
+func _on_window_mode_changed(index: int) -> void:
+	GameSettings.set_window_mode(index as GameSettings.WindowMode)
+
+
+func _on_background_fps_changed(index: int) -> void:
+	GameSettings.set_background_fps(GameSettings.BACKGROUND_FPS[index])
+
+
 func _show_display_settings() -> void:
+	window_mode.index = GameSettings.window_mode
+	background_fps.index = GameSettings.BACKGROUND_FPS.find(GameSettings.background_fps)
+	brightness.set_value_no_signal(GameSettings.brightness)
+	show_fps_check.set_pressed_no_signal(GameSettings.show_fps)
 	vsync_check.set_pressed_no_signal(GameSettings.vsync)
 	var fps := GameSettings.max_fps
 	fps_limit.set_value_no_signal(fps_limit.max_value if fps == 0 else float(fps))
