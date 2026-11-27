@@ -1,8 +1,9 @@
 class_name NelvarSettingsPanel
 extends NelvarMenuPanel
 ## Settings: categories on the left, the chosen category's rows on the right
-## (one line each, scrolled when they do not fit) and, under them, the hint of
-## the row under the cursor or in focus (rows keep it in `metadata/hint`).
+## (one line each, scrolled when they do not fit). The hint of the row under
+## the cursor or in focus (rows keep it in `metadata/hint`) is sent out with
+## `hint_changed`; NelvarPanelMorph shows it in its own frame (NelvarHintBox).
 ## Q/E or the gamepad shoulders switch categories from anywhere in the panel.
 ## «Разработчик» exists only in debug builds (editor runs and debug exports).
 ##
@@ -10,24 +11,39 @@ extends NelvarMenuPanel
 ## of their «Настройки» button with NelvarPanelMorph, which shows the content
 ## through `set_reveal`.
 
+signal hint_changed(text: String)
+
 const HINT_META := &"hint"
+
+## Step ticks closer together than this are skipped: dragging a slider
+## crosses many 1% steps a frame, held arrows repeat fast.
+const STEP_SOUND_GAP_MS := 45
 
 ## Next/previous category (physical keys, so they work in any layout).
 const NEXT_KEY := KEY_E
 const PREVIOUS_KEY := KEY_Q
 
-@onready var fullscreen_check: CheckButton = %Fullscreen
+@onready var window_mode: NelvarOptionRow = %WindowMode
+@onready var background_fps: NelvarOptionRow = %BackgroundFps
+@onready var brightness: NelvarSlider = %Brightness
+@onready var show_fps_check: CheckButton = %ShowFps
+@onready var mute_music_check: CheckButton = %MuteMusicInBackground
+@onready var pause_on_focus_loss_check: CheckButton = %PauseOnFocusLoss
+@onready var vsync_check: CheckButton = %VSync
+## The frame rate cap; its last step, past GameSettings.MAX_FPS_MAX, is "no cap".
+@onready var fps_limit: NelvarSlider = %FpsLimit
 @onready var info_panel_check: CheckButton = %InfoPanel
-@onready var vignette_level: NelvarOptionRow = %VignetteLevel
+@onready var vignette_level: NelvarSlider = %VignetteLevel
 @onready var vignette_direction_check: CheckButton = %VignetteDirection
 @onready var start_in_void_check: CheckButton = %StartInVoid
 @onready var categories: VBoxContainer = %Categories
 @onready var pages: VBoxContainer = %Pages
 @onready var scroll: ScrollContainer = %Scroll
-@onready var hint: Label = %Hint
 @onready var body: HBoxContainer = %Body
 @onready var footer: HBoxContainer = %Footer
 @onready var divider: ColorRect = %Body/Divider
+## Ticks on every step of a slider or a value row (the menu's hover sound).
+@onready var step_sound: AudioStreamPlayer = %StepSound
 
 var _tabs: Array[Button] = []
 var _pages: Array[Control] = []
@@ -36,6 +52,7 @@ var _focused_row: Control
 var _hovered_row: Control
 ## Off while the panel grows or shrinks: nothing in it takes focus or input.
 var _interactive := true
+var _last_step_sound_ms := -STEP_SOUND_GAP_MS
 
 
 func _ready() -> void:
@@ -66,20 +83,45 @@ func _ready() -> void:
 		if not rows.is_empty():
 			tab.focus_neighbor_right = tab.get_path_to(rows[0])
 		for row in rows:
+			if row is NelvarSlider:
+				(row as NelvarSlider).value_changed.connect(_play_step.unbind(1))
+			elif row is NelvarOptionRow:
+				(row as NelvarOptionRow).index_changed.connect(_play_step.unbind(1))
 			row.focus_neighbor_left = row.get_path_to(tab)
 			row.focus_entered.connect(_set_focused_row.bind(row))
 			row.focus_exited.connect(_set_focused_row.bind(null))
 			row.mouse_entered.connect(_set_hovered_row.bind(row))
 			row.mouse_exited.connect(_set_hovered_row.bind(null))
 
-	fullscreen_check.set_pressed_no_signal(FullscreenToggle.is_fullscreen())
-	fullscreen_check.toggled.connect(FullscreenToggle.set_fullscreen)
-	FullscreenToggle.fullscreen_changed.connect(fullscreen_check.set_pressed_no_signal)
+	window_mode.options = PackedStringArray(GameSettings.WINDOW_MODE_NAMES)
+	window_mode.index_changed.connect(_on_window_mode_changed)
+	background_fps.options = PackedStringArray(GameSettings.BACKGROUND_FPS_NAMES)
+	background_fps.index_changed.connect(_on_background_fps_changed)
+	brightness.min_value = GameSettings.BRIGHTNESS_MIN
+	brightness.max_value = GameSettings.BRIGHTNESS_MAX
+	brightness.step = GameSettings.BRIGHTNESS_STEP
+	brightness.value_changed.connect(GameSettings.set_brightness)
+	show_fps_check.toggled.connect(GameSettings.set_show_fps)
+	mute_music_check.set_pressed_no_signal(GameSettings.mute_music_in_background)
+	mute_music_check.toggled.connect(GameSettings.set_mute_music_in_background)
+	GameSettings.audio_changed.connect(func() -> void:
+		mute_music_check.set_pressed_no_signal(GameSettings.mute_music_in_background))
+	pause_on_focus_loss_check.set_pressed_no_signal(GameSettings.pause_on_focus_loss)
+	pause_on_focus_loss_check.toggled.connect(GameSettings.set_pause_on_focus_loss)
+	GameSettings.game_changed.connect(func() -> void:
+		pause_on_focus_loss_check.set_pressed_no_signal(GameSettings.pause_on_focus_loss))
+	vsync_check.toggled.connect(GameSettings.set_vsync)
+	fps_limit.min_value = GameSettings.MAX_FPS_MIN
+	fps_limit.max_value = GameSettings.MAX_FPS_MAX + GameSettings.MAX_FPS_STEP
+	fps_limit.step = GameSettings.MAX_FPS_STEP
+	fps_limit.value_changed.connect(_on_fps_limit_changed)
+	GameSettings.display_changed.connect(_show_display_settings)
+	_show_display_settings()
 	info_panel_check.set_pressed_no_signal(GameSettings.show_info_panel)
 	info_panel_check.toggled.connect(GameSettings.set_show_info_panel)
 	GameSettings.info_panel_changed.connect(info_panel_check.set_pressed_no_signal)
-	vignette_level.options = PackedStringArray(GameSettings.VIGNETTE_NAMES)
-	vignette_level.index_changed.connect(GameSettings.set_damage_vignette_level)
+	vignette_level.step = GameSettings.VIGNETTE_STEP
+	vignette_level.value_changed.connect(GameSettings.set_damage_vignette)
 	vignette_direction_check.toggled.connect(GameSettings.set_damage_vignette_directional)
 	GameSettings.damage_vignette_changed.connect(_show_vignette_settings)
 	_show_vignette_settings()
@@ -151,10 +193,10 @@ func _on_tab_toggled(pressed: bool, index: int) -> void:
 
 
 ## Shows the content as the panel opens: 0 = only the frame, 1 = all of it.
-## The header fades in, the rule is drawn from its center, then the columns
-## and the footer follow one after another.
+## The rule is drawn from its center, then the columns and the footer follow
+## one after another. The header is NelvarPanelMorph's: the button's text
+## flies there and becomes it.
 func set_reveal(amount: float) -> void:
-	header.modulate.a = _phase(amount, 0.0, 0.45)
 	_set_rule_width(ease(_phase(amount, 0.1, 0.7), 0.4))
 	categories.modulate.a = _phase(amount, 0.2, 0.65)
 	divider.modulate.a = categories.modulate.a
@@ -173,8 +215,38 @@ func begin_hide() -> void:
 	_stop()
 
 
+func _play_step() -> void:
+	var now := Time.get_ticks_msec()
+	if now - _last_step_sound_ms < STEP_SOUND_GAP_MS:
+		return
+	_last_step_sound_ms = now
+	step_sound.play()
+
+
+func _on_fps_limit_changed(value: float) -> void:
+	GameSettings.set_max_fps(0 if value > GameSettings.MAX_FPS_MAX else roundi(value))
+
+
+func _on_window_mode_changed(index: int) -> void:
+	GameSettings.set_window_mode(index as GameSettings.WindowMode)
+
+
+func _on_background_fps_changed(index: int) -> void:
+	GameSettings.set_background_fps(GameSettings.BACKGROUND_FPS[index])
+
+
+func _show_display_settings() -> void:
+	window_mode.index = GameSettings.window_mode
+	background_fps.index = GameSettings.BACKGROUND_FPS.find(GameSettings.background_fps)
+	brightness.set_value_no_signal(GameSettings.brightness)
+	show_fps_check.set_pressed_no_signal(GameSettings.show_fps)
+	vsync_check.set_pressed_no_signal(GameSettings.vsync)
+	var fps := GameSettings.max_fps
+	fps_limit.set_value_no_signal(fps_limit.max_value if fps == 0 else float(fps))
+
+
 func _show_vignette_settings() -> void:
-	vignette_level.index = GameSettings.damage_vignette_level
+	vignette_level.set_value_no_signal(GameSettings.damage_vignette)
 	vignette_direction_check.set_pressed_no_signal(GameSettings.damage_vignette_directional)
 
 
@@ -198,11 +270,15 @@ func _set_hovered_row(row: Control) -> void:
 
 
 func _refresh_hint() -> void:
+	hint_changed.emit(current_hint())
+
+
+## Hint of the row under the cursor, else of the row in focus; "" if none.
+func current_hint() -> String:
 	var row := _hovered_row if _hovered_row != null else _focused_row
 	if row != null and is_instance_valid(row) and row.is_visible_in_tree():
-		hint.text = row.get_meta(HINT_META, "")
-	else:
-		hint.text = ""
+		return row.get_meta(HINT_META, "")
+	return ""
 
 
 static func _phase(amount: float, from: float, to: float) -> float:

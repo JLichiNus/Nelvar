@@ -2,9 +2,10 @@ class_name NelvarOptionRow
 extends Control
 ## A settings row that picks one of a few values: the name on the left,
 ## "< value >" on the right, drawn with pixel arrows (whole art pixels).
-## Left/right while focused step through the values (no wrap-around); Enter
-## or a click on the row moves to the next one (wrapping); a click on an
-## arrow steps that way. Same height and focus frame as a CheckButton row.
+## Left/right while focused and the mouse wheel over the row step through
+## the values (no wrap-around); Enter or a click on the row moves to the next
+## one (wrapping); a click on an arrow steps that way. Same height and focus
+## frame as a CheckButton row.
 
 signal index_changed(index: int)
 
@@ -50,7 +51,15 @@ func _get_minimum_size() -> Vector2:
 
 func _gui_input(event: InputEvent) -> void:
 	var button := event as InputEventMouseButton
-	if button != null and button.button_index == MOUSE_BUTTON_LEFT and button.pressed:
+	if button != null and button.pressed and button.button_index in [
+			MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_RIGHT,
+			MOUSE_BUTTON_WHEEL_DOWN, MOUSE_BUTTON_WHEEL_LEFT]:
+		# Like the sliders: up/right is the next value; taken even at the
+		# ends so the page behind does not scroll.
+		var next := button.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_RIGHT]
+		_step(1 if next else -1, false)
+		accept_event()
+	elif button != null and button.button_index == MOUSE_BUTTON_LEFT and button.pressed:
 		grab_focus()
 		var value_box := _value_rect()
 		if button.position.x < value_box.position.x and button.position.x >= _left_arrow_x():

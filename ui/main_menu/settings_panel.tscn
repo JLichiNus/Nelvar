@@ -1,8 +1,10 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://ui/main_menu/settings_panel.gd" id="1"]
-[ext_resource type="Script" path="res://ui/main_menu/option_row.gd" id="2"]
+[ext_resource type="Script" path="res://ui/main_menu/slider.gd" id="2"]
 [ext_resource type="Script" path="res://ui/main_menu/volume_slider.gd" id="3"]
+[ext_resource type="AudioStream" uid="uid://cirqysvg3ccq2" path="res://assets/audio/sfx/ui_hover.wav" id="4"]
+[ext_resource type="Script" uid="uid://calolylcbdqph" path="res://ui/main_menu/option_row.gd" id="5"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_tabs"]
 
@@ -74,6 +76,14 @@ button_group = SubResource("ButtonGroup_tabs")
 text = "Аудио"
 alignment = 0
 
+[node name="GameTab" type="Button" parent="Rows/Body/Categories"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+toggle_mode = true
+button_group = SubResource("ButtonGroup_tabs")
+text = "Игра"
+alignment = 0
+
 [node name="DevRule" type="ColorRect" parent="Rows/Body/Categories"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 3)
@@ -119,49 +129,83 @@ size_flags_horizontal = 3
 layout_mode = 2
 theme_override_constants/separation = 9
 
-[node name="Fullscreen" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+[node name="WindowMode" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("5")
+title = "Режим окна"
+metadata/hint = "Без рамки — на весь экран, но легко переключаться на другие окна. Полный экран — монитор целиком, чуть меньше задержка"
+
+[node name="VSync" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
-text = "Полный экран"
-metadata/hint = "F11 — переключить в любой момент"
+text = "Вертикальная синхронизация"
+metadata/hint = "Кадры подстраиваются под частоту монитора: картинка не рвётся, но отклик чуть медленнее"
+
+[node name="FpsLimit" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("2")
+title = "Частота кадров"
+min_value = 30.0
+max_value = 250.0
+step = 10.0
+percent = false
+suffix = " FPS"
+max_text = "Без ограничения"
+metadata/hint = "Сколько кадров в секунду игра рисует, не больше. Действует отдельно от синхронизации"
+
+[node name="BackgroundFps" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("5")
+title = "Частота в фоне"
+metadata/hint = "Сколько кадров игра рисует, пока её окно не активно: меньше — тише и экономнее"
+
+[node name="Brightness" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("2")
+title = "Яркость"
+min_value = 0.5
+max_value = 1.5
+step = 0.05
+metadata/hint = "Светлее или темнее средние тона; чёрное и белое не меняются"
+
+[node name="ShowFps" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Показывать FPS"
+metadata/hint = "Счётчик кадров в секунду в правом верхнем углу"
 
 [node name="InterfacePage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 9
 
-[node name="PanelsGroup" type="Label" parent="Rows/Body/PageColumn/Scroll/Pages/InterfacePage"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
-theme_override_font_sizes/font_size = 22
-text = "Панели"
-
 [node name="InfoPanel" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/InterfacePage"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "Панель информации"
-metadata/hint = "Сид мира, статистика и управление. F12 — показать или скрыть в игре"
-
-[node name="VignetteGroup" type="Label" parent="Rows/Body/PageColumn/Scroll/Pages/InterfacePage"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
-theme_override_font_sizes/font_size = 22
-text = "Виньетка урона"
+metadata/hint = "Сид мира, статистика и управление поверх игры"
 
 [node name="VignetteLevel" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/InterfacePage"]
 unique_name_in_owner = true
 layout_mode = 2
 script = ExtResource("2")
-title = "Сила"
-metadata/hint = "Красный край экрана при получении урона. Стрелки влево и вправо — изменить"
+title = "Виньетка урона"
+step = 0.1
+min_text = "выкл."
+metadata/hint = "Красный край экрана при получении урона"
 
 [node name="VignetteDirection" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/InterfacePage"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
-text = "Со стороны удара"
+text = "Виньетка со стороны удара"
 metadata/hint = "Краснеет только тот край, с которого пришёл удар"
 
 [node name="AudioPage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
@@ -175,7 +219,7 @@ layout_mode = 2
 script = ExtResource("3")
 bus = &"Master"
 title = "Общая громкость"
-metadata/hint = "Громкость всей игры. Стрелки влево и вправо — изменить"
+metadata/hint = "Громкость всей игры"
 
 [node name="MusicVolume" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/AudioPage"]
 unique_name_in_owner = true
@@ -183,7 +227,7 @@ layout_mode = 2
 script = ExtResource("3")
 bus = &"Music"
 title = "Музыка"
-metadata/hint = "Музыка меню и забегов. Стрелки влево и вправо — изменить"
+metadata/hint = "Музыка меню и забегов"
 
 [node name="SfxVolume" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/AudioPage"]
 unique_name_in_owner = true
@@ -191,7 +235,26 @@ layout_mode = 2
 script = ExtResource("3")
 bus = &"SFX"
 title = "Звуки"
-metadata/hint = "Удары, шаги, интерфейс. Стрелки влево и вправо — изменить"
+metadata/hint = "Удары, шаги, интерфейс"
+
+[node name="MuteMusicInBackground" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/AudioPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Выключать музыку в фоне"
+metadata/hint = "Музыка затихает, пока окно игры не активно, и возвращается вместе с вами"
+
+[node name="GamePage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 9
+
+[node name="PauseOnFocusLoss" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/GamePage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Пауза, когда окно не активно"
+metadata/hint = "Забег встаёт на паузу, если переключиться на другое окно или свернуть игру"
 
 [node name="DevPage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
 unique_name_in_owner = true
@@ -199,32 +262,12 @@ visible = false
 layout_mode = 2
 theme_override_constants/separation = 9
 
-[node name="DevNote" type="Label" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
-theme_override_font_sizes/font_size = 22
-text = "Только в отладочной сборке"
-
 [node name="StartInVoid" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "Запускать игру в Пустоте"
 metadata/hint = "«Играть» откроет Пустоту вместо обычного мира"
-
-[node name="HintRule" type="ColorRect" parent="Rows/Body/PageColumn"]
-custom_minimum_size = Vector2(0, 3)
-layout_mode = 2
-mouse_filter = 2
-color = Color(0.62, 0.58, 0.54, 0.35)
-
-[node name="Hint" type="Label" parent="Rows/Body/PageColumn"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 60)
-layout_mode = 2
-theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
-theme_override_font_sizes/font_size = 22
-autowrap_mode = 3
 
 [node name="Footer" type="HBoxContainer" parent="Rows"]
 unique_name_in_owner = true
@@ -243,3 +286,10 @@ theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
 theme_override_font_sizes/font_size = 22
 text = "Q / E — раздел    Esc — назад"
 horizontal_alignment = 2
+
+[node name="StepSound" type="AudioStreamPlayer" parent="."]
+unique_name_in_owner = true
+stream = ExtResource("4")
+volume_db = -6.0
+max_polyphony = 4
+bus = &"SFX"

@@ -13,6 +13,7 @@
     python3 tools/gen_ui.py
 """
 
+import math
 from pathlib import Path
 
 from PIL import Image
@@ -1637,8 +1638,11 @@ def make_element_ui():
 
 
 # --- Иконки способностей -------------------------------------------------------
-# 16×16 арт-пикселей (в игре ×3), палитра воздуха, тёмная обводка рисуется сама.
-ICON_SIZE = 16
+# 24×24 арт-пикселя (в игре ×ICON_SCALE), палитра воздуха, тёмная обводка
+# рисуется сама. Рисунки — по наброскам автора: снаряд-комета, расходящаяся
+# волна, ветряной рывок-стрела, две волны, сжимаемые стрелками.
+ICON_SIZE = 24
+ICON_SCALE = 2
 ICON_OUTLINE = (20, 40, 66)
 ICON_WHITE = (255, 255, 255)
 ICON_LIGHT = (206, 236, 250)
@@ -1646,8 +1650,9 @@ ICON_MID = (130, 194, 232)
 ICON_DEEP = (70, 130, 186)
 
 
-def _icon_save(pixels, name):
-    """pixels: {(x, y): rgb}; обводка в 8 соседей вокруг рисунка."""
+def _icon_save(pixels, name, dark=()):
+    """pixels: {(x, y): rgb}; обводка в 8 соседей вокруг рисунка.
+    dark: пиксели рисунка, которые закрашиваются обводкой (разделители)."""
     img = Image.new("RGBA", (ICON_SIZE, ICON_SIZE), (0, 0, 0, 0))
     p = img.load()
     for x, y in {(x + dx, y + dy) for x, y in pixels for dx, dy in EIGHT} - set(pixels):
@@ -1656,77 +1661,181 @@ def _icon_save(pixels, name):
     for (x, y), c in pixels.items():
         if 0 <= x < ICON_SIZE and 0 <= y < ICON_SIZE:
             p[x, y] = c + (255,)
-    save_scaled(img, f"ability_{name}.png")
+    for x, y in dark:
+        if (x, y) in pixels:
+            p[x, y] = ICON_OUTLINE + (255,)
+    save_scaled(img, f"ability_{name}.png", ICON_SCALE)
+
+
+def _bez(pts, t):
+    while len(pts) > 1:
+        pts = [(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t) for a, b in zip(pts, pts[1:])]
+    return pts[0]
+
+
+def _stroke(px, pts, w0, w1, colors, steps=200):
+    """Кривая Безье с толщиной от w0 к w1; colors: [(t_до, цвет), ...] вдоль кривой."""
+    samples = [_bez(pts, i / steps) for i in range(steps + 1)]
+    for y in range(ICON_SIZE):
+        for x in range(ICON_SIZE):
+            best = None
+            for i, (sx, sy) in enumerate(samples):
+                t = i / steps
+                r = (w0 + (w1 - w0) * t) / 2
+                d = math.hypot(x + 0.5 - sx, y + 0.5 - sy)
+                if d <= r and (best is None or d - r < best[0]):
+                    best = (d - r, t)
+            if best:
+                t = best[1]
+                for lim, c in colors:
+                    if t <= lim:
+                        px[(x, y)] = c
+                        break
+
+
+def _thin(px, pts, colors, steps=400):
+    """Линия в 1 пиксель вдоль кривой Безье, без Г-образных ступенек."""
+    path = []
+    for i in range(steps + 1):
+        x, y = _bez(pts, i / steps)
+        p = (int(math.floor(x)), int(math.floor(y)))
+        if not path or path[-1] != p:
+            path.append(p)
+    clean = []
+    for p in path:
+        if len(clean) >= 2:
+            a, b = clean[-2], clean[-1]
+            if abs(a[0] - p[0]) == 1 and abs(a[1] - p[1]) == 1 and (b[0] == a[0] or b[1] == a[1]):
+                clean.pop()
+        clean.append(p)
+    n = len(clean)
+    for i, p in enumerate(clean):
+        t = i / max(1, n - 1)
+        for lim, c in colors:
+            if t <= lim:
+                px[p] = c
+                break
 
 
 def icon_primary():
-    """ЛКМ: вихревой снаряд летит вправо, за ним тянутся струи ветра."""
+    """ЛКМ: шар сжатого воздуха летит вверх-вправо, за ним хвост кометы."""
     px = {}
-    cx, cy, r = 10.5, 7.5, 3.6
-    for y in range(16):
-        for x in range(16):
-            d = ((x + 0.5 - cx) ** 2 + (y + 0.5 - cy) ** 2) ** 0.5
+    cx, cy, r = 15.5, 7.5, 5.0
+    # хвост: капля между двумя кривыми, у основания шириной с шар
+    left = [(10.6, 6.6), (7.8, 11.0), (9.8, 16.5), (6.0, 23.5)]
+    right = [(17.0, 12.6), (11.2, 15.0), (11.6, 19.0), (6.0, 23.5)]
+    steps = 120
+    for i in range(steps + 1):
+        t = i / steps
+        a, b = _bez(left, t), _bez(right, t)
+        for j in range(41):
+            s = j / 40
+            x, y = a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s
+            k = t + 0.35 * abs(s - 0.5)
+            px[(int(x), int(y))] = ICON_LIGHT if k < 0.32 else ICON_MID if k < 0.7 else ICON_DEEP
+    _thin(px, [(11, 12), (9, 15), (10, 18), (7, 22)], [(0.45, ICON_WHITE), (1, ICON_LIGHT)])
+    # отдельные струйки по бокам
+    _thin(px, [(5, 8), (1, 12), (6, 16), (2, 21)], [(0.5, ICON_LIGHT), (1, ICON_MID)])
+    _thin(px, [(18, 15), (21, 17), (17, 21)], [(0.6, ICON_LIGHT), (1, ICON_MID)])
+    # шар, отделённый от хвоста тёмным кольцом
+    ring = []
+    for y in range(ICON_SIZE):
+        for x in range(ICON_SIZE):
+            dx, dy = x + 0.5 - cx, y + 0.5 - cy
+            d = math.hypot(dx, dy)
             if d <= r:
-                light = (x + 0.5 - cx) + (y + 0.5 - cy)  # блик сверху-слева
-                px[(x, y)] = ICON_WHITE if light < -2.0 else ICON_LIGHT if d < r - 1.2 or light < 0 else ICON_MID
-    for y, x0, x1, c in ((5, 3, 6, ICON_LIGHT), (7, 1, 6, ICON_WHITE), (9, 3, 6, ICON_LIGHT), (11, 5, 7, ICON_MID)):
-        for x in range(x0, x1 + 1):
-            px[(x, y)] = c
-    return px
+                light = dx + dy
+                if d > r - 1.1 and light > 1.5:
+                    c = ICON_MID
+                elif abs(d - 3.1) < 0.55 and dx > 0.3 and dy > 0.3:
+                    c = ICON_WHITE  # внутренняя дуга-завиток
+                else:
+                    c = ICON_LIGHT
+                px[(x, y)] = c
+            elif d <= r + 1.0:
+                ring.append((x, y))
+    for p in ((13, 5), (13, 4), (14, 4)):
+        px[p] = ICON_WHITE
+    return px, ring
+
+
+def _arc(px, ox, oy, radius, a0, a1, w0, wm, colors):
+    """Дуга окружности вокруг (ox, oy) от угла a0 до a1 (градусы), толще в середине."""
+    n = 8
+    pts = []
+    for i in range(n + 1):
+        a = math.radians(a0 + (a1 - a0) * i / n)
+        pts.append((ox + math.cos(a) * radius, oy + math.sin(a) * radius))
+    for i in range(n):
+        wa = w0 + (wm - w0) * math.sin(math.pi * i / n)
+        wb = w0 + (wm - w0) * math.sin(math.pi * (i + 1) / n)
+        _stroke(px, [pts[i], pts[i + 1]], wa, wb, colors, steps=30)
 
 
 def icon_wave():
-    """ПКМ: три расходящиеся дуги ветра."""
-    import math
+    """ПКМ: фронт волны расходится из угла, порывы толкают его наружу."""
     px = {}
-    ox, oy = 1.5, 8.0
-    for radius, c in ((5.0, ICON_MID), (8.5, ICON_LIGHT), (12.0, ICON_WHITE)):
-        for y in range(16):
-            for x in range(16):
-                dx, dy = x + 0.5 - ox, y + 0.5 - oy
-                d = math.hypot(dx, dy)
-                ang = math.degrees(math.atan2(dy, dx))
-                spread = 62 - radius * 1.2
-                if abs(d - radius) <= 0.75 and abs(ang) <= spread:
-                    px[(x, y)] = c
-    return px
+    _arc(px, 2.0, 22.5, 20.0, -86, -4, 1.0, 3.4, [(1, ICON_WHITE)])
+    _arc(px, 2.0, 22.5, 14.5, -82, -8, 1.0, 2.2, [(1, ICON_LIGHT)])
+    # порывы, толкающие фронт (ровные штрихи под 45°)
+    for (x0, y0, n, c) in ((2, 15, 4, ICON_MID), (4, 20, 5, ICON_LIGHT)):
+        for i in range(n):
+            px[(x0 + i, y0 - i)] = c
+            px[(x0 + i + 1, y0 - i)] = c
+    return px, ()
 
 
 def icon_flight():
-    """Shift: смерч оторвался от земли, под ним тень."""
-    import math
+    """Shift: рывок — стрела из воздушных потоков с линиями скорости."""
     px = {}
-    for y in range(1, 12):
-        half = 6.5 - (y - 1) * 0.5
-        cx = 8.0 + math.sin(y * 0.7) * 1.0
-        band = ICON_WHITE if y % 3 == 1 else ICON_LIGHT if y % 3 == 2 else ICON_MID
-        for x in range(16):
-            if abs(x + 0.5 - cx) <= half:
-                px[(x, y)] = band
-    for x in range(5, 11):
-        px[(x, 14)] = ICON_DEEP
-    return px
+    poly = [(2, 7), (14, 10), (15.5, 8), (23, 12), (15.5, 16), (14, 14), (2, 17), (7.5, 12)]
+
+    def inside(x, y):
+        c = False
+        for (ax, ay), (bx, by) in zip(poly, poly[1:] + poly[:1]):
+            if (ay > y) != (by > y) and x < ax + (y - ay) * (bx - ax) / (by - ay):
+                c = not c
+        return c
+
+    for y in range(ICON_SIZE):
+        for x in range(ICON_SIZE):
+            if inside(x + 0.5, y + 0.5):
+                fx = x + 0.5
+                px[(x, y)] = ICON_WHITE if fx > 17 else ICON_LIGHT if fx > 10 else ICON_MID
+    # поток вдоль стрелы
+    _thin(px, [(6, 12), (21, 12)], [(0.35, ICON_DEEP), (0.6, ICON_LIGHT), (1, ICON_WHITE)])
+    # линии скорости
+    _thin(px, [(5, 3), (15, 4)], [(0.3, ICON_MID), (1, ICON_LIGHT)])
+    _thin(px, [(2, 21), (13, 20)], [(0.3, ICON_MID), (1, ICON_LIGHT)])
+    _thin(px, [(17, 3), (21, 7)], [(1, ICON_MID)])
+    _thin(px, [(17, 21), (21, 17)], [(1, ICON_MID)])
+    return px, ()
 
 
 def icon_compression():
-    """R: четыре стрелки-треугольника сходятся к сжатому ядру."""
+    """R: две волны с противоположных углов, стрелки толкают их навстречу."""
     px = {}
-    for x, y in ((7, 7), (8, 7), (7, 8), (8, 8)):
-        px[(x, y)] = ICON_WHITE
-    for k in range(3):
-        c = ICON_LIGHT if k < 2 else ICON_MID
-        for t in range(7 - k, 9 + k):
-            px[(t, 4 - k)] = c   # сверху, остриём вниз
-            px[(t, 11 + k)] = c  # снизу
-            px[(4 - k, t)] = c   # слева
-            px[(11 + k, t)] = c  # справа
-    return px
+    for ox, oy, a0, a1, sx in ((23.0, 1.0, 94, 176, -1), (1.0, 23.0, -86, -4, 1)):
+        # волна выгнута к центру
+        _arc(px, ox, oy, 10.0, a0, a1, 1.0, 3.0, [(1, ICON_WHITE)])
+        # стрелка из угла: остриё в вогнутости волны
+        tx, ty = (18, 5) if sx < 0 else (5, 18)
+        for i in range(5):
+            px[(tx - sx * i, ty + sx * i)] = ICON_MID if i > 2 else ICON_LIGHT
+        for i in range(1, 4):
+            px[(tx, ty + sx * i)] = ICON_LIGHT
+            px[(tx - sx * i, ty)] = ICON_LIGHT
+    # сжатый воздух между волнами
+    for p in ((11, 12), (12, 11)):
+        px[p] = ICON_LIGHT
+    return px, ()
 
 
 def make_ability_icons():
     for name, draw in (("primary", icon_primary), ("wave", icon_wave),
                        ("flight", icon_flight), ("compression", icon_compression)):
-        _icon_save(draw(), name)
+        pixels, dark = draw()
+        _icon_save(pixels, name, dark)
     print("ability icons saved")
 
 

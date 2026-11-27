@@ -10,7 +10,7 @@ process_mode = 3
 layer = 10
 visible = false
 script = ExtResource("1")
-settings_element = ExtResource("3")
+reality = ExtResource("3")
 
 [node name="Shade" type="ColorRect" parent="."]
 texture_filter = 1

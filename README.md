@@ -1,330 +1,74 @@
 # Nelvar
 
-**Nelvar** is a pixel-art 2D roguelike with a top-down perspective, where mutation serves as both the primary means of character progression and a constant source of danger.
+**A pixel-art top-down action roguelike where every mutation is a trade-off.**
 
-Unlike traditional roguelikes, where characters gradually grow stronger, in Nelvar, every advantage comes at a cost.
+You play a **Wanderer** — a paradoxical being whose versions died in all four
+elemental realities and went on existing anyway. Reality can't tolerate you: the
+longer you stay and the more you do, the sooner it throws you out into the
+next one, until there is nowhere left but the Void.
 
-## Concept
+To survive, you mutate. But every mutation that gives you something takes
+something away — and you share your body with three other versions of
+yourself, who pick mutations for their own element, not yours.
 
-The world of Nelvar is inhabited by creatures for whom mutation is a natural part of existence.
+> **Nelvar is not a game about endlessly accumulating power, but about
+> surviving through constant adaptation.**
 
-Players take control of one of the **Wanderers** — paradoxical beings whose very existence defies the conventional laws of reality.
+## Features
 
-Every Wanderer is forced to constantly evolve, adapting to the surrounding world and the consequences of their own mutations.
+- **Mutations with a cost.** Twenty-one mutations across three layers — body,
+  abilities and rules — each with a gain and a drawback. Some reshape how you
+  play: flight that no longer protects you, armour that only works while you
+  stand still, power that awakens near death.
+- **Four versions, one body.** Your Air version picks its own mutations, while
+  your Earth, Fire and Ice versions pick theirs. You see whose turn is next and
+  plan around it, but over the run you control less and less.
+- **Fast, readable combat.** Wind shots, a wave that turns enemy projectiles
+  back, a compression that crushes one target and a flight that carries you over
+  danger. Every enemy attack is shown before it lands.
+- **Procedural worlds.** Floating islands joined by wooden bridges over a sea
+  of clouds, with groves and rocks — layout and pixel art alike generated from
+  a seed.
+- **The Void and the Only One.** A final route across drifting debris of all
+  four realities, and a four-phase boss whose attacks are about geometry rather
+  than damage.
 
-**The game's core principle: to gain something, you must sacrifice something in return.**
+## Status
 
-## Development
+The first playable stage is close: the Air location, its enemies, the
+mutation system, the Void and the final boss are in. The Earth, Fire and Ice
+locations are in progress, followed by the full run from the first location to
+the boss. Development continues after that.
 
-Nelvar is currently in the early stages of active development.
+## Controls
 
-The current priority is to create a playable prototype featuring a fully developed character and a functional procedural environment generation system.
+| Key | Action |
+|---|---|
+| WASD / arrows | Move |
+| Ctrl | Toggle running |
+| Shift | Flight |
+| LMB | Wind shot (hold to keep firing) |
+| RMB | Wind wave |
+| R | Compression on the enemy nearest to the cursor |
+| E | Choose a ripe mutation |
+| Mouse wheel | Zoom |
+| Esc | Pause and mutation inventory |
 
-Gameplay mechanics, content, and technical implementation will gradually expand as the project evolves.
+## Running
 
-**Nelvar is not a game about endlessly accumulating power, but about surviving through constant adaptation.**
+Open `project.godot` in **Godot 4.7.2** and press **F5**. No other
+dependencies are needed.
 
-## Map prototype
+## Documentation
 
-Open `project.godot` in **Godot 4.7.2** and press **F5**. No external dependencies
-are required. Each launch generates a new random seed, displayed
-in the upper-left corner and printed to Output.
+The design documents are in Russian.
 
-- **WASD / arrow keys:** walk.
-- **Ctrl:** toggle running.
-- **Shift:** short flight (speed boost); airborne the player ignores contact damage.
-- **LMB:** wind projectile. **RMB:** wind wave. **R:** compression on the enemy nearest to the cursor.
-- **E:** open the choice of a ripe mutation (see Mutations below).
-- **Mouse wheel:** zoom the camera attached to the player.
-- **F4** (debug builds): fill the adaptation meter at once.
-- **F3:** show occupied chunks, collision boundaries, trunk circles, rock footprints and island IDs.
+- [`docs/VISION.md`](docs/VISION.md) — what the game should be and why.
+- [`docs/LORE.md`](docs/LORE.md) — the world of Nelvar.
+- [`docs/GDD.md`](docs/GDD.md) — rules, mechanics and numbers.
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — project structure,
+  generators, sound pipeline, tests (in English).
 
-The player (`player/player.tscn`) is drawn from two animated layers: legs play
-the locomotion, the torso follows it or plays an attack on top. The node origin
-is at the feet, under a circular collider of `NelvarPlayer.BODY_RADIUS`; aiming
-and attacks start from the body center (`AimPivot`). Hopper enemies spawn on
-walkable ground around the player, away from trunks. At zero HP the scene
-restarts with a new seed.
+## Licence
 
-### Enemies
-
-The spawner (`enemies/enemy_spawner.gd`) brings several kinds: each spawn picks
-an `NelvarEnemyKind` (scene, weight, own cap) among those below their cap. On the
-air map: hoppers (weight 3), Runners (weight 2, at most 4 alive) and Whistlers
-(weight 1, at most 3 alive).
-
-- **Прыгун** (`enemies/hopper/`) — a ball that hops about at random; hurts on touch.
-- **Свистун** (`enemies/whistler/`) — a hollow sack of dry reed rooted in the
-  ground, with a tube for a mouth that turns after the player. Within 640 of the
-  player it draws breath for 0.9 s — swells, quivers, air streams into the tube and
-  it whistles higher; the tube stops following 0.25 s before the blow — and blows
-  slow pink soap bubbles: a fan of 3–5, or (30%) a trill of three aimed one by one.
-  A bubble floats above its shadow, which is its collider; it hurts a walking player
-  (10) and passes a flying one, bursts on trunks and rocks but drifts over shores
-  and rails. The LMB shot bursts it; the RMB wave turns it back (`deflect`): it
-  takes the colours of the wind, flies twice as fast toward an enemy near the
-  wave's direction and hits it for 30. R compression breaks off a breath. 45 HP,
-  light contact damage; a wave only rocks it.
-
-- **Бегунок** (`enemies/runner/`) — a tiny fluffy bird on long legs. It chases
-  the player at 250 (slower than a walk), curving round to come from the side, and
-  Runners keep a little apart. When the player is 160–390 away and nothing stands
-  between them it winds up for 0.6 s — crouches, scratches the ground, chirps, and a
-  dashed orange arrow grows along the ground, following the player until it turns
-  light and locks 0.18 s before the dash — then dashes 760 for 0.42 s, hurting 14
-  instead of 8, with a wind trail behind. A miss ends in a skid and a moment out of
-  breath. A dash into a trunk or rock bounces it off stunned for 1.4 s (stars over its
-  head, harmless to touch); an RMB wave that catches it winding up or dashing knocks
-  it over for 0.9 s; R compression cancels the dash. 35 HP; it dies in a puff of
-  feathers.
-
-Enemy sounds are positional (`AudioStreamPlayer2D`); those that must outlive
-their source (a popped bubble, a dead Whistler) are played by
-`NelvarOneShotSound`, which also skips the same sound repeated within 40 ms.
-
-### Mutations
-
-Every mutation gives something and takes something (`mutations/`). The
-player's body adapts to what it lives through: the **adaptation** meter
-above the level line fills from lost health (most), kills and, slowly, time.
-A full meter ripens a mutation, and each ripening belongs in advance to one of
-the four linked versions of the Wanderer — the player's own (Air), Earth, Fire,
-Ice — or to none (spontaneous). The next owners are shown as element sigils
-next to the meter, so the player can plan around them.
-
-- **The player's own** waits: the sigil pulses, the meter stops and **E**
-  opens three cards (the game pauses; 1/2/3 or a click picks, Esc/E puts it
-  off). Left waiting for 40 s, another version seizes it and picks from the
-  same cards for itself.
-- **Another version's** is picked by that version from three cards by what
-  its element values (`NelvarMutation.VERSION_WEIGHTS`: Air — speed and
-  flight, Earth — health and defence, Fire — damage, Ice — cooldowns and
-  control). Each card says which version would like it.
-- **Spontaneous** ones are random.
-
-Received mutations line up along the top of the screen as small tiles (first
-letter, frame in the colour of the version that picked it, a mark of its layer,
-one pip per stage); hovering one shows its short summary. **Esc → Инвентарь**
-lists them all with exact numbers, layer and who picked each stage.
-
-The player's share of ripenings falls from 70% to 25% over the first 12
-mutations. Taking a mutation again deepens it to stage II (both sides doubled).
-Mutations come in three layers: **body** (stat trades), **ability** (how a skill
-works: split shot, piercing wind, longer or broader wave, longer flight, ...)
-and **rule** (hollow vortex — flight no longer protects; rooting — armour when
-standing still; storm core; last breath). The catalog is
-`mutations/mutation_catalog.gd`; stats live in `NelvarStats`, which the player
-reads instead of its exports; the meter, the queue and the choice are
-`NelvarMutationDirector` under the player; the HUD is `ui/mutations/`.
-
-### Sound
-
-Three audio buses (`default_bus_layout.tres`): **Master**, **Music** and **SFX**.
-Every music player sends to Music and every sound to SFX; their volumes are
-set in Settings → «Аудио» (main menu and pause menu alike) and saved in
-`user://settings.cfg` (`GameSettings`). The settings panel is split into tabs:
-«Экран», «Интерфейс», «Аудио».
-
-Music during a run is the `GameMusic` autoload (`scripts/game_music.gd`): a
-track fades in, plays to its end, fades out, then 30 s of silence and the next
-track is picked at random from `PLAYLIST` (`assets/audio/music/game/`). It
-keeps playing through the pause menu and through a restart after death, and
-fades out when the main menu opens.
-
-Sound effects are synthesised by `tools/gen_sfx.py` (numpy only) into
-`assets/audio/sfx/`; run `python3 tools/gen_sfx.py` from the project root to
-rebuild them. The LMB shot has no sound of its own: each shot feeds a small,
-looped wind (`wind.wav`, `ShotWind` under the player) that holds while the
-next shot is due and dies down without shots. A tap is a short breath of wind,
-held LMB one even wind of the same volume — five separate sounds a second
-would wear the ear out. The wind eases in and drifts away rather than
-switching on and off; volume, fade and easing are exports on the player
-(`shot_wind_*`). The RMB wave is one gust that rushes ahead with it and sinks as
-it spreads (`wind_wave_1..3.wav` via `wind_wave.tres`, `WaveSound`). The R
-compression rushes air in and strikes softly on impact
-(`compression_start_*`), then holds a looped tight wind whose pitch rises over
-the squeeze (`compression_hold.wav`); when the compression ends, early or not,
-both fade out instead of cutting off. Flight (Shift) takes off with a soft upward gust
-(`flight_lift_*`), keeps a looped rush of air while airborne that is louder the
-faster the player flies (`flight_air.wav`, `FlightAir`) and settles with a
-soft low puff on landing (`flight_land_*`).
-The Whistler draws breath with a rising whistle (`whistler_inhale_*`, 0.9 s, as
-long as the breath), blows a fan with a falling "pfoo" (`whistler_blow_*`) or a
-trill of three notes (`whistler_toot_1..3`, played in order), knocks hollow when
-hit (`whistler_hurt_*`) and wheezes as it deflates (`whistler_death_*`). Its
-bubbles pop (`bubble_pop_*`) and, turned back by the wave, bounce off with a
-springy "bwip" (`bubble_deflect_*`).
-The Runner patters with every footfall (`runner_step_*`, quiet), chirps through
-its windup (`runner_chirp_*`, 0.6 s), takes off with a flutter and a rush of air
-(`runner_dash_*`), scrapes into a skid (`runner_skid_*`), bonks into trunks and
-tweets dizzily (`runner_bonk_*`), peeps when hit (`runner_hurt_*`) and dies with a
-squawk and a puff of feathers (`runner_death_*`).
-
-The final boss has its own sounds in `assets/audio/sfx/boss/`, synthesised by
-`tools/gen_boss_sfx.py` (`boss_sfx_a.py`, `boss_sfx_b.py`, shared tools in
-`boss_sfx_common.py`). Every sound has three candidate variants:
-`--preview DIR` writes them all for listening, `--pick name=k ...` writes the
-chosen ones into the game. They are played by `NelvarBossSound`
-(`scripts/void/boss/boss_sound.gd`) as positional sounds where the attack
-happens: the aim, lock and rush of a dash, a tear charging and erupting and then
-crackling, a gravity well appearing, charging (timed to end on its burst), stopping
-still and bursting (twins differ in pitch), a rift cracking and opening (the sound
-rides the light along it) and then humming, the collapse's quickening ticks, strike
-and reversal, the shard rings' charge, launch and turn, a shard hitting, and the
-squeeze's groan, rising spiral, the beacon of the way out at the gap and the final
-blast. Around the boss: its intro, a low presence that sinks with every phase, hits,
-phase shifts and death. Hits, cracks and many rifts at once have a shortest gap and
-a voice limit, so a burst of them is heard as one event. Loops
-(`boss_presence`, `trail_crackle`, `rift_hum`, `squeeze_beacon`) are imported
-with loop mode Forward.
-
-`test_world.tscn` is a flat arena for tuning combat without the generator (F6).
-
-### The Void (developer menu)
-
-Settings → «Меню разработчика» → «Запускать игру в Пустоте» makes «Играть» open
-`scenes/void.tscn` instead of the earth map. The player wakes on debris of all four
-realities — torn earth, rocks, fallen trunks, ice, cooling basalt, cloud-stone,
-paved ruins and violet shards — hanging over the dark Void, and makes their way to
-the monolith: a black-grey angular island that is the same in every run.
-
-Debris has no walls. Off its edge the player keeps going for a moment
-(`NelvarVoidData.COYOTE_TIME`), so narrow gaps are walked over, wider ones need a
-run-up (Ctrl) and the widest need the flight (Shift); otherwise they fall, lose a
-little HP, come back where they last stood firmly and are told what that crossing
-takes. Some pieces drift between their neighbours and carry the player, some fade
-out of existence for a while. Faint threads of light across the gaps mark the
-route; their look tells a step, a run-up and a flight apart.
-
-Gaps are measured the way a player crosses them: straight from the middle of one
-piece towards the middle of the next, and lines a little to either side must stay
-within reach too (`NelvarVoidData.crossing_gap`, `slack_gap`). The test plays whole
-Voids with the real player, from the spawn to the arena, without a single fall.
-The layout comes from `NelvarVoidGenerator` (seeded like the earth map), the art
-from `NelvarDebrisPainter`, the sky from `scripts/void/void_sky.gdshader`.
-
-Stepping into the arena on the monolith starts the boss fight (`NelvarVoidArena`):
-the edge is sealed, the Void opens its eyes and the Only One (Единственный,
-`scripts/void/boss/`) forms out of the sigil. It is one body that the fight bends
-out of shape, its contours always lagging a moment behind it:
-
-Each phase has its own 3200 HP: the bar at the top shows only the current phase,
-empties, and fills up again in the next phase's colour; diamonds under it count
-the phases. The attacks follow three rules: the difficulty is in their geometry,
-they get in the way of hitting the boss, and every one can be avoided at plain
-walking or running speed.
-
-- **I · Единственный** — a hunched figure with an empty face and a huge left arm.
-  A dash that leads the player (the aim follows them, then locks just before it
-  goes) and leaves a tear in space that bursts out to both sides a second later;
-  a gravity well that pulls harder and grows its burst circle as it charges; a
-  rift whose energy runs along it as a wave and stays open for 2 s.
-- **II · Искажение** — the limbs come loose from the body. Two leading dashes, a
-  well that creeps after the player and stops before it bursts, three parallel
-  rifts that cut the floor into narrow corridors.
-- **III · Отторжение** — it stretches, squashes and blinks part by part. Three
-  dashes whose tears all stay open and divide the arena; twin wells circling one
-  point, pulling in turn and bursting one after the other; a maze of crossing
-  rifts that closes one corridor after another, always leaving a way out; the
-  collapse: 42° sectors turning around the boss with 18° lanes between them, no
-  safe spot at its feet, and a warned reversal.
-- **IV · Поглощённый** — only a crawling silhouette hovering in the centre. Two
-  rings of shards on spiral paths that curl back the other way, the second ring
-  crossing the first; and the squeeze: an accelerating ring of the Void whose one
-  gap sweeps around the boss.
-
-Every hazard shows itself before it hurts (a dash even draws its path); flight
-(Shift) passes through all of them. The fight is lit by the boss and its attacks
-(violet 2D lights on the dark arena), throws pixel sparks, and shakes the picture
-itself (`NelvarVoidScreen`: shockwaves, tearing, colour fringes, slow motion at
-phase changes and at its death); a title card announces it and each phase. Losing the fight brings the same Void back with the player at the arena's
-door. Defeating the Only One lifts the seal. The monolith is painted on a worker
-thread, so the Void loads as fast as before.
-
-The earth map contains 2–3 large floating islands and 6–7 small ones, connected
-by narrow wooden bridges. Shorelines and bridge sides block movement; falling
-and height differences are not implemented yet.
-
-The world wears the style of the air reality from the main menu. The islands
-float above a sea of clouds (`scripts/world/cloud_sea.gd` and its shader): puffy
-pixel clouds in overlapping rows, lit from the upper right and dithered like the
-menu art, with small gaps where the sky shows through. The sea lies deeper than
-the islands, so it follows the camera with parallax, and drifts smoothly with the
-wind. It is computed once per cloud pixel in a small viewport and stretched over
-the screen with a sub-pixel offset. Thin wind streaks, as in the menu, fly over
-the world (`scripts/fx/wind_particles.gd`).
-
-Bridge decks, board seams, rails, end caps and posts are generated procedurally
-and baked onto the same world pixel grid as the islands. Angled bridges are
-rasterized before display, so the finished pixels remain aligned with the
-terrain. The experimental bridge tile remains in `assets/textures/bridge/`
-for later use and is not loaded by the renderer.
-
-Island artwork is painted procedurally after map generation: pale grass and
-earth patches, stepped shorelines, layered cliffs, branching roots, individual
-grass tufts and small flowers beside some of them. Artwork follows a shared world pixel grid and is baked once per
-island; chunks display regions of those same textures to avoid seams. Painting
-does not modify the generated surface, bridges or physics. Grass avoids bridge
-landings. The same seed and style reproduce the same artwork.
-
-Visual settings are exposed in `resources/earth_terrain_style.tres`:
-`pixel_size` is measured in world units (4 by default), `cliff_depth` and
-`root_length` in terrain pixels, `grass_density` controls tuft placement and
-`flower_density` the share of tufts with a flower.
-
-Trees are generated in groves, leaving open ground between groups. Their
-placement uses a separate seeded generator with minimum trunk spacing, clear
-island hubs, reserved bridge routes and a clear spawn area. Each tree gets a
-different canopy silhouette, palette, bark and size, baked to the terrain's
-world pixel grid. Forest density, group sizes and clearances are exposed in
-`resources/earth_forest_config.tres`.
-
-Every trunk has a circular `StaticBody2D` collider. Trees and the player share
-the `Actors` Y-sort layer, sorted at their ground origins: the player is drawn
-behind trees when above their bases and in front when below. Canopies stay
-opaque. Collision only affects trunks, so the player can walk under foliage.
-
-Rocks and bushes are scattered after the forest (`NelvarPropGenerator`). Rocks
-keep the same hubs, bridge routes, spawn area and passages open as trunks, have
-an elliptic footprint collider and stop the player, enemies and projectiles.
-Bushes gather at the foot of trees and in the open and can be walked through.
-Neither is placed where a tree crown would hide it. Both Y-sort with the player
-and outline it when it stands behind them. Counts and sizes are exposed in
-`resources/earth_prop_config.tres`; clearances come from the forest config.
-
-Generation parameters are exposed in `resources/earth_map_config.tres`.
-The generator plans the islands and connected bridge graph, shapes the shores,
-and subdivides the surface into a quadtree. Interior leaves can remain large;
-shore and bridge regions subdivide down to 256 world pixels by default. Each
-occupied leaf owns its clipped geometry and boundary collisions. Shared island
-geometry keeps neighboring chunks consistent, including bridge landings.
-
-To reproduce a map from its seed, pass a command-line argument after `--`:
-
-```sh
-godot --path . -- --seed=20261120
-```
-
-Run the generation and physics checks without opening a window:
-
-```sh
-godot --headless --path . --script tests/test_world.gd -- --seeds=100
-godot --headless --path . --script tests/test_terrain.gd
-godot --headless --path . --script tests/test_forest.gd -- --seed=20261120
-godot --headless --path . --script tests/test_props.gd
-godot --headless --path . --script tests/test_void.gd -- --seeds=50 --walks=6
-godot --headless --path . --script tests/test_mutations.gd
-godot --headless --path . --script tests/test_whistler.gd
-godot --headless --path . --script tests/test_runner.gd
-```
-
-Here `godot` means the path to your Godot 4.7.2 executable. The checks cover
-island counts, connectivity, determinism, chunk geometry, spawn clearance,
-bridge landings, actual character movement and collision boundaries.
-Terrain checks cover repeatable island and bridge artwork across different
-chunk subdivisions, surface coverage, grass and flower settings, hanging roots
-and unchanged map geometry.
-Forest checks cover repeatable groves and tree art, trunk spacing, clear bridge
-routes, circular colliders and actual movement into and around a tree.
-Prop checks cover rock and bush placement rules, repeatable prop art, rock
-colliders that stop the player and bushes the player walks through.
+[MIT](LICENCE)
