@@ -125,7 +125,7 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "Полный экран"
-metadata/hint = "F11 — переключить в любой момент"
+metadata/hint = "Игра на весь экран, без рамки окна"
 
 [node name="InterfacePage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
 visible = false
@@ -137,7 +137,7 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "Панель информации"
-metadata/hint = "Сид мира, статистика и управление. F12 — показать или скрыть в игре"
+metadata/hint = "Сид мира, статистика и управление поверх игры"
 
 [node name="VignetteLevel" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/InterfacePage"]
 unique_name_in_owner = true
@@ -147,7 +147,7 @@ title = "Виньетка урона"
 step = 0.1
 zero_text = "выкл."
 fill_color = Color(0.86, 0.3, 0.3, 1)
-metadata/hint = "Красный край экрана при получении урона. Стрелки или колесико мыши — изменить"
+metadata/hint = "Красный край экрана при получении урона"
 
 [node name="VignetteDirection" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/InterfacePage"]
 unique_name_in_owner = true
@@ -167,7 +167,7 @@ layout_mode = 2
 script = ExtResource("3")
 bus = &"Master"
 title = "Общая громкость"
-metadata/hint = "Громкость всей игры. Стрелки или колесико мыши — изменить"
+metadata/hint = "Громкость всей игры"
 
 [node name="MusicVolume" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/AudioPage"]
 unique_name_in_owner = true
@@ -175,7 +175,7 @@ layout_mode = 2
 script = ExtResource("3")
 bus = &"Music"
 title = "Музыка"
-metadata/hint = "Музыка меню и забегов. Стрелки или колесико мыши — изменить"
+metadata/hint = "Музыка меню и забегов"
 
 [node name="SfxVolume" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/AudioPage"]
 unique_name_in_owner = true
@@ -183,7 +183,7 @@ layout_mode = 2
 script = ExtResource("3")
 bus = &"SFX"
 title = "Звуки"
-metadata/hint = "Удары, шаги, интерфейс. Стрелки или колесико мыши — изменить"
+metadata/hint = "Удары, шаги, интерфейс"
 
 [node name="DevPage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
 unique_name_in_owner = true
