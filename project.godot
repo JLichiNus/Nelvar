@@ -21,6 +21,7 @@ FullscreenToggle="*res://scripts/fullscreen_toggle.gd"
 GameSettings="*res://scripts/game_settings.gd"
 DisplayOverlay="*res://ui/display_overlay.gd"
 GameMusic="*res://scripts/game_music.gd"
+DevConsole="*res://ui/console/dev_console.gd"
 
 [display]
 

@@ -35,6 +35,7 @@ func bind(director: NelvarMutationDirector) -> void:
 	director.mutation_applied.connect(func(mutation: NelvarMutation, _s, _o, _i) -> void:
 		_rebuild()
 		_highlight(mutation.id))
+	director.mutation_removed.connect(func(_mutation: NelvarMutation) -> void: _rebuild())
 	_rebuild()
 
 

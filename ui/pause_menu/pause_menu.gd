@@ -121,7 +121,8 @@ func _ready() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if not event.is_action_pressed("ui_cancel"):
+	# Esc in the open console closes the console, not the run.
+	if not event.is_action_pressed("ui_cancel") or DevConsole.is_open():
 		return
 	get_viewport().set_input_as_handled()
 	if not _open:

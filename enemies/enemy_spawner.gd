@@ -1,3 +1,4 @@
+class_name NelvarEnemySpawner
 extends Node2D
 ## Без мира враги появляются в spawn_area (тестовая сцена). Со сгенерированным
 ## миром (start(world, forest, props)) — на суше в кольце вокруг игрока,

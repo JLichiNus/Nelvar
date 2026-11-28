@@ -125,6 +125,10 @@ const ATTACK_PRIORITY := {
 ## The exports above are the base values; mutations change them through
 ## stats (see NelvarStats), and the code reads the current values from it.
 var stats := NelvarStats.new()
+## Console (/god): nothing can hurt the player.
+var god_mode := false
+## Console (/cooldowns off): abilities are ready again right after use.
+var no_cooldowns := false
 var aim_direction := Vector2.RIGHT
 var _primary_cooldown_left := 0.0
 # Shots in the current burst and time since the last one (for the sound).
@@ -209,6 +213,8 @@ func _process(delta: float) -> void:
 	_primary_cooldown_left = maxf(_primary_cooldown_left - delta, 0.0)
 	_wave_cooldown_left = maxf(_wave_cooldown_left - delta, 0.0)
 	_compression_cooldown_left = maxf(_compression_cooldown_left - delta, 0.0)
+	if no_cooldowns:
+		reset_cooldowns()
 
 	# Стоя на месте Ctrl ничего не делает.
 	if Input.is_action_just_pressed("toggle_run") and _is_move_input_held():
@@ -486,7 +492,7 @@ func recover_at(point: Vector2) -> void:
 
 ## `from`: world point the hit came from (for the damage vignette); INF if none.
 func take_damage(amount: float, from: Vector2 = Vector2.INF) -> void:
-	if _is_dead or is_flight_protected() or _invulnerability_left > 0.0 \
+	if _is_dead or god_mode or is_flight_protected() or _invulnerability_left > 0.0 \
 			or amount <= 0.0:
 		return
 	amount *= _damage_taken_multiplier()
@@ -497,6 +503,48 @@ func take_damage(amount: float, from: Vector2 = Vector2.INF) -> void:
 		_die()
 		return
 	_invulnerability_left = stats.value(&"invulnerability")
+
+
+## Console: health straight to `value` (kept within 0..maximum), past armor,
+## invulnerability and god mode. A loss counts as damage (the vignette, the
+## adaptation meter); reaching zero kills.
+func set_health(value: float) -> void:
+	if _is_dead:
+		return
+	var target := clampf(value, 0.0, get_max_health())
+	var lost := health - target
+	health = target
+	_emit_health()
+	if lost > 0.0:
+		damaged.emit(lost, Vector2.INF)
+	if health <= 0.0:
+		_die()
+
+
+## Console: jumps to `value` with no kills toward the next level.
+func set_level(value: int) -> void:
+	level = maxi(value, 1)
+	level_kills = 0
+	level_changed.emit(level, level_kills, kills_to_next_level())
+
+
+## Console: every ability is ready at once (flight lands first if airborne).
+func reset_cooldowns() -> void:
+	_primary_cooldown_left = 0.0
+	_wave_cooldown_left = 0.0
+	_compression_cooldown_left = 0.0
+	if _speed_boost_state == SpeedBoostState.COOLDOWN:
+		boost_cooldown_timer.stop()
+		_on_boost_cooldown_timeout()
+
+
+## Console: moves the player to `point` without the camera sliding there.
+func teleport(point: Vector2) -> void:
+	if _is_dead or _is_falling:
+		return
+	global_position = point
+	velocity = Vector2.ZERO
+	camera.reset_smoothing()
 
 
 func _damage_taken_multiplier() -> float:

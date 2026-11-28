@@ -28,6 +28,39 @@ Debug keys: **F3** shows occupied chunks, collision boundaries, trunk circles,
 rock footprints and island IDs; **F4** (debug builds only) fills the
 adaptation meter at once.
 
+### Console
+
+In debug builds **/** opens the developer console during a run (the slash
+key itself, whatever the layout). It works like a game chat with commands:
+the game stands still while it is open, the list above the line shows what
+may be typed next (a mutation is also found by its Russian title), the rest
+of the chosen word is greyed out in the line. **Tab** takes it, **↑↓** walk
+the list or, on a bare "/", the history; **Enter** runs the command and
+closes the console, **Esc** just closes it. Answers stay over the game for a
+few seconds; the mouse wheel scrolls them back while the console is open.
+
+`/help` lists the commands, `/help <command>` shows every form of one:
+
+- `/mutation give <id> [stage] [owner]`, `upgrade <id|all>`,
+  `remove <id|all>`, `list`, `catalog`, `ripen [owner]`, `adapt <amount>`;
+- `/hp add|remove|set <amount>`, `/hp full`, `/hp max <amount>` (base
+  maximum); `remove` and `set` pass armor and invulnerability;
+- `/god [on|off]`, `/cooldowns reset|off|on`, `/level set|add <n>`;
+- `/spawn <enemy> [count]` (at the cursor), `/kill [enemy|boss]` (without an
+  argument every enemy but the boss), `/spawner on|off`;
+- `/tp` (to the cursor) or `/tp <x> <y>`, `/timescale <scale>` (kept until
+  `/restart` or a new `/timescale`), `/stats [all]`, `/restart`, `/clear`.
+
+Code: `ui/console/` — `dev_console.gd` (the `DevConsole` autoload: the look
+and the keys), `command_tree.gd` (parsing and hints), `console_node.gd` (a
+word or an argument of a command), `console_commands.gd` (the commands).
+A command is a tree of `NelvarConsoleNode`; a node with a handler may end
+the command, so a handler on a node with children makes the rest optional.
+The mutation director and the player have small console-only methods
+(`grant`, `remove`, `ripen_now`; `set_health`, `set_level`,
+`reset_cooldowns`, `teleport`, `god_mode`, `no_cooldowns`). Tests:
+`tests/test_console.gd`.
+
 ## Player
 
 `player/player.tscn` is drawn from two animated layers: legs play the

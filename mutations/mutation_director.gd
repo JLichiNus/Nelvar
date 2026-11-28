@@ -27,6 +27,8 @@ signal pending_changed(pending: bool)
 ## A mutation took effect. owner: NelvarMutation.Version or SPONTANEOUS.
 ## intercepted: the player's mutation was seized by another version.
 signal mutation_applied(mutation: NelvarMutation, stage: int, owner: int, intercepted: bool)
+## A mutation was taken away (console).
+signal mutation_removed(mutation: NelvarMutation)
 
 @export_category("Adaptation")
 @export var first_threshold: float = 100.0
@@ -177,6 +179,65 @@ func owned() -> Array[Dictionary]:
 ## The stage `mutation` would get if taken now.
 func next_stage(mutation: NelvarMutation) -> int:
 	return stage_of(mutation.id) + 1
+
+
+## Every mutation that can come.
+func catalog() -> Array[NelvarMutation]:
+	return _pool.duplicate()
+
+
+## The catalog's mutation `id`, null if there is none.
+func find(id: StringName) -> NelvarMutation:
+	return _find(id)
+
+
+## Console: `id` takes `stage` at once, as if `owner` picked every stage it
+## gains. A lower stage than the current one takes the rest back. False for
+## an unknown id or a stage outside 1..max_stage.
+func grant(id: StringName, stage: int, owner: int = player_version) -> bool:
+	var mutation := _find(id)
+	if mutation == null or stage < 1 or stage > mutation.max_stage or _player == null:
+		return false
+	if not _stages.has(id):
+		_order.append(id)
+		_owners[id] = [] as Array[int]
+	var owners: Array[int] = _owners[id]
+	mutation_count += stage - stage_of(id)
+	while owners.size() < stage:
+		owners.append(owner)
+	owners.resize(stage)
+	_stages[id] = stage
+	_player.stats.set_source(StringName("mutation:%s" % id), mutation.modifiers_at(stage))
+	mutation_applied.emit(mutation, stage, owners[stage - 1], false)
+	return true
+
+
+## Console: takes `id` away with all its stages. False if it is not received.
+func remove(id: StringName) -> bool:
+	if not _stages.has(id) or _player == null:
+		return false
+	mutation_count -= int(_stages[id])
+	_stages.erase(id)
+	_owners.erase(id)
+	_order.erase(id)
+	_player.stats.set_source(StringName("mutation:%s" % id), [])
+	mutation_removed.emit(_find(id))
+	return true
+
+
+## Console: the next mutation ripens now, as if the meter filled. `owner`
+## (a Version or SPONTANEOUS) takes the turn of the queued one; any other
+## value keeps the queue. False while the player's mutation already waits.
+func ripen_now(owner: int = -2) -> bool:
+	if _pending or _player == null or _player.is_dead():
+		return false
+	if owner == NelvarMutation.SPONTANEOUS or (owner >= 0 and owner < NelvarMutation.Version.size()):
+		_queue[0] = owner
+	adaptation = 0.0
+	threshold *= threshold_growth
+	_ripen()
+	adaptation_changed.emit(adaptation, threshold)
+	return true
 
 
 func _ripen() -> void:
