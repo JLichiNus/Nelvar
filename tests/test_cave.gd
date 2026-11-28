@@ -429,7 +429,7 @@ func _check_scene() -> void:
 	await physics_frame
 	_check(game.thing_nodes.size() == data.things.size() and game.depths.frozen_nodes.size() == data.frozen.size(),
 		"Some things or frozen creatures are missing")
-	_check(game.ground.transparent and NelvarPlayer.sight_mask == NelvarCaveData.WALL_SIGHT_LAYER,
+	_check(game.ground.transparent and player.sight_mask == NelvarCaveData.WALL_SIGHT_LAYER,
 		"The floor is not see-through or the walls do not block sight")
 	await _check_walls_hold(game, data, player)
 	await _check_melting(game, data, player)
@@ -447,7 +447,6 @@ func _check_scene() -> void:
 	_check(game.get("_outlines").visible, "F3 does not show the outlines")
 	game.queue_free()
 	await process_frame
-	_check(NelvarPlayer.sight_mask == 0, "Leaving the cave left the sight check on")
 
 
 ## Walking into a wall, then flying into it: the player stays on the floor.

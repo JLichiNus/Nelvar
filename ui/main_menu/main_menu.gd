@@ -110,6 +110,8 @@ var _homes: Dictionary = {}
 
 
 func _ready() -> void:
+	# Back in the menu, whatever way: the run is over.
+	NelvarRun.end()
 	# The run's music fades out; the menu plays its own.
 	GameMusic.stop()
 	_material = background.material as ShaderMaterial
@@ -614,6 +616,7 @@ func _on_play_pressed() -> void:
 			scene = ICE_SCENE
 		elif GameSettings.start_on_earth:
 			scene = EARTH_SCENE
+	NelvarRun.begin()
 	get_tree().change_scene_to_file(scene)
 
 

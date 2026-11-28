@@ -205,8 +205,11 @@ func _check_gameplay() -> void:
 		for frame in 20:
 			await physics_frame
 		_check(player.is_airborne() and game.falls == falls_flying, "The flight fell into the sky")
-	game.world_view.toggle_chunks()
-	_check(game.world_view.details.show_chunks, "Chunk debug view does not toggle")
+	var key := InputEventKey.new()
+	key.keycode = KEY_F3
+	key.pressed = true
+	game._unhandled_input(key)
+	_check(game.world_view.details.show_chunks, "F3 does not show the chunks")
 	game.queue_free()
 	await process_frame
 

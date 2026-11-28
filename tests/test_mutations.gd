@@ -21,8 +21,9 @@ func _run() -> void:
 	await _check_director()
 	await _check_player_stats()
 	await _check_hud()
+	await _check_run()
 	if _failures.is_empty():
-		print("PASS: %d mutation checks; catalog, meter, choice, interception, versions, stats, HUD." % _checks)
+		print("PASS: %d mutation checks; catalog, meter, choice, interception, versions, stats, HUD, run." % _checks)
 		quit(0)
 	else:
 		for failure in _failures:
@@ -243,6 +244,52 @@ func _check_hud() -> void:
 	inventory.queue_free()
 	hud.queue_free()
 	player.queue_free()
+	await process_frame
+
+
+# The run (NelvarRun): the next location's player goes on with the same health, level
+# and mutations, a waiting choice included; with no run going each player has its own.
+func _check_run() -> void:
+	NelvarRun.begin()
+	var first := await _spawn_player()
+	var director: NelvarMutationDirector = first.get_node("Mutations")
+	director.start_share = 1.0
+	director.final_share = 1.0
+	director.spontaneous_chance = 0.0
+	director.set_seed(11)
+	director.grant(&"light_body", 1)
+	first.take_damage(10.0)
+	first.set_level(3)
+	director.add_adaptation(director.threshold)
+	var health := first.health
+	var max_health := first.get_max_health()
+	var offers := director.pending_offers().map(func(m: NelvarMutation) -> StringName: return m.id)
+	_check(director.has_pending() and health < max_health, "Run test: nothing ripened or nothing hurt")
+	first.queue_free()
+	await process_frame
+
+	var second := await _spawn_player()
+	var next: NelvarMutationDirector = second.get_node("Mutations")
+	_check(second.run == NelvarRun.current(), "The next player did not take the run")
+	_check(is_equal_approx(second.health, health) and is_equal_approx(second.get_max_health(), max_health),
+		"Health or its maximum did not carry to the next player")
+	_check(second.level == 3, "The level did not carry to the next player")
+	_check(next.stage_of(&"light_body") == 1 and next.mutation_count == 1,
+		"The mutations did not carry to the next player")
+	_check(next.has_pending() and next.pending_offers().map(func(m: NelvarMutation) -> StringName: return m.id) == offers,
+		"The waiting choice did not carry to the next player")
+	next.choose(0)
+	_check(next.mutation_count == 2 and not next.has_pending(), "The carried choice could not be taken")
+	second.queue_free()
+	await process_frame
+
+	NelvarRun.end()
+	var alone := await _spawn_player()
+	var other := await _spawn_player()
+	_check(alone.run != other.run and alone.level == 1 and alone.health == alone.get_max_health(),
+		"Without a run the players share a state or do not start fresh")
+	alone.queue_free()
+	other.queue_free()
 	await process_frame
 
 

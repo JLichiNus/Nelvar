@@ -20,6 +20,13 @@ extends Resource
 @export var text_material: Material
 ## Mouse cursor while this reality is shown; its tip is at NelvarLocationCursor.HOTSPOT.
 @export var cursor: Texture2D
+@export_group("Location")
+## The reality's colours over a location (NelvarLocationUI): the info panel's title and
+## the messages' text and outline.
+@export var hud_color: Color = Color(0.96, 0.9, 0.72)
+@export var message_color: Color = Color(0.94, 0.97, 1.0)
+@export var message_outline: Color = Color(0.12, 0.16, 0.22)
+@export_group("")
 ## Living spots of the landscape: x, y in texture UV, z = radius in UV.y units.
 ## Tuned for tools/gen_menu_backgrounds.py: statue, right tree, pond, far tree.
 @export var breath_points: PackedVector3Array

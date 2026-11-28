@@ -1,3 +1,4 @@
+class_name NelvarPauseMenu
 extends CanvasLayer
 ## Pause: resume, inventory, settings, back to the main menu, quit.
 ##

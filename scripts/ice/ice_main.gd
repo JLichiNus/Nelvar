@@ -1,5 +1,5 @@
 class_name NelvarIceMain
-extends Node2D
+extends NelvarLocation
 ## The ice valley (developer setting "Запускать игру на Льду"): a snowy plain ringed by
 ## snowy mountains, with frozen lakes, crevasses, pines under snow, drifts and
 ## petrified creatures, in the style of the "Лёд" menu background.
@@ -43,8 +43,6 @@ const STORM_CLOCK := 6.0
 ## Snow-clock seconds a mark in the snow lasts.
 const MARK_LIFE := 90.0
 const HINT_STORM := "Надвигается метель"
-const MESSAGE_FADE := 0.6
-const MESSAGE_HOLD := 2.6
 
 
 ## A blizzard's way across the valley.
@@ -113,47 +111,22 @@ var _frozen_arts: Array = []
 var _cracks: Array:
 	get:
 		return hazards.cracks if hazards != null else []
-var _message_tween: Tween
-var _show_debug := false
 var _outlines: Node2D
 
 @onready var depths: NelvarIceDepths = $Depths
 @onready var ground: NelvarCloudSea = $Ground
 @onready var world_layer: Node2D = $World
 @onready var actors: Node2D = $Actors
-@onready var player: NelvarPlayer = $Actors/Player
-@onready var enemy_spawner: Node2D = $Actors/EnemySpawner
 @onready var snowfall: NelvarWindParticles = $Snowfall
 @onready var snow_marks: NelvarSnowMarks = $SnowMarks
 @onready var blizzard: NelvarBlizzard = $Blizzard
-@onready var info_panel: Control = $HUD/Margin/Stack/Panel
-@onready var seed_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Seed
-@onready var status_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Status
-@onready var message: Label = $HUD/Message
 
 
-func _ready() -> void:
-	info_panel.visible = GameSettings.show_info_panel
-	GameSettings.info_panel_changed.connect(info_panel.set_visible)
-	message.modulate.a = 0.0
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	var world_seed := int(rng.randi())
-	for argument in OS.get_cmdline_user_args():
-		if argument.begins_with("--seed="):
-			var value := argument.trim_prefix("--seed=")
-			if value.is_valid_int():
-				world_seed = value.to_int()
-	if has_meta("seed_override"):
-		world_seed = get_meta("seed_override")
+func _build() -> void:
 	var started := Time.get_ticks_msec()
 	data = NelvarIceGenerator.new().generate(config, world_seed)
 	if data == null:
-		seed_label.text = "Долина не сложилась · сид %d" % world_seed
-		status_label.text = "Ошибка генерации. Подробности в Output."
-		info_panel.show()
-		player.set_physics_process(false)
-		player.set_process(false)
+		fail("Долина не сложилась")
 		return
 	_build_walls()
 	_paint_world()
@@ -164,8 +137,8 @@ func _ready() -> void:
 	player.camera.reset_smoothing()
 	hazards = NelvarIceHazards.new(data, player, self, snow_marks)
 	hazards.fell.connect(_update_status.unbind(1))
-	enemy_spawner.call("start_on", data)
-	seed_label.text = "ЛЁД · ДОЛИНА · СИД %d" % data.world_seed
+	enemy_spawner.start_on(data)
+	show_seed()
 	_update_status()
 	var kinds := NelvarIceData.Kind
 	print("Nelvar ice seed: %d | lakes: %d | thin: %d | frozen: %d | crevasses: %d | bridges: %d | trails: %d | pines: %d | dead: %d | rocks: %d | peaks: %d | %d ms" % [
@@ -466,7 +439,7 @@ func _process(delta: float) -> void:
 	material.set_shader_parameter("hole_count", hole_count)
 	blizzard.strength = storm_level
 	snowfall.speed_scale = 1.0 + storm_level * 2.5
-	if _show_debug:
+	if show_debug:
 		_outlines.queue_redraw()
 
 
@@ -526,31 +499,12 @@ func _update_storms(delta: float) -> void:
 	blizzard.warning_side = side
 
 
-## A line in the middle of the screen, faded in and out.
-func say(text: String) -> void:
-	if _message_tween != null:
-		_message_tween.kill()
-	message.text = text
-	_message_tween = create_tween()
-	_message_tween.tween_property(message, "modulate:a", 1.0, MESSAGE_FADE)
-	_message_tween.tween_interval(MESSAGE_HOLD)
-	_message_tween.tween_property(message, "modulate:a", 0.0, MESSAGE_FADE)
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
-		_show_debug = not _show_debug
-		_outlines.visible = _show_debug
-		_outlines.queue_redraw()
-		for node in thing_nodes:
-			if node.thing.solid:
-				node.show_collision = _show_debug
-				node.queue_redraw()
-		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			player.adjust_zoom(1.15)
-			get_viewport().set_input_as_handled()
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			player.adjust_zoom(1.0 / 1.15)
-			get_viewport().set_input_as_handled()
+## F3: the colliders and the outlines.
+func _set_debug(shown: bool) -> bool:
+	_outlines.visible = shown
+	_outlines.queue_redraw()
+	for node in thing_nodes:
+		if node.thing.solid:
+			node.show_collision = shown
+			node.queue_redraw()
+	return true

@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/void/void_main.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/world/cloud_sea.gd" id="2"]
@@ -7,21 +7,18 @@
 [ext_resource type="Script" path="res://scripts/void/void_arena.gd" id="5"]
 [ext_resource type="Script" path="res://scripts/fx/wind_particles.gd" id="6"]
 [ext_resource type="Shader" path="res://scripts/void/void_vignette.gdshader" id="7"]
-[ext_resource type="Script" path="res://ui/health_bar.gd" id="8"]
-[ext_resource type="PackedScene" path="res://ui/pause_menu/pause_menu.tscn" id="9"]
-[ext_resource type="Script" path="res://scripts/location_cursor.gd" id="cursor_script"]
-[ext_resource type="Texture2D" path="res://assets/textures/ui/cursor_void.png" id="cursor_tex"]
-[ext_resource type="Script" path="res://ui/ability_bar.gd" id="ability_bar"]
-[ext_resource type="Script" path="res://ui/level_line.gd" id="level_line"]
-[ext_resource type="Script" path="res://ui/damage_vignette.gd" id="damage_vignette"]
-[ext_resource type="PackedScene" path="res://ui/mutations/mutation_hud.tscn" id="mutation_hud"]
 [ext_resource type="Resource" path="res://ui/main_menu/elements/void.tres" id="reality_void"]
+[ext_resource type="PackedScene" path="res://ui/location_ui/location_ui.tscn" id="location_ui"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_vignette"]
 shader = ExtResource("7")
 
 [node name="Void" type="Node2D"]
 script = ExtResource("1")
+reality = ExtResource("reality_void")
+title = "ПУСТОТА"
+controls = "WASD / стрелки — ходьба   ·   Ctrl — разбег через широкую щель   ·   Shift — перелёт через пропасть
+ЛКМ — снаряд   ·   ПКМ — волна   ·   Колесо — масштаб   ·   F12 — скрыть панель   ·   Esc — пауза"
 
 [node name="Sky" type="CanvasLayer" parent="."]
 layer = -1
@@ -72,81 +69,10 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="HUD" type="CanvasLayer" parent="."]
+[node name="BossHud" type="CanvasLayer" parent="."]
 layer = 3
 
-[node name="DamageVignette" type="ColorRect" parent="HUD" node_paths=PackedStringArray("player")]
-layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-script = ExtResource("damage_vignette")
-player = NodePath("../../Actors/Player")
-
-[node name="Margin" type="MarginContainer" parent="HUD"]
-texture_filter = 1
-offset_left = 20.0
-offset_top = 20.0
-mouse_filter = 2
-
-[node name="Stack" type="VBoxContainer" parent="HUD/Margin"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 9
-
-[node name="Panel" type="PanelContainer" parent="HUD/Margin/Stack"]
-visible = false
-layout_mode = 2
-mouse_filter = 2
-
-[node name="Padding" type="MarginContainer" parent="HUD/Margin/Stack/Panel"]
-layout_mode = 2
-mouse_filter = 2
-
-[node name="Rows" type="VBoxContainer" parent="HUD/Margin/Stack/Panel/Padding"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 6
-
-[node name="Seed" type="Label" parent="HUD/Margin/Stack/Panel/Padding/Rows"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.78, 0.68, 0.98, 1)
-theme_override_font_sizes/font_size = 22
-text = "ПУСТОТА"
-
-[node name="Status" type="Label" parent="HUD/Margin/Stack/Panel/Padding/Rows"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_font_sizes/font_size = 22
-text = "Генерация…"
-
-[node name="Controls" type="Label" parent="HUD/Margin/Stack/Panel/Padding/Rows"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.72, 0.79, 0.83, 1)
-theme_override_font_sizes/font_size = 22
-text = "WASD / стрелки — ходьба   ·   Ctrl — разбег через широкую щель   ·   Shift — перелёт через пропасть
-ЛКМ — снаряд   ·   ПКМ — волна   ·   Колесо — масштаб   ·   F12 — скрыть панель   ·   Esc — пауза"
-
-[node name="HealthBar" type="Control" parent="HUD" node_paths=PackedStringArray("player")]
-layout_mode = 3
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 24.0
-offset_top = -66.0
-offset_right = 360.0
-offset_bottom = -24.0
-grow_vertical = 0
-mouse_filter = 2
-script = ExtResource("8")
-player = NodePath("../../Actors/Player")
-
-[node name="Message" type="Label" parent="HUD"]
+[node name="Message" type="Label" parent="BossHud"]
 texture_filter = 1
 anchors_preset = 12
 anchor_top = 1.0
@@ -161,7 +87,7 @@ theme_override_colors/font_color = Color(0.8, 0.72, 0.98, 1)
 theme_override_font_sizes/font_size = 33
 horizontal_alignment = 1
 
-[node name="BossBar" type="VBoxContainer" parent="HUD"]
+[node name="BossBar" type="VBoxContainer" parent="BossHud"]
 visible = false
 texture_filter = 1
 anchors_preset = 5
@@ -175,20 +101,20 @@ grow_horizontal = 2
 mouse_filter = 2
 theme_override_constants/separation = 8
 
-[node name="Name" type="Label" parent="HUD/BossBar"]
+[node name="Name" type="Label" parent="BossHud/BossBar"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.86, 0.78, 1, 1)
 theme_override_font_sizes/font_size = 33
 text = "Единственный"
 horizontal_alignment = 1
 
-[node name="Bar" type="ColorRect" parent="HUD/BossBar"]
+[node name="Bar" type="ColorRect" parent="BossHud/BossBar"]
 custom_minimum_size = Vector2(0, 15)
 layout_mode = 2
 mouse_filter = 2
 color = Color(0.03, 0.02, 0.06, 0.9)
 
-[node name="Chip" type="ColorRect" parent="HUD/BossBar/Bar"]
+[node name="Chip" type="ColorRect" parent="BossHud/BossBar/Bar"]
 layout_mode = 1
 anchors_preset = -1
 anchor_right = 1.0
@@ -200,7 +126,7 @@ offset_bottom = -3.0
 mouse_filter = 2
 color = Color(0.92, 0.86, 1, 0.85)
 
-[node name="Fill" type="ColorRect" parent="HUD/BossBar/Bar"]
+[node name="Fill" type="ColorRect" parent="BossHud/BossBar/Bar"]
 layout_mode = 1
 anchors_preset = -1
 anchor_right = 1.0
@@ -212,7 +138,7 @@ offset_bottom = -3.0
 mouse_filter = 2
 color = Color(0.56, 0.36, 0.92, 1)
 
-[node name="Edge" type="ReferenceRect" parent="HUD/BossBar/Bar"]
+[node name="Edge" type="ReferenceRect" parent="BossHud/BossBar/Bar"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -224,14 +150,14 @@ border_color = Color(0.5, 0.34, 0.82, 1)
 border_width = 3.0
 editor_only = false
 
-[node name="Hint" type="Label" parent="HUD/BossBar"]
+[node name="Hint" type="Label" parent="BossHud/BossBar"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.55, 0.5, 0.64, 1)
 theme_override_font_sizes/font_size = 22
 text = "I · Единственный"
 horizontal_alignment = 1
 
-[node name="BossTitle" type="VBoxContainer" parent="HUD"]
+[node name="BossTitle" type="VBoxContainer" parent="BossHud"]
 visible = false
 texture_filter = 1
 anchors_preset = -1
@@ -243,7 +169,7 @@ grow_horizontal = 2
 mouse_filter = 2
 theme_override_constants/separation = 6
 
-[node name="Title" type="Label" parent="HUD/BossTitle"]
+[node name="Title" type="Label" parent="BossHud/BossTitle"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.9, 0.84, 1, 1)
 theme_override_colors/font_shadow_color = Color(0.32, 0.12, 0.7, 1)
@@ -253,50 +179,11 @@ theme_override_font_sizes/font_size = 66
 text = "ЕДИНСТВЕННЫЙ"
 horizontal_alignment = 1
 
-[node name="Subtitle" type="Label" parent="HUD/BossTitle"]
+[node name="Subtitle" type="Label" parent="BossHud/BossTitle"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.62, 0.55, 0.78, 1)
 theme_override_font_sizes/font_size = 22
 text = "Пустота обрела форму"
 horizontal_alignment = 1
 
-[node name="PauseMenu" parent="." instance=ExtResource("9")]
-reality = ExtResource("reality_void")
-
-[node name="LocationCursor" type="Node" parent="."]
-script = ExtResource("cursor_script")
-cursor = ExtResource("cursor_tex")
-
-[node name="AbilityBar" type="Control" parent="HUD" node_paths=PackedStringArray("player")]
-layout_mode = 3
-anchors_preset = 3
-anchor_left = 1.0
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -300.0
-offset_top = -84.0
-offset_right = -24.0
-offset_bottom = -24.0
-grow_horizontal = 0
-grow_vertical = 0
-mouse_filter = 2
-script = ExtResource("ability_bar")
-player = NodePath("../../Actors/Player")
-
-[node name="LevelLine" type="Control" parent="HUD" node_paths=PackedStringArray("player")]
-layout_mode = 3
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 24.0
-offset_top = -102.0
-offset_right = 360.0
-offset_bottom = -75.0
-grow_vertical = 0
-mouse_filter = 2
-script = ExtResource("level_line")
-player = NodePath("../../Actors/Player")
-
-[node name="MutationHud" parent="." node_paths=PackedStringArray("player") instance=ExtResource("mutation_hud")]
-player = NodePath("../Actors/Player")
+[node name="Interface" parent="." instance=ExtResource("location_ui")]

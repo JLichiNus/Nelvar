@@ -140,7 +140,8 @@ var aim_direction := Vector2.RIGHT
 var traction := 1.0
 ## Physics layers that block the player's sight (the ice cave's walls): the wind wave and
 ## the compression only reach enemies the player can see. 0 (every other map): no check.
-static var sight_mask := 0
+## The location sets it on its own player.
+var sight_mask := 0
 ## Shared modifiers (the ice valley's blizzard; mutations later): a multiplier of the
 ## movement speed, and of the rate of attacks (cooldowns, animations, projectiles).
 var move_scale := 1.0
@@ -159,10 +160,25 @@ var _compression_cooldown_left := 0.0
 var _speed_boost_state := SpeedBoostState.READY
 # Ctrl переключает бег/ходьбу; любая атака или остановка сбрасывает бег.
 var _is_running := false
-var health: float
-var level := 1
+## The run this player belongs to (NelvarRun.attach() in _ready): health, level and
+## mutations live there and carry to the next location.
+var run := NelvarRunState.new()
+var health: float:
+	get:
+		return run.player.health
+	set(value):
+		run.player.health = value
+var level: int:
+	get:
+		return run.player.level
+	set(value):
+		run.player.level = value
 ## Kills since the last level-up.
-var level_kills := 0
+var level_kills: int:
+	get:
+		return run.player.level_kills
+	set(value):
+		run.player.level_kills = value
 var _invulnerability_left := 0.0
 var _is_dead := false
 var _flight_tween: Tween
@@ -213,8 +229,16 @@ var _shown_health := 0
 
 func _ready() -> void:
 	_init_stats()
-	health = get_max_health()
-	_max_health_now = health
+	run = NelvarRun.attach()
+	# The run's mutations go back onto the stats before health is read off them.
+	var director := get_node_or_null(^"Mutations") as NelvarMutationDirector
+	if director != null:
+		director.attach(run.mutations)
+	_max_health_now = get_max_health()
+	if health < 0.0:
+		health = _max_health_now
+	health = minf(health, _max_health_now)
+	stats.changed.connect(_on_stats_changed)
 	# Enemies report kills to this group (register_kill).
 	add_to_group(&"player")
 	(collision_shape.shape as CircleShape2D).radius = BODY_RADIUS
@@ -658,7 +682,6 @@ func _init_stats() -> void:
 	}
 	for stat in bases:
 		stats.set_base(stat, bases[stat])
-	stats.changed.connect(_on_stats_changed)
 
 
 # A larger maximum adds the difference to health, a smaller one cuts it.
@@ -709,7 +732,7 @@ func _die() -> void:
 
 
 func _restart_scene() -> void:
-	get_tree().reload_current_scene()
+	NelvarRun.restart(get_tree(), run)
 
 
 func _try_primary_attack() -> void:
@@ -806,6 +829,7 @@ func _try_wave_attack() -> void:
 	var wave_origin := get_aim_origin() + aim_direction * wave_spawn_distance
 	if sight_mask != 0:
 		wave.set("sight_from", global_position)
+		wave.set("sight_mask", sight_mask)
 	wave.call("launch", wave_origin, aim_direction)
 
 
@@ -939,12 +963,13 @@ func _on_boost_cooldown_timeout() -> void:
 ## True when nothing on sight_mask stands between the player and `point` (always true
 ## without a sight_mask).
 func can_see(point: Vector2) -> bool:
-	return sight_clear(get_world_2d(), global_position, point)
+	return sight_clear(get_world_2d(), global_position, point, sight_mask)
 
 
-## The same check from any point (the wind wave asks from where it was cast).
-static func sight_clear(world: World2D, from: Vector2, to: Vector2) -> bool:
-	if sight_mask == 0 or world == null:
+## The same check from any point (the wind wave asks from where it was cast, with the
+## caster's mask).
+static func sight_clear(world: World2D, from: Vector2, to: Vector2, mask: int) -> bool:
+	if mask == 0 or world == null:
 		return true
-	var query := PhysicsRayQueryParameters2D.create(from, to, sight_mask)
+	var query := PhysicsRayQueryParameters2D.create(from, to, mask)
 	return world.direct_space_state.intersect_ray(query).is_empty()

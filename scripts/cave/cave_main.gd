@@ -1,5 +1,5 @@
 class_name NelvarCaveMain
-extends Node2D
+extends NelvarLocation
 ## The ice cave, Лёд 2 (developer setting "Запускать игру на Льду"): a maze of halls and
 ## winding passages cut into blue ice with dead creatures frozen into it. Mostly dusk (an
 ## overlay multiplies it in; the player carries their own soft light); under holes in the
@@ -57,8 +57,6 @@ const DARK := Vector3(0.46, 0.52, 0.66)
 const MAX_RIPPLES := 12
 const MAX_FLARES := 8
 const MAX_HEAT := 8
-const MESSAGE_FADE := 0.6
-const MESSAGE_HOLD := 2.8
 const STEAM: Array[Color] = [Color8(150, 168, 184), Color8(186, 202, 214), Color8(216, 226, 234),
 	Color8(240, 245, 250)]
 const STEAM_PLUME: Array[Color] = [Color8(164, 180, 194), Color8(196, 210, 220), Color8(222, 232, 240),
@@ -103,8 +101,6 @@ var _geyser_stage := PackedInt32Array()
 var _blasted := {}
 var _snowfalls: Array[CPUParticles2D] = []
 var _hinted := {}
-var _message_tween: Tween
-var _show_debug := false
 var _outlines: Node2D
 var _wall_lines := {}
 
@@ -114,44 +110,21 @@ var _wall_lines := {}
 @onready var world_layer: Node2D = $World
 @onready var floaters: NelvarCaveFloaters = $World/Floaters
 @onready var actors: Node2D = $Actors
-@onready var player: NelvarPlayer = $Actors/Player
-@onready var enemy_spawner: Node2D = $Actors/EnemySpawner
 @onready var snow_marks: NelvarSnowMarks = $SnowMarks
 @onready var skylights: Node2D = $Skylights
 @onready var geysers: NelvarCaveGeysers = $Geysers
 @onready var steam: NelvarSmoke = $Steam
 @onready var shade: NelvarCloudSea = $Shade
 @onready var shine: NelvarCloudSea = $Shine
-@onready var info_panel: Control = $HUD/Margin/Stack/Panel
-@onready var seed_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Seed
-@onready var status_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Status
-@onready var message: Label = $HUD/Message
 
 
-func _ready() -> void:
-	info_panel.visible = GameSettings.show_info_panel
-	GameSettings.info_panel_changed.connect(info_panel.set_visible)
-	message.modulate.a = 0.0
+func _build() -> void:
 	# NelvarCloudSea puts every layer at -1; the abyss lies under the depths.
 	abyss.layer = -3
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	var world_seed := int(rng.randi())
-	for argument in OS.get_cmdline_user_args():
-		if argument.begins_with("--seed="):
-			var value := argument.trim_prefix("--seed=")
-			if value.is_valid_int():
-				world_seed = value.to_int()
-	if has_meta("seed_override"):
-		world_seed = get_meta("seed_override")
 	var started := Time.get_ticks_msec()
 	data = NelvarCaveGenerator.new().generate(config, world_seed)
 	if data == null:
-		seed_label.text = "Пещера не сложилась · сид %d" % world_seed
-		status_label.text = "Ошибка генерации. Подробности в Output."
-		info_panel.show()
-		player.set_physics_process(false)
-		player.set_process(false)
+		fail("Пещера не сложилась")
 		return
 	_wall_lines = NelvarCaveWalls.segments(data)
 	wall_bodies = NelvarCaveWalls.build(_wall_lines, world_layer)
@@ -166,14 +139,14 @@ func _ready() -> void:
 	data.path_origin = data.spawn_position
 	# The spawner's path grid, built now rather than on the first spawn.
 	data.path_distance(data.spawn_position)
-	NelvarPlayer.sight_mask = NelvarCaveData.WALL_SIGHT_LAYER
+	player.sight_mask = NelvarCaveData.WALL_SIGHT_LAYER
 	hazards = NelvarIceHazards.new(data, player, self, snow_marks)
 	hazards.hints[Fall.CHASM] = HINT_CHASM
 	hazards.fell.connect(_update_status.unbind(1))
 	_geyser_stage.resize(data.geysers.size())
 	geysers.setup(data)
-	enemy_spawner.call("start_on", data)
-	seed_label.text = "ЛЁД 2 · ПЕЩЕРА · СИД %d" % data.world_seed
+	enemy_spawner.start_on(data)
+	show_seed()
 	_update_status()
 	var zones := NelvarCaveData.Zone
 	var pools := NelvarCaveData.Pool
@@ -186,7 +159,6 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	NelvarPlayer.sight_mask = 0
 	if _queue != null:
 		_queue.stop()
 
@@ -554,7 +526,7 @@ func _process(delta: float) -> void:
 	glow.set_shader_parameter("flare_count", flare_count)
 	glow.set_shader_parameter("heat", heat)
 	glow.set_shader_parameter("heat_count", heat_count)
-	if _show_debug:
+	if show_debug:
 		_outlines.queue_redraw()
 
 
@@ -629,31 +601,12 @@ func _geysers() -> void:
 		_geyser_stage[i] = stage
 
 
-## A line in the middle of the screen, faded in and out.
-func say(text: String) -> void:
-	if _message_tween != null:
-		_message_tween.kill()
-	message.text = text
-	_message_tween = create_tween()
-	_message_tween.tween_property(message, "modulate:a", 1.0, MESSAGE_FADE)
-	_message_tween.tween_interval(MESSAGE_HOLD)
-	_message_tween.tween_property(message, "modulate:a", 0.0, MESSAGE_FADE)
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
-		_show_debug = not _show_debug
-		_outlines.visible = _show_debug
-		_outlines.queue_redraw()
-		for node in thing_nodes:
-			if node.thing.solid:
-				node.show_collision = _show_debug
-				node.queue_redraw()
-		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			player.adjust_zoom(1.15)
-			get_viewport().set_input_as_handled()
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			player.adjust_zoom(1.0 / 1.15)
-			get_viewport().set_input_as_handled()
+## F3: the colliders and the outlines.
+func _set_debug(shown: bool) -> bool:
+	_outlines.visible = shown
+	_outlines.queue_redraw()
+	for node in thing_nodes:
+		if node.thing.solid:
+			node.show_collision = shown
+			node.queue_redraw()
+	return true

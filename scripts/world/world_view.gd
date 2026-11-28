@@ -32,12 +32,12 @@ func build(data: NelvarWorldData) -> void:
 	queue_redraw()
 
 
-func toggle_chunks() -> bool:
+## F3: the chunk grid and the collision boundaries.
+func show_chunks(shown: bool) -> void:
 	if details == null:
-		return false
-	details.show_chunks = not details.show_chunks
+		return
+	details.show_chunks = shown
 	details.queue_redraw()
-	return details.show_chunks
 
 
 func _draw() -> void:

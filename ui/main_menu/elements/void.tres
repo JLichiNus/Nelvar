@@ -1,9 +1,14 @@
-[gd_resource type="Resource" script_class="NelvarMenuElement" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="NelvarMenuElement" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://ui/main_menu/menu_element.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/textures/ui/cursor_void.png" id="cursor"]
 
 [resource]
 script = ExtResource("1")
 id = &"void"
 title = "Пустота"
 accent = Color(0.76, 0.68, 0.95, 1)
+hud_color = Color(0.78, 0.68, 0.98, 1)
+message_color = Color(0.8, 0.72, 0.98, 1)
+message_outline = Color(0.06, 0.04, 0.1, 1)
+cursor = ExtResource("cursor")

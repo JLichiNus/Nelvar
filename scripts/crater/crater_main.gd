@@ -1,5 +1,5 @@
 class_name NelvarCraterMain
-extends Node2D
+extends NelvarLocation
 ## The volcano, Огонь 2 (developer setting "Запускать игру в Огне"): the top of one
 ## huge mountain. The player runs round the crater's broad rim; the crater is a lake of
 ## lava crowded with floes of magma crust; below the summit's edge clouds of ash drift
@@ -44,8 +44,6 @@ const FRESH_INTERVAL := 0.5
 const FRESH_SLOW := 0.6
 const HINT_SINK := "Эта плита уходит под лаву: когда её швы разгораются, сходи с неё"
 const HINT_FAR := "Лава не держит. Иди по плитам магмы, разбегись (Ctrl) или взлети (Shift)"
-const MESSAGE_FADE := 0.6
-const MESSAGE_HOLD := 3.0
 const MAX_GEYSERS := 10
 const MAX_FLARES := 8
 
@@ -82,8 +80,6 @@ var _geyser_thrown := {}
 var _fresh_timer := 0.0
 var _hinted_sink := false
 var _hinted_far := false
-var _message_tween: Tween
-var _show_debug := false
 var _outlines: Node2D
 
 @onready var below: NelvarCloudSea = $Below
@@ -94,42 +90,19 @@ var _outlines: Node2D
 @onready var world_layer: Node2D = $World
 @onready var splashes: NelvarLavaSplashes = $World/Splashes
 @onready var actors: Node2D = $Actors
-@onready var player: NelvarPlayer = $Actors/Player
-@onready var enemy_spawner: Node2D = $Actors/EnemySpawner
 @onready var geysers: NelvarGeysers = $Geysers
 @onready var embers: NelvarEmbers = $Embers
 @onready var smoke: NelvarSmoke = $Smoke
 @onready var critters: NelvarFireCritters = $Critters
-@onready var info_panel: Control = $HUD/Margin/Stack/Panel
-@onready var seed_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Seed
-@onready var status_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Status
-@onready var message: Label = $HUD/Message
 
 
-func _ready() -> void:
-	info_panel.visible = GameSettings.show_info_panel
-	GameSettings.info_panel_changed.connect(info_panel.set_visible)
-	message.modulate.a = 0.0
+func _build() -> void:
 	# NelvarCloudSea puts every layer at -1; the clouds lie under the floor.
 	below.layer = -2
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	var world_seed := int(rng.randi())
-	for argument in OS.get_cmdline_user_args():
-		if argument.begins_with("--seed="):
-			var value := argument.trim_prefix("--seed=")
-			if value.is_valid_int():
-				world_seed = value.to_int()
-	if has_meta("seed_override"):
-		world_seed = get_meta("seed_override")
 	var started := Time.get_ticks_msec()
 	data = NelvarCraterGenerator.new().generate(config, world_seed)
 	if data == null:
-		seed_label.text = "Вулкан не сложился · сид %d" % world_seed
-		status_label.text = "Ошибка генерации. Подробности в Output."
-		info_panel.show()
-		player.set_physics_process(false)
-		player.set_process(false)
+		fail("Вулкан не сложился")
 		return
 	_build_debug()
 	_paint_world()
@@ -144,8 +117,8 @@ func _ready() -> void:
 	for node in isle_nodes:
 		splashes.isle_nodes[node.isle.id] = node
 	splashes.struck.connect(_on_splash)
-	enemy_spawner.call("start_on", data)
-	seed_label.text = "ОГОНЬ 2 · ВУЛКАН · СИД %d" % data.world_seed
+	enemy_spawner.start_on(data)
+	show_seed()
 	_update_status()
 	print("Nelvar volcano seed: %d | floes: %d (%d sink) | capes: %d | geysers: %d | boils: %d | things: %d | %d ms" % [
 		data.world_seed, data.floes.size(), data.floes.filter(func(floe: NelvarCraterData.Isle) -> bool: return floe.sinks()).size(),
@@ -437,7 +410,7 @@ func _process(delta: float) -> void:
 	glow.backdrop_material().set_shader_parameter("time", _time)
 	glow.backdrop_material().set_shader_parameter("flares", lit)
 	glow.backdrop_material().set_shader_parameter("flare_count", lit_count)
-	if _show_debug:
+	if show_debug:
 		_outlines.queue_redraw()
 
 
@@ -680,31 +653,12 @@ func _burn() -> void:
 		say(hint)
 
 
-## A line in the middle of the screen, faded in and out.
-func say(text: String) -> void:
-	if _message_tween != null:
-		_message_tween.kill()
-	message.text = text
-	_message_tween = create_tween()
-	_message_tween.tween_property(message, "modulate:a", 1.0, MESSAGE_FADE)
-	_message_tween.tween_interval(MESSAGE_HOLD)
-	_message_tween.tween_property(message, "modulate:a", 0.0, MESSAGE_FADE)
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
-		_show_debug = not _show_debug
-		_outlines.visible = _show_debug
-		_outlines.queue_redraw()
-		for node in thing_nodes:
-			if node.thing.solid:
-				node.show_collision = _show_debug
-				node.queue_redraw()
-		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			player.adjust_zoom(1.15)
-			get_viewport().set_input_as_handled()
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			player.adjust_zoom(1.0 / 1.15)
-			get_viewport().set_input_as_handled()
+## F3: the colliders and the outlines.
+func _set_debug(shown: bool) -> bool:
+	_outlines.visible = shown
+	_outlines.queue_redraw()
+	for node in thing_nodes:
+		if node.thing.solid:
+			node.show_collision = shown
+			node.queue_redraw()
+	return true

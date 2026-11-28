@@ -1,5 +1,5 @@
 class_name NelvarThicketMain
-extends Node2D
+extends NelvarLocation
 ## The giant forest, Земля 2 (developer setting "Запускать игру на Земле"): the floor of a
 ## forest of giants, the player the size of a beetle. Trunks wider than the screen go up
 ## into the dark of the crowns; grass blades are taller than the player, an acorn is a
@@ -45,8 +45,6 @@ const HOLD := 1.5
 const HINT_LOOSE := "Рыхлая земля не держит, если стоять. Двигайся"
 const HINT_WATER := "Вода не держит. Иди по кувшинкам и листьям, разбегись (Ctrl) или взлети (Shift)"
 const HINT_SINK := "Маленький лист тонет под весом. Не стой на нём"
-const MESSAGE_FADE := 0.6
-const MESSAGE_HOLD := 3.0
 const MAX_GLOWS := 16
 ## Bands of rows the floor's maps are built in, at once.
 const FIELD_BANDS := 32
@@ -104,16 +102,12 @@ var crack_stage := 0.0
 var _held := {}
 var _hinted := {}
 var _pollen: Array[CPUParticles2D] = []
-var _message_tween: Tween
-var _show_debug := false
 var _outlines: Node2D
 
 @onready var ground: NelvarCloudSea = $Ground
 @onready var world_layer: Node2D = $World
 @onready var rafts: NelvarLeafRafts = $World/Rafts
 @onready var actors: Node2D = $Actors
-@onready var player: NelvarPlayer = $Actors/Player
-@onready var enemy_spawner: Node2D = $Actors/EnemySpawner
 @onready var flytraps: NelvarFlytraps = $Flytraps
 @onready var puffballs: NelvarPuffballs = $Puffballs
 @onready var falling: NelvarFalling = $Falling
@@ -123,34 +117,13 @@ var _outlines: Node2D
 @onready var pollen_layer: Node2D = $Pollen
 @onready var shade: NelvarCloudSea = $Shade
 @onready var shine: NelvarCloudSea = $Shine
-@onready var info_panel: Control = $HUD/Margin/Stack/Panel
-@onready var seed_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Seed
-@onready var status_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Status
-@onready var message: Label = $HUD/Message
 
 
-func _ready() -> void:
-	info_panel.visible = GameSettings.show_info_panel
-	GameSettings.info_panel_changed.connect(info_panel.set_visible)
-	message.modulate.a = 0.0
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	var world_seed := int(rng.randi())
-	for argument in OS.get_cmdline_user_args():
-		if argument.begins_with("--seed="):
-			var value := argument.trim_prefix("--seed=")
-			if value.is_valid_int():
-				world_seed = value.to_int()
-	if has_meta("seed_override"):
-		world_seed = get_meta("seed_override")
+func _build() -> void:
 	var started := Time.get_ticks_msec()
 	data = NelvarThicketGenerator.new().generate(config, world_seed)
 	if data == null:
-		seed_label.text = "Лес не сложился · сид %d" % world_seed
-		status_label.text = "Ошибка генерации. Подробности в Output."
-		info_panel.show()
-		player.set_physics_process(false)
-		player.set_process(false)
+		fail("Лес не сложился")
 		return
 	_build_walls()
 	_build_debug()
@@ -166,8 +139,8 @@ func _ready() -> void:
 	ants.setup(data, player)
 	flytraps.snapped.connect(_on_snap)
 	puffballs.burst.connect(_update_status.unbind(1))
-	enemy_spawner.call("start_on", data)
-	seed_label.text = "ЗЕМЛЯ 2 · ИСПОЛИНСКИЙ ЛЕС · СИД %d" % data.world_seed
+	enemy_spawner.start_on(data)
+	show_seed()
 	_update_status()
 	print("Nelvar giant forest seed: %d | giants: %d inside, %d in the ring | roots: %d (%d arches) | clearings: %d | trails: %d | ponds: %d (%d lily pads, %d rafts) | fallen giant: %s | flytraps: %d | puffballs: %d | loose: %d | resin: %d | things: %d | %d ms" % [
 		data.world_seed, data.inner_giants().size(), data.giants.size() - data.inner_giants().size(), data.roots.size(),
@@ -691,7 +664,7 @@ func _process(delta: float) -> void:
 		tints.append(Vector3.ZERO)
 	glow.set_shader_parameter("glows", glows)
 	glow.set_shader_parameter("glow_tint", tints)
-	if _show_debug:
+	if show_debug:
 		_outlines.queue_redraw()
 
 
@@ -920,37 +893,18 @@ func _puff(point: Vector2, color: Color, count: int) -> void:
 	particles.emitting = true
 
 
-## A line in the middle of the screen, faded in and out.
-func say(text: String) -> void:
-	if _message_tween != null:
-		_message_tween.kill()
-	message.text = text
-	_message_tween = create_tween()
-	_message_tween.tween_property(message, "modulate:a", 1.0, MESSAGE_FADE)
-	_message_tween.tween_interval(MESSAGE_HOLD)
-	_message_tween.tween_property(message, "modulate:a", 0.0, MESSAGE_FADE)
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
-		_show_debug = not _show_debug
-		_outlines.visible = _show_debug
-		_outlines.queue_redraw()
-		for node in thing_nodes:
-			if node.thing.solid:
-				node.show_collision = _show_debug
-				node.queue_redraw()
-		for node in trunk_nodes:
-			node.show_collision = _show_debug
+## F3: the colliders and the outlines.
+func _set_debug(shown: bool) -> bool:
+	_outlines.visible = shown
+	_outlines.queue_redraw()
+	for node in thing_nodes:
+		if node.thing.solid:
+			node.show_collision = shown
 			node.queue_redraw()
-		flytraps.set_debug(_show_debug)
-		puffballs.set_debug(_show_debug)
-		rafts.set_debug(_show_debug)
-		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			player.adjust_zoom(1.15)
-			get_viewport().set_input_as_handled()
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			player.adjust_zoom(1.0 / 1.15)
-			get_viewport().set_input_as_handled()
+	for node in trunk_nodes:
+		node.show_collision = shown
+		node.queue_redraw()
+	flytraps.set_debug(shown)
+	puffballs.set_debug(shown)
+	rafts.set_debug(shown)
+	return true

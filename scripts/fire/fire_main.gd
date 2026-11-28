@@ -1,5 +1,5 @@
 class_name NelvarFireMain
-extends Node2D
+extends NelvarLocation
 ## The fire forge (developer setting "Запускать игру в Огне"): a basin of ash and basalt
 ## ringed by black ridges and volcanoes, with lava lakes and streams, roads of cooled
 ## lava, magma fissures, smoking vents and burnt trees, in the style of the "Огонь" menu
@@ -72,7 +72,6 @@ var _fissure_state := PackedInt32Array()
 var _fissure_hit := PackedByteArray()
 ## Craters glowing over their rims: world art pixel, radius, heat.
 var _craters: Array[Vector4] = []
-var _show_debug := false
 var _outlines: Node2D
 
 @onready var ground: NelvarCloudSea = $Ground
@@ -81,37 +80,16 @@ var _outlines: Node2D
 @onready var heat_haze: NelvarHeatHaze = $HeatHaze
 @onready var world_layer: Node2D = $World
 @onready var actors: Node2D = $Actors
-@onready var player: NelvarPlayer = $Actors/Player
-@onready var enemy_spawner: Node2D = $Actors/EnemySpawner
 @onready var embers: NelvarEmbers = $Embers
 @onready var smoke: NelvarSmoke = $Smoke
 @onready var critters: NelvarFireCritters = $Critters
-@onready var info_panel: Control = $HUD/Margin/Stack/Panel
-@onready var seed_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Seed
-@onready var status_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Status
 
 
-func _ready() -> void:
-	info_panel.visible = GameSettings.show_info_panel
-	GameSettings.info_panel_changed.connect(info_panel.set_visible)
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	var world_seed := int(rng.randi())
-	for argument in OS.get_cmdline_user_args():
-		if argument.begins_with("--seed="):
-			var value := argument.trim_prefix("--seed=")
-			if value.is_valid_int():
-				world_seed = value.to_int()
-	if has_meta("seed_override"):
-		world_seed = get_meta("seed_override")
+func _build() -> void:
 	var started := Time.get_ticks_msec()
 	data = NelvarFireGenerator.new().generate(config, world_seed)
 	if data == null:
-		seed_label.text = "Кузня не сложилась · сид %d" % world_seed
-		status_label.text = "Ошибка генерации. Подробности в Output."
-		info_panel.show()
-		player.set_physics_process(false)
-		player.set_process(false)
+		fail("Кузня не сложилась")
 		return
 	_build_walls()
 	_paint_world()
@@ -122,12 +100,12 @@ func _ready() -> void:
 	_safe_position = data.spawn_position
 	_fissure_state.resize(data.fissures.size())
 	_fissure_hit.resize(data.fissures.size())
-	enemy_spawner.call("start_on", data)
+	enemy_spawner.start_on(data)
 	var kinds := NelvarFireData.Kind
 	var crossings := 0
 	for stream in data.streams:
 		crossings += stream.crossings.size()
-	seed_label.text = "ОГОНЬ · КУЗНЯ · СИД %d" % data.world_seed
+	show_seed()
 	status_label.text = "%d озёр лавы · %d ручьёв · %d переправ · %d трещин · %d деревьев · %d камней · %d растений" % [
 		data.lakes.size(), data.streams.size(), crossings, data.fissures.size(), data.count(kinds.TREE),
 		data.count(kinds.ROCK), _plant_count()]
@@ -564,20 +542,12 @@ func _enemies_in_lava() -> void:
 			enemy.call("take_damage", 10000.0)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
-		_show_debug = not _show_debug
-		_outlines.visible = _show_debug
-		_outlines.queue_redraw()
-		for node in thing_nodes:
-			if node.thing.solid:
-				node.show_collision = _show_debug
-				node.queue_redraw()
-		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			player.adjust_zoom(1.15)
-			get_viewport().set_input_as_handled()
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			player.adjust_zoom(1.0 / 1.15)
-			get_viewport().set_input_as_handled()
+## F3: the colliders and the outlines.
+func _set_debug(shown: bool) -> bool:
+	_outlines.visible = shown
+	_outlines.queue_redraw()
+	for node in thing_nodes:
+		if node.thing.solid:
+			node.show_collision = shown
+			node.queue_redraw()
+	return true

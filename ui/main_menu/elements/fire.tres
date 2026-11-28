@@ -23,3 +23,6 @@ particle_direction = Vector2(0, -1)
 particle_spread = 25.0
 particle_velocity = Vector2(20, 48)
 particle_gravity = Vector2(0, -8)
+hud_color = Color(1, 0.72, 0.45, 1)
+message_color = Color(1, 0.86, 0.66, 1)
+message_outline = Color(0.2, 0.08, 0.06, 1)

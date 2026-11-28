@@ -1,5 +1,5 @@
 class_name NelvarVoidMain
-extends Node2D
+extends NelvarLocation
 ## The Void (developer setting "Запускать игру в Пустоте"): the player wakes on
 ## debris of the four realities and makes their way to the monolith.
 ##
@@ -70,58 +70,42 @@ var _boss_bar_home := Vector2.INF
 var _boss_last_health := -1.0
 var _boss_time := 0.0
 var _title_tween: Tween
-## A Void whose boss fight was lost comes back with the same seed, the player at
-## the arena's door: the climb is not repeated. -1 = no checkpoint.
-static var _checkpoint_seed := -1
+## Opened from the run's checkpoint (NelvarRunState.void_checkpoint): a lost boss fight
+## comes back with the same seed, the player at the arena's door.
 var _from_checkpoint := false
 
 @onready var sky: NelvarCloudSea = $Sky
 @onready var distant: Parallax2D = $Distant
 @onready var world_layer: Node2D = $World
 @onready var actors: Node2D = $Actors
-@onready var player: NelvarPlayer = $Actors/Player
 @onready var arena: NelvarVoidArena = $Actors/Arena
 @onready var motes: NelvarWindParticles = $Motes
 @onready var shade: ColorRect = $Shade/Vignette
-@onready var info_panel: Control = $HUD/Margin/Stack/Panel
-@onready var seed_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Seed
-@onready var status_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Status
-@onready var message: Label = $HUD/Message
-@onready var boss_bar: Control = $HUD/BossBar
-@onready var boss_fill: ColorRect = $HUD/BossBar/Bar/Fill
-@onready var boss_chip: ColorRect = $HUD/BossBar/Bar/Chip
-@onready var boss_title: Control = $HUD/BossTitle
-@onready var boss_title_label: Label = $HUD/BossTitle/Title
-@onready var boss_subtitle: Label = $HUD/BossTitle/Subtitle
-@onready var boss_phase: Label = $HUD/BossBar/Hint
+## The story's lines at the bottom of the screen (_say), the Void's own.
+@onready var narration: Label = $BossHud/Message
+@onready var boss_bar: Control = $BossHud/BossBar
+@onready var boss_fill: ColorRect = $BossHud/BossBar/Bar/Fill
+@onready var boss_chip: ColorRect = $BossHud/BossBar/Bar/Chip
+@onready var boss_title: Control = $BossHud/BossTitle
+@onready var boss_title_label: Label = $BossHud/BossTitle/Title
+@onready var boss_subtitle: Label = $BossHud/BossTitle/Subtitle
+@onready var boss_phase: Label = $BossHud/BossBar/Hint
 
 
-func _ready() -> void:
-	GameMusic.start(&"void")
-	info_panel.visible = GameSettings.show_info_panel
-	GameSettings.info_panel_changed.connect(info_panel.set_visible)
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	var world_seed := int(rng.randi())
-	for argument in OS.get_cmdline_user_args():
-		if argument.begins_with("--seed="):
-			var value := argument.trim_prefix("--seed=")
-			if value.is_valid_int():
-				world_seed = value.to_int()
-	# Tests pick a seed with the crossings they need.
-	if has_meta("seed_override"):
-		world_seed = get_meta("seed_override")
-	elif _checkpoint_seed >= 0:
-		world_seed = _checkpoint_seed
+## The run's checkpoint brings back the Void of a lost fight (the tests' seed_override
+## still wins: they pick a seed with the crossings they need).
+func _pick_seed() -> int:
+	if not has_meta("seed_override") and player.run.void_checkpoint >= 0:
 		_from_checkpoint = true
-	_checkpoint_seed = -1
+		return player.run.void_checkpoint
+	return super()
+
+
+func _build() -> void:
+	player.run.void_checkpoint = -1
 	data = NelvarVoidGenerator.new().generate(world_seed)
 	if data == null:
-		seed_label.text = "Пустота не сложилась · сид %d" % world_seed
-		status_label.text = "Ошибка генерации. Подробности в Output."
-		info_panel.show()
-		player.set_physics_process(false)
-		player.set_process(false)
+		fail("Пустота не сложилась")
 		return
 	var screen := NelvarVoidScreen.new()
 	screen.name = "Screen"
@@ -131,13 +115,14 @@ func _ready() -> void:
 	threads.name = "Threads"
 	threads.setup(data)
 	world_layer.add_child(threads)
-	_build_distant(world_seed)
+	_build_distant()
 	_sky_material = sky.backdrop_material()
 	sky.set_world_seed(world_seed)
 	motes.color = Color(0.66, 0.52, 1.0, 0.5)
 	arena.setup(data, player, monolith_node, world_layer)
 	arena.fight_started.connect(_on_fight_started)
 	arena.fight_won.connect(_on_fight_won)
+	player.died.connect(_on_player_died)
 	player.position = data.spawn_position
 	if _from_checkpoint:
 		# The causeway in front of the monolith.
@@ -146,9 +131,9 @@ func _ready() -> void:
 	_last_route_index = data.route.find(data.support_at(player.position, 0.0).id) \
 		if data.support_at(player.position, 0.0) != null else 0
 	player.camera.reset_smoothing()
-	message.modulate.a = 0.0
+	narration.modulate.a = 0.0
 	boss_bar.hide()
-	seed_label.text = "ПУСТОТА · СИД %d" % data.world_seed
+	show_seed()
 	status_label.text = "%d обломков на пути · %d всего · %d разбегов · %d перелётов" % [
 		data.route.size(), data.debris.size(), data.count_gaps(NelvarVoidData.Gap.LEAP),
 		data.count_gaps(NelvarVoidData.Gap.FLIGHT)]
@@ -195,13 +180,16 @@ func _exit_tree() -> void:
 	if _monolith_task >= 0:
 		WorkerThreadPool.wait_for_task_completion(_monolith_task)
 		_monolith_task = -1
-	# Lost the fight: the next Void (the scene reloads) starts at the arena.
-	if arena != null and arena.started and not arena.boss_defeated and player.health <= 0.0:
-		_checkpoint_seed = data.world_seed
+
+
+## Lost the fight: the run's next Void (the scene reloads) starts at the arena.
+func _on_player_died() -> void:
+	if arena.started and not arena.boss_defeated:
+		player.run.void_checkpoint = data.world_seed
 
 
 ## Far-off debris drifting deep in the Void: dim silhouettes on a slow parallax layer.
-func _build_distant(world_seed: int) -> void:
+func _build_distant() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = ("%d:distant" % world_seed).hash()
 	var painter := NelvarDebrisPainter.new()
@@ -486,18 +474,9 @@ func _say(lines: Array[String], delay: float, hold: float = MESSAGE_HOLD) -> voi
 	_message_tween = create_tween()
 	_message_tween.tween_interval(delay)
 	for line in lines:
-		_message_tween.tween_callback(message.set_text.bind(line))
-		_message_tween.tween_property(message, "modulate:a", 1.0, MESSAGE_FADE)
+		_message_tween.tween_callback(narration.set_text.bind(line))
+		_message_tween.tween_property(narration, "modulate:a", 1.0, MESSAGE_FADE)
 		_message_tween.tween_interval(hold)
-		_message_tween.tween_property(message, "modulate:a", 0.0, MESSAGE_FADE)
+		_message_tween.tween_property(narration, "modulate:a", 0.0, MESSAGE_FADE)
 		_message_tween.tween_interval(0.4)
 
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			player.adjust_zoom(1.15)
-			get_viewport().set_input_as_handled()
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			player.adjust_zoom(1.0 / 1.15)
-			get_viewport().set_input_as_handled()

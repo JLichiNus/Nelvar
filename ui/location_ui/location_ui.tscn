@@ -1,0 +1,129 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://ui/location_ui/location_ui.gd" id="location_ui"]
+[ext_resource type="Script" path="res://ui/damage_vignette.gd" id="damage_vignette"]
+[ext_resource type="Script" path="res://ui/health_bar.gd" id="health_bar"]
+[ext_resource type="Script" path="res://ui/ability_bar.gd" id="ability_bar"]
+[ext_resource type="Script" path="res://ui/level_line.gd" id="level_line"]
+[ext_resource type="PackedScene" path="res://ui/pause_menu/pause_menu.tscn" id="pause_menu"]
+[ext_resource type="Script" path="res://scripts/location_cursor.gd" id="location_cursor"]
+[ext_resource type="PackedScene" path="res://ui/mutations/mutation_hud.tscn" id="mutation_hud"]
+
+[node name="Interface" type="Node"]
+script = ExtResource("location_ui")
+
+[node name="HUD" type="CanvasLayer" parent="."]
+layer = 3
+
+[node name="DamageVignette" type="ColorRect" parent="HUD"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("damage_vignette")
+
+[node name="Margin" type="MarginContainer" parent="HUD"]
+texture_filter = 1
+offset_left = 20.0
+offset_top = 20.0
+mouse_filter = 2
+
+[node name="Stack" type="VBoxContainer" parent="HUD/Margin"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 9
+
+[node name="Panel" type="PanelContainer" parent="HUD/Margin/Stack"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Padding" type="MarginContainer" parent="HUD/Margin/Stack/Panel"]
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Rows" type="VBoxContainer" parent="HUD/Margin/Stack/Panel/Padding"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="Seed" type="Label" parent="HUD/Margin/Stack/Panel/Padding/Rows"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 22
+text = "СИД"
+
+[node name="Status" type="Label" parent="HUD/Margin/Stack/Panel/Padding/Rows"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/font_size = 22
+text = "Генерация…"
+
+[node name="Controls" type="Label" parent="HUD/Margin/Stack/Panel/Padding/Rows"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.72, 0.79, 0.83, 1)
+theme_override_font_sizes/font_size = 22
+
+[node name="Message" type="Label" parent="HUD"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 120.0
+offset_bottom = 160.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 26
+horizontal_alignment = 1
+
+[node name="HealthBar" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -66.0
+offset_right = 360.0
+offset_bottom = -24.0
+grow_vertical = 0
+mouse_filter = 2
+script = ExtResource("health_bar")
+
+[node name="AbilityBar" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -300.0
+offset_top = -84.0
+offset_right = -24.0
+offset_bottom = -24.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+script = ExtResource("ability_bar")
+
+[node name="LevelLine" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -102.0
+offset_right = 360.0
+offset_bottom = -75.0
+grow_vertical = 0
+mouse_filter = 2
+script = ExtResource("level_line")
+
+[node name="PauseMenu" parent="." instance=ExtResource("pause_menu")]
+
+[node name="LocationCursor" type="Node" parent="."]
+script = ExtResource("location_cursor")
+
+[node name="MutationHud" parent="." instance=ExtResource("mutation_hud")]

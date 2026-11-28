@@ -1,4 +1,4 @@
-extends Node2D
+extends NelvarLocation
 ## The air map: islands and bridges over a sea of clouds.
 ##
 ## Shores and bridge sides do not stop the player (NelvarWorldData.EDGE_LAYER): off
@@ -34,35 +34,12 @@ var _safe_position := Vector2.ZERO
 @onready var wind: NelvarWindParticles = $Wind
 @onready var world_view: NelvarWorldView = $World
 @onready var actors: Node2D = $Actors
-@onready var player: NelvarPlayer = $Actors/Player
-@onready var enemy_spawner: Node2D = $Actors/EnemySpawner
-@onready var info_panel: Control = $HUD/Margin/Stack/Panel
-@onready var seed_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Seed
-@onready var status_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Status
 
 
-func _ready() -> void:
-	GameMusic.start(&"air")
-	# Seed, world stats and controls: hidden unless enabled in settings or with F12.
-	info_panel.visible = GameSettings.show_info_panel
-	GameSettings.info_panel_changed.connect(info_panel.set_visible)
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	var world_seed := int(rng.randi())
-	# An optional command-line override makes reported maps reproducible.
-	# Ordinary editor/game launches always use a fresh random seed.
-	for argument in OS.get_cmdline_user_args():
-		if argument.begins_with("--seed="):
-			var value := argument.trim_prefix("--seed=")
-			if value.is_valid_int():
-				world_seed = value.to_int()
+func _build() -> void:
 	world_data = NelvarWorldGenerator.new().generate(world_config, world_seed)
 	if world_data == null:
-		seed_label.text = "Не удалось построить карту · сид %d" % world_seed
-		status_label.text = "Ошибка генерации. Подробности в Output."
-		info_panel.show()  # the error must be visible even if the panel is off
-		player.set_physics_process(false)
-		player.set_process(false)
+		fail("Не удалось построить карту")
 		return
 	world_view.build(world_data)
 	cloud_sea.texel_size = world_view.terrain_style.pixel_size
@@ -85,8 +62,8 @@ func _ready() -> void:
 	player.position = world_data.spawn_position
 	_safe_position = player.position
 	player.camera.reset_smoothing()
-	enemy_spawner.call("start", world_data, forest_data, prop_data)
-	seed_label.text = "ЗЕМЛЯ · СИД %d" % world_data.world_seed
+	enemy_spawner.start(world_data, forest_data, prop_data)
+	show_seed()
 	var large := 0
 	for island in world_data.islands:
 		if island.large:
@@ -128,21 +105,13 @@ func _fall() -> void:
 	player.take_damage(FALL_DAMAGE)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_F3:
-			var show_debug := world_view.toggle_chunks()
-			for tree in tree_nodes:
-				tree.show_collision = show_debug
-				tree.queue_redraw()
-			for prop in prop_nodes:
-				prop.show_collision = show_debug
-				prop.queue_redraw()
-			get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			player.adjust_zoom(1.15)
-			get_viewport().set_input_as_handled()
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			player.adjust_zoom(1.0 / 1.15)
-			get_viewport().set_input_as_handled()
+## F3: the chunks, the trunks' and the rocks' colliders.
+func _set_debug(shown: bool) -> bool:
+	world_view.show_chunks(shown)
+	for tree in tree_nodes:
+		tree.show_collision = shown
+		tree.queue_redraw()
+	for prop in prop_nodes:
+		prop.show_collision = shown
+		prop.queue_redraw()
+	return true

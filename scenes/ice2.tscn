@@ -1,4 +1,4 @@
-[gd_scene load_steps=28 format=3]
+[gd_scene load_steps=18 format=3]
 
 [ext_resource type="Script" path="res://scripts/cave/cave_main.gd" id="1"]
 [ext_resource type="Resource" path="res://resources/ice_cave_config.tres" id="2"]
@@ -10,22 +10,23 @@
 [ext_resource type="Script" path="res://scripts/ice/ice_depths.gd" id="8"]
 [ext_resource type="Script" path="res://scripts/cave/floaters.gd" id="9"]
 [ext_resource type="Script" path="res://scripts/ice/snow_marks.gd" id="10"]
-[ext_resource type="Script" path="res://ui/health_bar.gd" id="11"]
-[ext_resource type="PackedScene" path="res://ui/pause_menu/pause_menu.tscn" id="12"]
 [ext_resource type="Script" path="res://scripts/cave/geysers.gd" id="13"]
 [ext_resource type="Script" path="res://scripts/fire/smoke.gd" id="14"]
 [ext_resource type="Shader" path="res://scripts/cave/cave_abyss.gdshader" id="15"]
 [ext_resource type="Shader" path="res://scripts/cave/cave_shade.gdshader" id="16"]
 [ext_resource type="Shader" path="res://scripts/cave/cave_shine.gdshader" id="17"]
-[ext_resource type="Script" path="res://scripts/location_cursor.gd" id="cursor_script"]
-[ext_resource type="Texture2D" path="res://assets/textures/ui/cursor_ice.png" id="cursor_tex"]
-[ext_resource type="Script" path="res://ui/ability_bar.gd" id="ability_bar"]
-[ext_resource type="Script" path="res://ui/level_line.gd" id="level_line"]
-[ext_resource type="Script" path="res://ui/damage_vignette.gd" id="damage_vignette"]
+[ext_resource type="Resource" path="res://ui/main_menu/elements/ice.tres" id="reality"]
+[ext_resource type="PackedScene" path="res://ui/location_ui/location_ui.tscn" id="location_ui"]
 
 [node name="Ice2" type="Node2D"]
 script = ExtResource("1")
 config = ExtResource("2")
+reality = ExtResource("reality")
+title = "ЛЁД 2 · ПЕЩЕРА"
+controls = "WASD / стрелки — ходьба   ·   Ctrl — бег (узкие провалы, подтаявший лёд)   ·   Shift — полёт (не сквозь стены)
+ЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)   ·   E — мутация
+Колесо — масштаб   ·   F3 — коллизии   ·   F12 — скрыть панель   ·   Esc — пауза"
+message_hold = 2.8
 
 [node name="Abyss" type="CanvasLayer" parent="."]
 layer = -3
@@ -97,127 +98,4 @@ wind = Vector2(0, 0)
 hole_amount = 0.0
 shader = ExtResource("17")
 
-[node name="HUD" type="CanvasLayer" parent="."]
-layer = 3
-
-[node name="DamageVignette" type="ColorRect" parent="HUD" node_paths=PackedStringArray("player")]
-layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-script = ExtResource("damage_vignette")
-player = NodePath("../../Actors/Player")
-
-[node name="Margin" type="MarginContainer" parent="HUD"]
-texture_filter = 1
-offset_left = 20.0
-offset_top = 20.0
-mouse_filter = 2
-
-[node name="Stack" type="VBoxContainer" parent="HUD/Margin"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 9
-
-[node name="Panel" type="PanelContainer" parent="HUD/Margin/Stack"]
-visible = false
-layout_mode = 2
-mouse_filter = 2
-
-[node name="Padding" type="MarginContainer" parent="HUD/Margin/Stack/Panel"]
-layout_mode = 2
-mouse_filter = 2
-
-[node name="Rows" type="VBoxContainer" parent="HUD/Margin/Stack/Panel/Padding"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_constants/separation = 6
-
-[node name="Seed" type="Label" parent="HUD/Margin/Stack/Panel/Padding/Rows"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.72, 0.86, 1, 1)
-theme_override_font_sizes/font_size = 22
-text = "ЛЁД 2 · ПЕЩЕРА"
-
-[node name="Status" type="Label" parent="HUD/Margin/Stack/Panel/Padding/Rows"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_font_sizes/font_size = 22
-text = "Генерация…"
-
-[node name="Controls" type="Label" parent="HUD/Margin/Stack/Panel/Padding/Rows"]
-layout_mode = 2
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.72, 0.79, 0.83, 1)
-theme_override_font_sizes/font_size = 22
-text = "WASD / стрелки — ходьба   ·   Ctrl — бег (узкие провалы, подтаявший лёд)   ·   Shift — полёт (не сквозь стены)
-ЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)
-Колесо — масштаб   ·   F3 — коллизии   ·   F12 — скрыть панель   ·   Esc — пауза"
-
-[node name="Message" type="Label" parent="HUD"]
-anchors_preset = 10
-anchor_right = 1.0
-offset_top = 120.0
-offset_bottom = 160.0
-grow_horizontal = 2
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.9, 0.96, 1, 1)
-theme_override_colors/font_outline_color = Color(0.1, 0.16, 0.26, 1)
-theme_override_constants/outline_size = 6
-theme_override_font_sizes/font_size = 26
-horizontal_alignment = 1
-
-[node name="PauseMenu" parent="." instance=ExtResource("12")]
-
-[node name="LocationCursor" type="Node" parent="."]
-script = ExtResource("cursor_script")
-cursor = ExtResource("cursor_tex")
-
-[node name="HealthBar" type="Control" parent="HUD" node_paths=PackedStringArray("player")]
-layout_mode = 3
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 24.0
-offset_top = -60.0
-offset_right = 360.0
-offset_bottom = -24.0
-grow_vertical = 0
-mouse_filter = 2
-script = ExtResource("11")
-player = NodePath("../../Actors/Player")
-
-[node name="AbilityBar" type="Control" parent="HUD" node_paths=PackedStringArray("player")]
-layout_mode = 3
-anchors_preset = 3
-anchor_left = 1.0
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -300.0
-offset_top = -84.0
-offset_right = -24.0
-offset_bottom = -24.0
-grow_horizontal = 0
-grow_vertical = 0
-mouse_filter = 2
-script = ExtResource("ability_bar")
-player = NodePath("../../Actors/Player")
-
-[node name="LevelLine" type="Control" parent="HUD" node_paths=PackedStringArray("player")]
-layout_mode = 3
-anchors_preset = 2
-anchor_top = 1.0
-anchor_bottom = 1.0
-offset_left = 24.0
-offset_top = -96.0
-offset_right = 360.0
-offset_bottom = -69.0
-grow_vertical = 0
-mouse_filter = 2
-script = ExtResource("level_line")
-player = NodePath("../../Actors/Player")
+[node name="Interface" parent="." instance=ExtResource("location_ui")]

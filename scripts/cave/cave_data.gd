@@ -34,7 +34,7 @@ const PATH_CELL := 32.0
 const LEAP_RUN := 34.0
 const LEAP_FLY := 100.0
 ## Physics layer 9 ("Walls"): the cave's walls are on it besides World, so a sight line
-## can tell them from the things (NelvarPlayer.sight_mask).
+## can tell them from the things (the player's sight_mask).
 const WALL_SIGHT_LAYER := 256
 
 ## Hall kinds: a dark hall, a sunny one under a hole in the roof, a cold arena, a grotto

@@ -505,7 +505,8 @@ func _restart() -> NelvarConsoleNode:
 	return N.literal("restart", "начать забег заново").runs(func(_a: Dictionary) -> void:
 		Engine.time_scale = 1.0
 		_scene_tree.paused = false
-		_scene_tree.reload_current_scene())
+		var player := _scene_tree.get_first_node_in_group(&"player") as NelvarPlayer
+		NelvarRun.restart(_scene_tree, player.run if player != null else null))
 
 
 # --- helpers -------------------------------------------------------------------

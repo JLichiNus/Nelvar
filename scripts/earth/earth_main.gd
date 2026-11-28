@@ -1,5 +1,5 @@
 class_name NelvarEarthMain
-extends Node2D
+extends NelvarLocation
 ## The earth valley (developer setting "Запускать игру на Земле"): a plain of grass
 ## and groves with ponds and trails, ringed by snowy mountains, in the style of the
 ## "Земля" menu background.
@@ -34,7 +34,6 @@ var _peaks: Array[NelvarEarthData.Thing] = []
 var _peak_arts: Array = []
 var _peaks_left := 0
 var _waterfall_material: ShaderMaterial
-var _show_debug := false
 ## F3: the mountain foot and the pond shores as the physics sees them.
 var _outlines: Node2D
 
@@ -43,35 +42,14 @@ var _outlines: Node2D
 @onready var pollen: NelvarWindParticles = $Pollen
 @onready var world_layer: Node2D = $World
 @onready var actors: Node2D = $Actors
-@onready var player: NelvarPlayer = $Actors/Player
-@onready var enemy_spawner: Node2D = $Actors/EnemySpawner
 @onready var butterflies: NelvarButterflies = $Butterflies
-@onready var info_panel: Control = $HUD/Margin/Stack/Panel
-@onready var seed_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Seed
-@onready var status_label: Label = $HUD/Margin/Stack/Panel/Padding/Rows/Status
 
 
-func _ready() -> void:
-	info_panel.visible = GameSettings.show_info_panel
-	GameSettings.info_panel_changed.connect(info_panel.set_visible)
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-	var world_seed := int(rng.randi())
-	for argument in OS.get_cmdline_user_args():
-		if argument.begins_with("--seed="):
-			var value := argument.trim_prefix("--seed=")
-			if value.is_valid_int():
-				world_seed = value.to_int()
-	if has_meta("seed_override"):
-		world_seed = get_meta("seed_override")
+func _build() -> void:
 	var started := Time.get_ticks_msec()
 	data = NelvarEarthGenerator.new().generate(config, world_seed)
 	if data == null:
-		seed_label.text = "Долина не сложилась · сид %d" % world_seed
-		status_label.text = "Ошибка генерации. Подробности в Output."
-		info_panel.show()
-		player.set_physics_process(false)
-		player.set_process(false)
+		fail("Долина не сложилась")
 		return
 	_build_walls()
 	_paint_world()
@@ -80,8 +58,8 @@ func _ready() -> void:
 	player.position = data.spawn_position
 	player.camera.reset_smoothing()
 	butterflies.setup(data, player)
-	enemy_spawner.call("start_on", data)
-	seed_label.text = "ЗЕМЛЯ · ДОЛИНА · СИД %d" % data.world_seed
+	enemy_spawner.start_on(data)
+	show_seed()
 	var kinds := NelvarEarthData.Kind
 	status_label.text = "%d деревьев · %d прудов · %d троп · %d камней · %d окаменевших · %d растений" % [
 		data.count(kinds.TREE), data.ponds.size(), data.trails.size(), data.count(kinds.ROCK),
@@ -295,19 +273,11 @@ func _process(delta: float) -> void:
 			node.set_gust(gust(node.position))
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
-		_show_debug = not _show_debug
-		_outlines.visible = _show_debug
-		for node in thing_nodes + peak_nodes:
-			if node.thing.solid:
-				node.show_collision = _show_debug
-				node.queue_redraw()
-		get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			player.adjust_zoom(1.15)
-			get_viewport().set_input_as_handled()
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			player.adjust_zoom(1.0 / 1.15)
-			get_viewport().set_input_as_handled()
+## F3: the colliders and the outlines.
+func _set_debug(shown: bool) -> bool:
+	_outlines.visible = shown
+	for node in thing_nodes + peak_nodes:
+		if node.thing.solid:
+			node.show_collision = shown
+			node.queue_redraw()
+	return true

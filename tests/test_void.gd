@@ -371,23 +371,31 @@ func _check_boss() -> void:
 	_check(game.arena.get_node("Seal").collision_layer == 0, "The seal stayed after the fight")
 	game.queue_free()
 	await process_frame
-	# Lose a fight: the next Void starts at the arena.
+	# Lose a fight: the run starts over (NelvarRun.restart without the reload) and its
+	# next Void starts at the arena.
+	NelvarRun.begin()
 	game = await _spawn(777)
 	player = game.player
 	player.global_position = game.data.arena_center + Vector2(0.0, NelvarVoidData.ARENA_TRIGGER_RADIUS - 30.0)
 	await _wait_frames(3)
-	player.health = 0.0
+	player.set_health(0.0)
+	var over: NelvarRunState = player.run
 	game.queue_free()
 	await process_frame
+	var next := NelvarRun.start_over(over)
+	_check(next != over and next.void_checkpoint == 777 and next.player.level == 1,
+		"The run after a lost fight is not a fresh one with the checkpoint")
 	var retry = (load("res://scenes/void.tscn") as PackedScene).instantiate()
 	root.add_child(retry)
 	await _wait_frames(2)
+	_check(next.void_checkpoint == -1, "The checkpoint was not used up")
 	var last: NelvarVoidData.Debris = retry.data.debris[retry.data.route[retry.data.route.size() - 1]]
 	_check(retry.data.world_seed == 777, "A lost fight did not bring the same Void back")
 	_check(retry.data.support_at(retry.player.global_position, 0.0) == last,
 		"After a lost fight the player did not start at the arena's door")
 	retry.queue_free()
 	await process_frame
+	NelvarRun.end()
 
 
 ## Untyped: the scene script uses autoloads, which tests cannot name at compile time.

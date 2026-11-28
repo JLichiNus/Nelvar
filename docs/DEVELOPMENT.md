@@ -75,6 +75,42 @@ The player reads its characteristics from `NelvarStats`
 (`mutations/stats.gd`) instead of its own exports, so that mutations can change
 them. The exports are only the base values.
 
+## The run
+
+Everything about the Wanderer that must outlive a location — health, level and
+kills, the mutations with the meter, the owners' queue and a waiting choice, the
+Void's checkpoint — is the run's state (`NelvarRunState`, `core/run_state.gd`), not
+the scene's. `NelvarRun` (`core/run.gd`) holds it: «Играть» begins a run, the main
+menu ends it, a death or `/restart` starts it over (only the Void's checkpoint
+carries) and reloads the location. The player (`NelvarPlayerProgress`) and the
+mutation director (`NelvarMutationState`) take the run's state in their `_ready`
+and change it in place, so the next location's player goes on where the last one
+stopped. A location opened on its own (F6, a test) has no run: its player gets a
+state of its own, and its first death starts a run.
+
+`NelvarRun` is a static holder, not an autoload: tests preload `player.tscn`
+before autoloads exist. Location-specific settings of the player (the ice cave's
+`sight_mask`) are set by the location on its own player, never kept in statics.
+
+## Locations
+
+Every map is a `NelvarLocation` (`core/location.gd`) and builds only its own world
+in `_build()`. A location scene keeps the player at `Actors/Player` (with an
+`EnemySpawner` beside it, if it has enemies) and instances the shared interface at
+`Interface` (`ui/location_ui/location_ui.tscn`, `NelvarLocationUI`): the HUD
+(health, abilities, level, damage vignette, info panel, the message line), the
+mutations, the pause menu and the cursor. The location binds it to its player and
+its reality in `_enter_tree`, before any widget is ready, so a new map needs no
+HUD of its own.
+
+The scene's root sets `reality` (one of `ui/main_menu/elements/*.tres`: its accent
+and font for the pause menu, cursor, HUD colours, and its id picks the music
+playlist), `title` (the info panel's title before the seed), `controls` (the info
+panel's keys line) and `message_hold`. The base class picks the seed (see
+«Running»), shows a generation failure (`fail()`), says messages (`say()`), zooms
+on the wheel and calls `_set_debug(shown)` on F3. `tests/test_locations.gd`
+checks all of this on every map.
+
 ## Enemies
 
 The spawner (`enemies/enemy_spawner.gd`) brings several kinds: each spawn picks
@@ -107,7 +143,9 @@ Rules are in `GDD.md` §3. In code:
   (`VERSION_WEIGHTS`);
 - `mutations/stats.gd` — `NelvarStats`, the stats mutations may touch;
 - `mutations/mutation_director.gd` — `NelvarMutationDirector` under the player:
-  the adaptation meter, the owner queue, the choice and its interception;
+  the adaptation meter, the owner queue, the choice and its interception (the
+  rules; the numbers are the run's `NelvarMutationState`,
+  `mutations/mutation_state.gd`);
 - `ui/mutations/` — the HUD, the cards and the inventory.
 
 ## Sound
@@ -768,6 +806,7 @@ godot --headless --path . --script tests/test_ice.gd -- --seeds=30
 godot --headless --path . --script tests/test_crater.gd -- --seeds=30
 godot --headless --path . --script tests/test_cave.gd -- --seeds=6
 godot --headless --path . --script tests/test_mutations.gd
+godot --headless --path . --script tests/test_locations.gd
 godot --headless --path . --script tests/test_whistler.gd
 godot --headless --path . --script tests/test_runner.gd
 ```
@@ -842,7 +881,11 @@ godot --headless --path . --script tests/test_runner.gd
 - **Mutations** — every mutation gains and costs at every stage; the meter
   ripens them; the player's own wait and get seized; other versions pick by
   their element; stats really change the player and the HUD; the choice opens
-  on E, pauses and picks with 1/2/3.
+  on E, pauses and picks with 1/2/3; the next player of a run goes on with its
+  health, level and mutations, a waiting choice included.
+- **Locations** — every map builds on `NelvarLocation` and gets the shared
+  interface bound to its own player: the HUD, the mutations, the pause menu and
+  cursor of its reality, the panel's title with the seed, messages, F3 and zoom.
 - **Whistler** — breath, fans and trills; bubbles against walking and flying
   players, the shot, the wave and compression; the spawner's per-kind caps.
 - **Runner** — chase, windup and dash, dash damage, skid and recovery, stuns
