@@ -23,9 +23,11 @@ func bind(director: NelvarMutationDirector) -> void:
 	add_theme_constant_override("separation", GAP)
 	alignment = BoxContainer.ALIGNMENT_CENTER
 	_hint = PanelContainer.new()
-	# Out of the row's layout, but still inheriting its theme and the nearest
-	# texture filter that keeps the pixel font sharp.
+	# Out of the row's layout, but still inheriting its theme. A top-level item
+	# does not inherit the row's texture filter, so the nearest filter that
+	# keeps the pixel font sharp is set on it directly.
 	_hint.top_level = true
+	_hint.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_hint.visible = false
 	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hint.add_theme_stylebox_override("panel", get_theme_stylebox("panel", "TooltipPanel"))

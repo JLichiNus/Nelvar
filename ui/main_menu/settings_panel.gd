@@ -1,125 +1,311 @@
 class_name NelvarSettingsPanel
 extends NelvarMenuPanel
-## Settings in tabs: «Экран», «Интерфейс», «Аудио» (one page shows at a
-## time; the panel keeps the size of the largest page so it does not jump).
-## The same panel serves the main menu and the pause menu.
-## "Меню разработчика" opens the developer panel to the left of this one;
-## it closes together with the settings. The screen that holds this panel
-## makes room for it on `dev_panel_toggled`.
+## Settings: categories on the left, the chosen category's rows on the right
+## (one line each, scrolled when they do not fit). The hint of the row under
+## the cursor or in focus (rows keep it in `metadata/hint`) is sent out with
+## `hint_changed`; NelvarPanelMorph shows it in its own frame (NelvarHintBox).
+## Q/E or the gamepad shoulders switch categories from anywhere in the panel.
+## «Разработчик» exists only in debug builds (editor runs and debug exports).
+##
+## The same panel serves the main menu and the pause menu. Both grow it out
+## of their «Настройки» button with NelvarPanelMorph, which shows the content
+## through `set_reveal`.
 
-signal dev_panel_toggled(open: bool)
+signal hint_changed(text: String)
 
-@onready var fullscreen_check: CheckButton = %Fullscreen
+const HINT_META := &"hint"
+
+## Step ticks closer together than this are skipped: dragging a slider
+## crosses many 1% steps a frame, held arrows repeat fast.
+const STEP_SOUND_GAP_MS := 45
+
+## Next/previous category (physical keys, so they work in any layout).
+const NEXT_KEY := KEY_E
+const PREVIOUS_KEY := KEY_Q
+
+@onready var window_mode: NelvarOptionRow = %WindowMode
+@onready var background_fps: NelvarOptionRow = %BackgroundFps
+@onready var brightness: NelvarSlider = %Brightness
+@onready var show_fps_check: CheckButton = %ShowFps
+@onready var mute_music_check: CheckButton = %MuteMusicInBackground
+@onready var pause_on_focus_loss_check: CheckButton = %PauseOnFocusLoss
+@onready var vsync_check: CheckButton = %VSync
+## The frame rate cap; its last step, past GameSettings.MAX_FPS_MAX, is "no cap".
+@onready var fps_limit: NelvarSlider = %FpsLimit
 @onready var info_panel_check: CheckButton = %InfoPanel
-@onready var damage_vignette_button: Button = %DamageVignette
+@onready var vignette_level: NelvarSlider = %VignetteLevel
 @onready var vignette_direction_check: CheckButton = %VignetteDirection
-@onready var dev_menu_button: Button = %DevMenu
-@onready var dev_panel: NelvarDevPanel = %DevPanel
-@onready var tabs: HBoxContainer = %Tabs
+@onready var start_in_void_check: CheckButton = %StartInVoid
+@onready var start_on_earth_check: CheckButton = %StartOnEarth
+@onready var start_on_earth2_check: CheckButton = %StartOnEarth2
+@onready var start_in_fire_check: CheckButton = %StartInFire
+@onready var start_on_ice_check: CheckButton = %StartOnIce
+@onready var start_in_fire2_check: CheckButton = %StartInFire2
+@onready var start_on_ice2_check: CheckButton = %StartOnIce2
+@onready var categories: VBoxContainer = %Categories
 @onready var pages: VBoxContainer = %Pages
+@onready var scroll: ScrollContainer = %Scroll
+@onready var body: HBoxContainer = %Body
+@onready var footer: HBoxContainer = %Footer
+@onready var divider: ColorRect = %Body/Divider
+## Ticks on every step of a slider or a value row (the menu's hover sound).
+@onready var step_sound: AudioStreamPlayer = %StepSound
+
+var _tabs: Array[Button] = []
+var _pages: Array[Control] = []
+var _current := 0
+var _focused_row: Control
+var _hovered_row: Control
+## Off while the panel grows or shrinks: nothing in it takes focus or input.
+var _interactive := true
+var _last_step_sound_ms := -STEP_SOUND_GAP_MS
 
 
 func _ready() -> void:
 	super()
-	for i in tabs.get_child_count():
-		(tabs.get_child(i) as Button).toggled.connect(_on_tab_toggled.bind(i))
-	_fit_pages.call_deferred()
-	fullscreen_check.set_pressed_no_signal(FullscreenToggle.is_fullscreen())
-	fullscreen_check.toggled.connect(FullscreenToggle.set_fullscreen)
-	FullscreenToggle.fullscreen_changed.connect(fullscreen_check.set_pressed_no_signal)
+	for child in categories.get_children():
+		if child is Button:
+			_tabs.append(child)
+	for child in pages.get_children():
+		_pages.append(child)
+	if OS.is_debug_build():
+		start_in_void_check.set_pressed_no_signal(GameSettings.start_in_void)
+		start_in_void_check.toggled.connect(GameSettings.set_start_in_void)
+		GameSettings.start_in_void_changed.connect(start_in_void_check.set_pressed_no_signal)
+		# The start options exclude each other (GameSettings turns the others off).
+		_bind_start(start_on_earth_check, GameSettings.start_on_earth,
+			GameSettings.set_start_on_earth, GameSettings.start_on_earth_changed)
+		_bind_start(start_on_earth2_check, GameSettings.start_on_earth2,
+			GameSettings.set_start_on_earth2, GameSettings.start_on_earth2_changed)
+		_bind_start(start_in_fire_check, GameSettings.start_in_fire,
+			GameSettings.set_start_in_fire, GameSettings.start_in_fire_changed)
+		_bind_start(start_on_ice_check, GameSettings.start_on_ice,
+			GameSettings.set_start_on_ice, GameSettings.start_on_ice_changed)
+		_bind_start(start_in_fire2_check, GameSettings.start_in_fire2,
+			GameSettings.set_start_in_fire2, GameSettings.start_in_fire2_changed)
+		_bind_start(start_on_ice2_check, GameSettings.start_on_ice2,
+			GameSettings.set_start_on_ice2, GameSettings.start_on_ice2_changed)
+	else:
+		# Public builds: no developer category at all.
+		_tabs.pop_back()
+		_pages.pop_back()
+		for node: Node in [%DevTab, %DevRule, %DevPage]:
+			node.get_parent().remove_child(node)
+			node.queue_free()
+
+	for i in _tabs.size():
+		var tab := _tabs[i]
+		tab.toggled.connect(_on_tab_toggled.bind(i))
+		# Moving through the list with the keyboard opens each category.
+		tab.focus_entered.connect(show_tab.bind(i))
+		var rows := _rows(_pages[i])
+		if not rows.is_empty():
+			tab.focus_neighbor_right = tab.get_path_to(rows[0])
+		for row in rows:
+			if row is NelvarSlider:
+				(row as NelvarSlider).value_changed.connect(_play_step.unbind(1))
+			elif row is NelvarOptionRow:
+				(row as NelvarOptionRow).index_changed.connect(_play_step.unbind(1))
+			row.focus_neighbor_left = row.get_path_to(tab)
+			row.focus_entered.connect(_set_focused_row.bind(row))
+			row.focus_exited.connect(_set_focused_row.bind(null))
+			row.mouse_entered.connect(_set_hovered_row.bind(row))
+			row.mouse_exited.connect(_set_hovered_row.bind(null))
+
+	window_mode.options = PackedStringArray(GameSettings.WINDOW_MODE_NAMES)
+	window_mode.index_changed.connect(_on_window_mode_changed)
+	background_fps.options = PackedStringArray(GameSettings.BACKGROUND_FPS_NAMES)
+	background_fps.index_changed.connect(_on_background_fps_changed)
+	brightness.min_value = GameSettings.BRIGHTNESS_MIN
+	brightness.max_value = GameSettings.BRIGHTNESS_MAX
+	brightness.step = GameSettings.BRIGHTNESS_STEP
+	brightness.value_changed.connect(GameSettings.set_brightness)
+	show_fps_check.toggled.connect(GameSettings.set_show_fps)
+	mute_music_check.set_pressed_no_signal(GameSettings.mute_music_in_background)
+	mute_music_check.toggled.connect(GameSettings.set_mute_music_in_background)
+	GameSettings.audio_changed.connect(func() -> void:
+		mute_music_check.set_pressed_no_signal(GameSettings.mute_music_in_background))
+	pause_on_focus_loss_check.set_pressed_no_signal(GameSettings.pause_on_focus_loss)
+	pause_on_focus_loss_check.toggled.connect(GameSettings.set_pause_on_focus_loss)
+	GameSettings.game_changed.connect(func() -> void:
+		pause_on_focus_loss_check.set_pressed_no_signal(GameSettings.pause_on_focus_loss))
+	vsync_check.toggled.connect(GameSettings.set_vsync)
+	fps_limit.min_value = GameSettings.MAX_FPS_MIN
+	fps_limit.max_value = GameSettings.MAX_FPS_MAX + GameSettings.MAX_FPS_STEP
+	fps_limit.step = GameSettings.MAX_FPS_STEP
+	fps_limit.value_changed.connect(_on_fps_limit_changed)
+	GameSettings.display_changed.connect(_show_display_settings)
+	_show_display_settings()
 	info_panel_check.set_pressed_no_signal(GameSettings.show_info_panel)
 	info_panel_check.toggled.connect(GameSettings.set_show_info_panel)
 	GameSettings.info_panel_changed.connect(info_panel_check.set_pressed_no_signal)
-	# Each press switches to the next strength, from the strongest back to off.
-	damage_vignette_button.pressed.connect(_next_vignette_level)
-	vignette_direction_check.set_pressed_no_signal(GameSettings.damage_vignette_directional)
+	vignette_level.step = GameSettings.VIGNETTE_STEP
+	vignette_level.value_changed.connect(GameSettings.set_damage_vignette)
 	vignette_direction_check.toggled.connect(GameSettings.set_damage_vignette_directional)
 	GameSettings.damage_vignette_changed.connect(_show_vignette_settings)
 	_show_vignette_settings()
-	dev_menu_button.toggled.connect(_set_dev_panel_open)
-	# Arrow keys move between the button and the panel it opened.
-	dev_menu_button.focus_neighbor_left = dev_menu_button.get_path_to(dev_panel.start_in_void_check)
-	dev_panel.start_in_void_check.focus_neighbor_right = \
-		dev_panel.start_in_void_check.get_path_to(dev_menu_button)
-	# Follow this panel when the window is resized.
-	item_rect_changed.connect(_place_dev_panel)
 
 
-## Always opens on the first tab: the screens that open this panel focus
-## its first control (fullscreen_check).
-func play_open() -> void:
-	_close_dev_panel()
+## Ties a developer start option's check to its GameSettings value both ways.
+func _bind_start(check: CheckButton, enabled: bool, setter: Callable, changed: Signal) -> void:
+	check.set_pressed_no_signal(enabled)
+	check.toggled.connect(setter)
+	changed.connect(check.set_pressed_no_signal)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not is_visible_in_tree() or not _interactive:
+		return
+	var step := 0
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo:
+		if key.physical_keycode == NEXT_KEY:
+			step = 1
+		elif key.physical_keycode == PREVIOUS_KEY:
+			step = -1
+	var pad := event as InputEventJoypadButton
+	if pad != null and pad.pressed:
+		if pad.button_index == JOY_BUTTON_RIGHT_SHOULDER:
+			step = 1
+		elif pad.button_index == JOY_BUTTON_LEFT_SHOULDER:
+			step = -1
+	if step == 0:
+		return
+	get_viewport().set_input_as_handled()
+	var next := posmod(_current + step, _tabs.size())
+	show_tab(next)
+	_tabs[next].grab_focus()
+
+
+## The control that takes focus when the panel opens.
+func first_focus() -> Control:
+	return _tabs[_current]
+
+
+## While off, the panel's controls can't be focused or clicked and Q/E do
+## nothing (it is half-transparent and moving).
+func set_interactive(on: bool) -> void:
+	_interactive = on
+	focus_behavior_recursive = Control.FOCUS_BEHAVIOR_INHERITED if on else Control.FOCUS_BEHAVIOR_DISABLED
+	mouse_behavior_recursive = Control.MOUSE_BEHAVIOR_INHERITED if on else Control.MOUSE_BEHAVIOR_DISABLED
+
+
+## Back to the first category, scrolled to the top, nothing revealed yet.
+func reset_view() -> void:
 	show_tab(0)
-	super()
+	_focused_row = null
+	_hovered_row = null
+	_refresh_hint()
+	set_reveal(0.0)
 
 
 func show_tab(index: int) -> void:
-	(tabs.get_child(index) as Button).button_pressed = true
-	_on_tab_toggled(true, index)
+	if not _tabs[index].button_pressed:
+		_tabs[index].button_pressed = true  # toggled -> _on_tab_toggled
+	else:
+		_on_tab_toggled(true, index)
 
 
 func _on_tab_toggled(pressed: bool, index: int) -> void:
 	if not pressed:
 		return
-	for i in pages.get_child_count():
-		pages.get_child(i).visible = i == index
+	var changed := index != _current
+	_current = index
+	for i in _pages.size():
+		_pages[i].visible = i == index
+	if changed:
+		scroll.scroll_vertical = 0
+	_refresh_hint()
 
 
-# The pages area is as large as the largest page, so switching tabs never
-# resizes the panel.
-func _fit_pages() -> void:
-	var largest := Vector2.ZERO
-	for page: Control in pages.get_children():
-		largest = largest.max(page.get_combined_minimum_size())
-	pages.custom_minimum_size = largest
+## Shows the content as the panel opens: 0 = only the frame, 1 = all of it.
+## The rule is drawn from its center, then the columns and the footer follow
+## one after another. The header is NelvarPanelMorph's: the button's text
+## flies there and becomes it.
+func set_reveal(amount: float) -> void:
+	_set_rule_width(ease(_phase(amount, 0.1, 0.7), 0.4))
+	categories.modulate.a = _phase(amount, 0.2, 0.65)
+	divider.modulate.a = categories.modulate.a
+	scroll.get_parent().modulate.a = _phase(amount, 0.3, 0.8)
+	footer.modulate.a = _phase(amount, 0.45, 1.0)
 
 
-func play_close() -> void:
-	_close_dev_panel()
-	super()
+## Fully open: the rule starts breathing.
+func finish_reveal() -> void:
+	_stop()
+	_pulse_rule()
 
 
-func close_now() -> void:
-	_close_dev_panel()
-	super()
+## Closing: the rule stops breathing so `set_reveal` can take it back.
+func begin_hide() -> void:
+	_stop()
 
 
-func _next_vignette_level() -> void:
-	var count := GameSettings.VIGNETTE_LEVELS.size()
-	GameSettings.set_damage_vignette_level((GameSettings.damage_vignette_level + 1) % count)
+func _play_step() -> void:
+	var now := Time.get_ticks_msec()
+	if now - _last_step_sound_ms < STEP_SOUND_GAP_MS:
+		return
+	_last_step_sound_ms = now
+	step_sound.play()
+
+
+func _on_fps_limit_changed(value: float) -> void:
+	GameSettings.set_max_fps(0 if value > GameSettings.MAX_FPS_MAX else roundi(value))
+
+
+func _on_window_mode_changed(index: int) -> void:
+	GameSettings.set_window_mode(index as GameSettings.WindowMode)
+
+
+func _on_background_fps_changed(index: int) -> void:
+	GameSettings.set_background_fps(GameSettings.BACKGROUND_FPS[index])
+
+
+func _show_display_settings() -> void:
+	window_mode.index = GameSettings.window_mode
+	background_fps.index = GameSettings.BACKGROUND_FPS.find(GameSettings.background_fps)
+	brightness.set_value_no_signal(GameSettings.brightness)
+	show_fps_check.set_pressed_no_signal(GameSettings.show_fps)
+	vsync_check.set_pressed_no_signal(GameSettings.vsync)
+	var fps := GameSettings.max_fps
+	fps_limit.set_value_no_signal(fps_limit.max_value if fps == 0 else float(fps))
 
 
 func _show_vignette_settings() -> void:
-	damage_vignette_button.text = "Виньетка урона: %s" % \
-		GameSettings.VIGNETTE_NAMES[GameSettings.damage_vignette_level]
+	vignette_level.set_value_no_signal(GameSettings.damage_vignette)
 	vignette_direction_check.set_pressed_no_signal(GameSettings.damage_vignette_directional)
 
 
-func _set_dev_panel_open(open: bool) -> void:
-	dev_panel_toggled.emit(open)
-	if open:
-		# After the holder has re-laid this panel out to make room (its
-		# containers re-sort deferred, before this call).
-		_open_dev_panel.call_deferred()
-	else:
-		dev_panel.play_close()
+## Focusable rows of a page (group headings and notes are skipped).
+func _rows(page: Control) -> Array[Control]:
+	var rows: Array[Control] = []
+	for child in page.get_children():
+		if child is Control and (child as Control).focus_mode != Control.FOCUS_NONE:
+			rows.append(child)
+	return rows
 
 
-func _open_dev_panel() -> void:
-	if not dev_menu_button.button_pressed:
-		return
-	dev_panel.place_left_of(get_global_rect())
-	dev_panel.play_open()
+func _set_focused_row(row: Control) -> void:
+	_focused_row = row
+	_refresh_hint()
 
 
-func _close_dev_panel() -> void:
-	if not dev_menu_button.button_pressed:
-		return
-	dev_menu_button.set_pressed_no_signal(false)
-	dev_panel.close_now()
-	dev_panel_toggled.emit(false)
+func _set_hovered_row(row: Control) -> void:
+	_hovered_row = row
+	_refresh_hint()
 
 
-func _place_dev_panel() -> void:
-	if dev_panel.visible and dev_menu_button.button_pressed:
-		dev_panel.place_left_of(get_global_rect())
+func _refresh_hint() -> void:
+	hint_changed.emit(current_hint())
+
+
+## Hint of the row under the cursor, else of the row in focus; "" if none.
+func current_hint() -> String:
+	var row := _hovered_row if _hovered_row != null else _focused_row
+	if row != null and is_instance_valid(row) and row.is_visible_in_tree():
+		return row.get_meta(HINT_META, "")
+	return ""
+
+
+static func _phase(amount: float, from: float, to: float) -> float:
+	return clampf((amount - from) / (to - from), 0.0, 1.0)

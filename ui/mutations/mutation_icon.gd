@@ -8,6 +8,7 @@ extends Control
 const ART_PIXEL := 3.0
 const SIDE := 42.0
 const FONT_SIZE := 22
+const HINT_FONT_SIZE := 33
 const BACK := Color(0.05, 0.06, 0.08, 0.82)
 const EDGE := Color(0.02, 0.03, 0.05, 0.9)
 const MutationText := preload("res://ui/mutations/mutation_text.gd")
@@ -84,9 +85,11 @@ func build_hint() -> Control:
 		return null
 	var rows := VBoxContainer.new()
 	rows.add_theme_constant_override("separation", 3)
+	# 3x the 11 px bitmap font: one font pixel = one art pixel, so the text
+	# scales as evenly as the rest of the art on non-integer window scales.
 	rows.add_child(MutationText.line("%s %s" % [mutation.title, NelvarMutation.stage_name(stage)],
-		owner_color(), 24))
-	rows.add_child(MutationText.line(mutation.summary, Color.WHITE))
+		owner_color(), HINT_FONT_SIZE))
+	rows.add_child(MutationText.line(mutation.summary, Color.WHITE, HINT_FONT_SIZE))
 	# The hint takes the content's minimum size: wrapped labels would make
 	# it as tall as one word per line.
 	for label: Label in rows.get_children():

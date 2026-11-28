@@ -5,7 +5,8 @@ extends Control
 ## earned part is solid white, the rest faint.
 
 const ART_PIXEL := 3.0
-const FONT_SIZE := 22
+## 3x the 11 px bitmap font, so a font pixel matches an art pixel.
+const FONT_SIZE := 33
 ## Space between the line and the text in the gap.
 const TEXT_PADDING := 9.0
 

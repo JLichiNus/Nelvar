@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=17 format=3]
 
 [ext_resource type="Script" path="res://scripts/void/void_main.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/world/cloud_sea.gd" id="2"]
@@ -15,6 +15,7 @@
 [ext_resource type="Script" path="res://ui/level_line.gd" id="level_line"]
 [ext_resource type="Script" path="res://ui/damage_vignette.gd" id="damage_vignette"]
 [ext_resource type="PackedScene" path="res://ui/mutations/mutation_hud.tscn" id="mutation_hud"]
+[ext_resource type="Resource" path="res://ui/main_menu/elements/void.tres" id="reality_void"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_vignette"]
 shader = ExtResource("7")
@@ -137,7 +138,7 @@ anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 24.0
-offset_top = -60.0
+offset_top = -66.0
 offset_right = 360.0
 offset_bottom = -24.0
 grow_vertical = 0
@@ -260,6 +261,7 @@ text = "Пустота обрела форму"
 horizontal_alignment = 1
 
 [node name="PauseMenu" parent="." instance=ExtResource("9")]
+reality = ExtResource("reality_void")
 
 [node name="LocationCursor" type="Node" parent="."]
 script = ExtResource("cursor_script")
@@ -288,9 +290,9 @@ anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 24.0
-offset_top = -96.0
+offset_top = -102.0
 offset_right = 360.0
-offset_bottom = -69.0
+offset_bottom = -75.0
 grow_vertical = 0
 mouse_filter = 2
 script = ExtResource("level_line")

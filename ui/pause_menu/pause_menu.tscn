@@ -10,7 +10,7 @@ process_mode = 3
 layer = 10
 visible = false
 script = ExtResource("1")
-settings_element = ExtResource("3")
+reality = ExtResource("3")
 
 [node name="Shade" type="ColorRect" parent="."]
 texture_filter = 1
@@ -77,9 +77,9 @@ theme_override_font_sizes/font_size = 33
 text = "Выйти из игры"
 alignment = 0
 
-[node name="SettingsPanel" parent="Shade/Center" instance=ExtResource("2")]
+[node name="SettingsPanel" parent="Shade" instance=ExtResource("2")]
 unique_name_in_owner = true
-layout_mode = 2
+layout_mode = 0
 
 [node name="InventoryPanel" type="PanelContainer" parent="Shade/Center"]
 unique_name_in_owner = true

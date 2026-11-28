@@ -1,16 +1,20 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://ui/main_menu/settings_panel.gd" id="1"]
-[ext_resource type="PackedScene" path="res://ui/main_menu/dev_panel.tscn" id="2"]
+[ext_resource type="Script" path="res://ui/main_menu/slider.gd" id="2"]
 [ext_resource type="Script" path="res://ui/main_menu/volume_slider.gd" id="3"]
+[ext_resource type="AudioStream" uid="uid://cirqysvg3ccq2" path="res://assets/audio/sfx/ui_hover.wav" id="4"]
+[ext_resource type="Script" uid="uid://calolylcbdqph" path="res://ui/main_menu/option_row.gd" id="5"]
 
 [sub_resource type="ButtonGroup" id="ButtonGroup_tabs"]
 
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_scroll"]
+
 [node name="SettingsPanel" type="PanelContainer" node_paths=PackedStringArray("back_button")]
 visible = false
-custom_minimum_size = Vector2(480, 0)
+custom_minimum_size = Vector2(840, 480)
 script = ExtResource("1")
-back_button = NodePath("Rows/SettingsBack")
+back_button = NodePath("Rows/Footer/SettingsBack")
 reveal_text = false
 
 [node name="Rows" type="VBoxContainer" parent="."]
@@ -35,139 +39,299 @@ anchor_right = 0.5
 anchor_bottom = 1.0
 mouse_filter = 2
 
-[node name="Tabs" type="HBoxContainer" parent="Rows"]
+[node name="Body" type="HBoxContainer" parent="Rows"]
 unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 21
+
+[node name="Categories" type="VBoxContainer" parent="Rows/Body"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(234, 0)
 layout_mode = 2
 theme_override_constants/separation = 9
 
-[node name="ScreenTab" type="Button" parent="Rows/Tabs"]
+[node name="ScreenTab" type="Button" parent="Rows/Body/Categories"]
 layout_mode = 2
-size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 22
 toggle_mode = true
 button_pressed = true
 button_group = SubResource("ButtonGroup_tabs")
 text = "Экран"
+alignment = 0
 
-[node name="InterfaceTab" type="Button" parent="Rows/Tabs"]
+[node name="InterfaceTab" type="Button" parent="Rows/Body/Categories"]
 layout_mode = 2
-size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 22
 toggle_mode = true
 button_group = SubResource("ButtonGroup_tabs")
 text = "Интерфейс"
+alignment = 0
 
-[node name="AudioTab" type="Button" parent="Rows/Tabs"]
+[node name="AudioTab" type="Button" parent="Rows/Body/Categories"]
 layout_mode = 2
-size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 22
 toggle_mode = true
 button_group = SubResource("ButtonGroup_tabs")
 text = "Аудио"
-
-[node name="Pages" type="VBoxContainer" parent="Rows"]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="ScreenPage" type="VBoxContainer" parent="Rows/Pages"]
-layout_mode = 2
-theme_override_constants/separation = 14
-
-[node name="Fullscreen" type="CheckButton" parent="Rows/Pages/ScreenPage"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 22
-text = "Полный экран"
-
-[node name="Hint" type="Label" parent="Rows/Pages/ScreenPage"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
-theme_override_font_sizes/font_size = 22
-text = "F11 — переключить в любой момент"
-
-[node name="InterfacePage" type="VBoxContainer" parent="Rows/Pages"]
-visible = false
-layout_mode = 2
-theme_override_constants/separation = 14
-
-[node name="InfoPanel" type="CheckButton" parent="Rows/Pages/InterfacePage"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 22
-text = "Панель информации в игре"
-
-[node name="InfoHint" type="Label" parent="Rows/Pages/InterfacePage"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
-theme_override_font_sizes/font_size = 22
-text = "F12 — показать или скрыть в игре"
-
-[node name="DamageVignette" type="Button" parent="Rows/Pages/InterfacePage"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 22
-text = "Виньетка урона: средняя"
 alignment = 0
 
-[node name="VignetteDirection" type="CheckButton" parent="Rows/Pages/InterfacePage"]
+[node name="GameTab" type="Button" parent="Rows/Body/Categories"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+toggle_mode = true
+button_group = SubResource("ButtonGroup_tabs")
+text = "Игра"
+alignment = 0
+
+[node name="DevRule" type="ColorRect" parent="Rows/Body/Categories"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 3)
+layout_mode = 2
+mouse_filter = 2
+color = Color(0.62, 0.58, 0.54, 0.35)
+
+[node name="DevTab" type="Button" parent="Rows/Body/Categories"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.76, 0.68, 0.95, 1)
+theme_override_font_sizes/font_size = 22
+toggle_mode = true
+button_group = SubResource("ButtonGroup_tabs")
+text = "Разработчик"
+alignment = 0
+
+[node name="Divider" type="ColorRect" parent="Rows/Body"]
+custom_minimum_size = Vector2(3, 0)
+layout_mode = 2
+mouse_filter = 2
+color = Color(0.62, 0.58, 0.54, 0.35)
+
+[node name="PageColumn" type="VBoxContainer" parent="Rows/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 12
+
+[node name="Scroll" type="ScrollContainer" parent="Rows/Body/PageColumn"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxEmpty_scroll")
+follow_focus = true
+horizontal_scroll_mode = 0
+
+[node name="Pages" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ScreenPage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
+layout_mode = 2
+theme_override_constants/separation = 9
+
+[node name="WindowMode" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("5")
+title = "Режим окна"
+metadata/hint = "Без рамки — на весь экран, но легко переключаться на другие окна. Полный экран — монитор целиком, чуть меньше задержка"
+
+[node name="VSync" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Вертикальная синхронизация"
+metadata/hint = "Кадры подстраиваются под частоту монитора: картинка не рвётся, но отклик чуть медленнее"
+
+[node name="FpsLimit" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("2")
+title = "Частота кадров"
+min_value = 30.0
+max_value = 250.0
+step = 10.0
+percent = false
+suffix = " FPS"
+max_text = "Без ограничения"
+metadata/hint = "Сколько кадров в секунду игра рисует, не больше. Действует отдельно от синхронизации"
+
+[node name="BackgroundFps" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("5")
+title = "Частота в фоне"
+metadata/hint = "Сколько кадров игра рисует, пока её окно не активно: меньше — тише и экономнее"
+
+[node name="Brightness" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("2")
+title = "Яркость"
+min_value = 0.5
+max_value = 1.5
+step = 0.05
+metadata/hint = "Светлее или темнее средние тона; чёрное и белое не меняются"
+
+[node name="ShowFps" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/ScreenPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Показывать FPS"
+metadata/hint = "Счётчик кадров в секунду в правом верхнем углу"
+
+[node name="InterfacePage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 9
+
+[node name="InfoPanel" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/InterfacePage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Панель информации"
+metadata/hint = "Сид мира, статистика и управление поверх игры"
+
+[node name="VignetteLevel" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/InterfacePage"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("2")
+title = "Виньетка урона"
+step = 0.1
+min_text = "выкл."
+metadata/hint = "Красный край экрана при получении урона"
+
+[node name="VignetteDirection" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/InterfacePage"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "Виньетка со стороны удара"
+metadata/hint = "Краснеет только тот край, с которого пришёл удар"
 
-[node name="VignetteHint" type="Label" parent="Rows/Pages/InterfacePage"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
-theme_override_font_sizes/font_size = 22
-text = "Красный край экрана при получении урона"
-
-[node name="AudioPage" type="VBoxContainer" parent="Rows/Pages"]
+[node name="AudioPage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
 visible = false
 layout_mode = 2
-theme_override_constants/separation = 21
+theme_override_constants/separation = 9
 
-[node name="MasterVolume" type="Control" parent="Rows/Pages/AudioPage"]
+[node name="MasterVolume" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/AudioPage"]
 unique_name_in_owner = true
 layout_mode = 2
 script = ExtResource("3")
 bus = &"Master"
 title = "Общая громкость"
+metadata/hint = "Громкость всей игры"
 
-[node name="MusicVolume" type="Control" parent="Rows/Pages/AudioPage"]
+[node name="MusicVolume" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/AudioPage"]
 unique_name_in_owner = true
 layout_mode = 2
 script = ExtResource("3")
 bus = &"Music"
 title = "Музыка"
+metadata/hint = "Музыка меню и забегов"
 
-[node name="SfxVolume" type="Control" parent="Rows/Pages/AudioPage"]
+[node name="SfxVolume" type="Control" parent="Rows/Body/PageColumn/Scroll/Pages/AudioPage"]
 unique_name_in_owner = true
 layout_mode = 2
 script = ExtResource("3")
 bus = &"SFX"
 title = "Звуки"
+metadata/hint = "Удары, шаги, интерфейс"
 
-[node name="AudioHint" type="Label" parent="Rows/Pages/AudioPage"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
-theme_override_font_sizes/font_size = 22
-text = "Стрелки влево и вправо — с клавиатуры"
-
-[node name="DevMenu" type="Button" parent="Rows"]
+[node name="MuteMusicInBackground" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/AudioPage"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
-toggle_mode = true
-text = "Меню разработчика"
-alignment = 0
+text = "Выключать музыку в фоне"
+metadata/hint = "Музыка затихает, пока окно игры не активно, и возвращается вместе с вами"
 
-[node name="SettingsBack" type="Button" parent="Rows"]
+[node name="GamePage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 9
+
+[node name="PauseOnFocusLoss" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/GamePage"]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_horizontal = 0
+theme_override_font_sizes/font_size = 22
+text = "Пауза, когда окно не активно"
+metadata/hint = "Забег встаёт на паузу, если переключиться на другое окно или свернуть игру"
+
+[node name="DevPage" type="VBoxContainer" parent="Rows/Body/PageColumn/Scroll/Pages"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 9
+
+[node name="StartInVoid" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Запускать игру в Пустоте"
+metadata/hint = "«Играть» откроет Пустоту вместо обычного мира"
+
+[node name="StartOnEarth" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Запускать игру на Земле"
+metadata/hint = "«Играть» откроет земляную долину вместо обычного мира"
+
+[node name="StartOnEarth2" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Запускать игру на Земле 2"
+metadata/hint = "«Играть» откроет исполинский лес (Земля 2) вместо обычного мира"
+
+[node name="StartInFire" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Запускать игру в Огне"
+metadata/hint = "«Играть» откроет огненную кузню вместо обычного мира"
+
+[node name="StartOnIce" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Запускать игру на Льду"
+metadata/hint = "«Играть» откроет ледяную долину вместо обычного мира"
+
+[node name="StartOnIce2" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Запускать игру на Льду 2"
+metadata/hint = "«Играть» откроет ледяную пещеру (Лёд 2) вместо обычного мира"
+
+[node name="StartInFire2" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Запускать игру в Огне 2"
+metadata/hint = "«Играть» откроет вулкан (Огонь 2) вместо обычного мира"
+
+[node name="Footer" type="HBoxContainer" parent="Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="SettingsBack" type="Button" parent="Rows/Footer"]
+unique_name_in_owner = true
+layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "Назад"
 
-[node name="DevPanel" parent="." instance=ExtResource("2")]
-unique_name_in_owner = true
+[node name="Keys" type="Label" parent="Rows/Footer"]
 layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.62, 0.58, 0.54, 1)
+theme_override_font_sizes/font_size = 22
+text = "Q / E — раздел    Esc — назад"
+horizontal_alignment = 2
+
+[node name="StepSound" type="AudioStreamPlayer" parent="."]
+unique_name_in_owner = true
+stream = ExtResource("4")
+volume_db = -6.0
+max_polyphony = 4
+bus = &"SFX"

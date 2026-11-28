@@ -334,8 +334,8 @@ func _check_settings() -> void:
 	var menu := FileAccess.get_file_as_string("res://ui/main_menu/main_menu.gd")
 	_check(menu.contains("res://scenes/fire2.tscn") and menu.contains("GameSettings.start_in_fire2"),
 		"«Играть» does not open the volcano")
-	var panel: Node = load("res://ui/main_menu/dev_panel.tscn").instantiate()
-	var check: Node = panel.get_node_or_null("Rows/StartInFire2")
+	var panel: Node = load("res://ui/main_menu/settings_panel.tscn").instantiate()
+	var check: Node = panel.get_node_or_null("Rows/Body/PageColumn/Scroll/Pages/DevPage/StartInFire2")
 	_check(check is CheckButton and (check as CheckButton).text == "Запускать игру в Огне 2",
 		"The developer menu has no Fire 2 start")
 	panel.free()

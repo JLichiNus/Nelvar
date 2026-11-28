@@ -330,9 +330,9 @@ func _check_settings() -> void:
 	var menu := FileAccess.get_file_as_string("res://ui/main_menu/main_menu.gd")
 	_check(menu.contains("res://scenes/fire.tscn") and menu.contains("GameSettings.start_in_fire"),
 		"«Играть» does not open the forge")
-	var panel: Node = load("res://ui/main_menu/dev_panel.tscn").instantiate()
-	_check(panel.get_node_or_null("Rows/StartInFire") is CheckButton, "The developer menu has no fire start")
-	_check(panel.get_node_or_null("Rows/StartOnIce") is CheckButton, "The developer menu has no ice start")
+	var panel: Node = load("res://ui/main_menu/settings_panel.tscn").instantiate()
+	_check(panel.get_node_or_null("Rows/Body/PageColumn/Scroll/Pages/DevPage/StartInFire") is CheckButton, "The developer menu has no fire start")
+	_check(panel.get_node_or_null("Rows/Body/PageColumn/Scroll/Pages/DevPage/StartOnIce") is CheckButton, "The developer menu has no ice start")
 	_check(menu.contains("res://scenes/ice.tscn") and menu.contains("GameSettings.start_on_ice"),
 		"«Играть» does not open the ice valley")
 	panel.free()

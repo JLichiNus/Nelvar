@@ -339,10 +339,10 @@ func _check_settings() -> void:
 	_check(menu.contains("res://scenes/ice.tscn") and menu.contains("GameSettings.start_on_ice"),
 		"«Играть» does not open the ice valley")
 	_check(not menu.contains("Ледяной долины ещё нет"), "«Играть» still falls back from the ice valley")
-	var panel: Node = load("res://ui/main_menu/dev_panel.tscn").instantiate()
-	_check(panel.get_node_or_null("Rows/StartOnIce") is CheckButton, "The developer menu has no ice start")
+	var panel: Node = load("res://ui/main_menu/settings_panel.tscn").instantiate()
+	_check(panel.get_node_or_null("Rows/Body/PageColumn/Scroll/Pages/DevPage/StartOnIce") is CheckButton, "The developer menu has no ice start")
 	panel.free()
-	var hint := FileAccess.get_file_as_string("res://ui/main_menu/dev_panel.gd")
+	var hint := FileAccess.get_file_as_string("res://ui/main_menu/settings_panel.tscn")
 	_check(hint.contains("«Играть» откроет ледяную долину"), "The developer menu does not say «Играть» opens the ice")
 
 
