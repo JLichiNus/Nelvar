@@ -353,6 +353,7 @@ func _check_scene() -> void:
 	var game = load("res://scenes/ice.tscn").instantiate()
 	game.set_meta("seed_override", picked)
 	root.add_child(game)
+	game.finish_painting()
 	await physics_frame
 	await physics_frame
 	var data: NelvarIceData = game.data

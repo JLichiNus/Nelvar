@@ -26,6 +26,14 @@ int key_of(vec4 texel) {
 	return int(round(texel.a * 255.0));
 }
 
+// The node's modulate (art painted late fades in): COLOR in vertex(); the pixels written
+// here take it on, the rest have it already.
+varying vec4 tint;
+
+void vertex() {
+	tint = COLOR;
+}
+
 void fragment() {
 	vec4 texel = texture(TEXTURE, UV);
 	int key = key_of(texel);
@@ -41,12 +49,12 @@ void fragment() {
 		} else if (right && streak >= 0.14) {
 			color = WATER[2];
 		}
-		COLOR = vec4(color, 1.0);
+		COLOR = vec4(color, 1.0) * tint;
 	} else if (key == FOAM_KEY) {
 		float flicker = hash12(pixel + floor(TIME * 7.0) * 3.1);
-		COLOR = vec4(flicker < 0.25 ? WATER[3] : FOAM, 1.0);
+		COLOR = vec4(flicker < 0.25 ? WATER[3] : FOAM, 1.0) * tint;
 	} else if (key == MIST_KEY) {
 		float flicker = hash12(pixel + floor(TIME * 5.0) * 7.3);
-		COLOR = vec4(FOAM, flicker < 0.5 ? 0.7 : 0.0);
+		COLOR = vec4(FOAM, flicker < 0.5 ? 0.7 : 0.0) * tint;
 	}
 }

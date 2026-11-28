@@ -4,13 +4,19 @@ extends Node2D
 ## and groves with ponds and trails, ringed by snowy mountains, in the style of the
 ## "Земля" menu background.
 ##
-## Loading paints everything — the valley and the peaks round it — on all cores at
-## once, then works out the ground under the range (its rocky foot and the shadows the
-## peaks cast) from the painted peaks: the map opens complete. The floor (ground
-## shader) and the cloud shadows are drawn on the GPU.
+## Loading builds the floor's map and paints what lies near the start on several cores
+## (NelvarPaintQueue); the map opens then. The rest of the valley and the peaks round it are
+## painted while the game runs (nearest first, fading in), then the ground under the range
+## (its rocky foot and the shadows the peaks cast) is worked out from the painted peaks.
+## Everything stands and collides from the start. The floor (ground shader) and the cloud
+## shadows are drawn on the GPU.
 
 const STEP := NelvarEarthData.PIXEL
 const WATERFALL_SHADER := preload("res://scripts/earth/waterfall.gdshader")
+## The first frame waits for the art this near the start (world units); the rest fades in
+## over APPEAR seconds as it is painted.
+const READY_REACH := 700.0
+const APPEAR := 0.35
 
 @export var config: NelvarEarthConfig = preload("res://resources/earth_valley_config.tres")
 
@@ -21,15 +27,12 @@ var peak_nodes: Array[NelvarEarthThing] = []
 var _time := 0.0
 var _swaying: Array[NelvarEarthThing] = []
 var _painter := NelvarEarthPainter.new()
-## Threads painting the art. Past about half the cores (a dozen at most) script
-## threads mostly wait for each other, and painting gets slower, not faster.
-var _painters := clampi(OS.get_processor_count() >> 1, 2, 12)
-## Everything to paint, the peaks first (largest first), and its art.
-var _painting: Array[NelvarEarthData.Thing] = []
-var _arts: Array = []
+var _queue: NelvarPaintQueue
 var _field: NelvarEarthField
-var _mountain_field: NelvarMountainField
+## The peaks, their art as it comes in, how many still to come.
 var _peaks: Array[NelvarEarthData.Thing] = []
+var _peak_arts: Array = []
+var _peaks_left := 0
 var _waterfall_material: ShaderMaterial
 var _show_debug := false
 ## F3: the mountain foot and the pond shores as the physics sees them.
@@ -141,58 +144,70 @@ func _outline_shape(polygon: PackedVector2Array) -> CollisionShape2D:
 	return collider
 
 
-## Everything in the valley, the peaks and the ground maps, painted on all cores at
-## once. The peaks take longest, the biggest most: they start first, and the small
-## things of the valley fill the cores up behind them.
+## The floor's map and everything in the valley and round it, on several cores: the map and
+## what is within READY_REACH of the start before the first frame, the rest after (see the
+## class comment). Each thing stands (and collides) at once and gets its art when painted.
 func _paint_world() -> void:
-	var valley_things: Array[NelvarEarthData.Thing] = []
+	_queue = NelvarPaintQueue.new(_paint_job, _lay, "Earth art")
+	_queue.add(["field"], 0.0, true)
 	for thing in data.things:
-		if thing.kind == NelvarEarthData.Kind.PEAK:
-			_peaks.append(thing)
-		else:
-			valley_things.append(thing)
-	_peaks.sort_custom(func(a: NelvarEarthData.Thing, b: NelvarEarthData.Thing) -> bool:
-		return a.size.x * a.size.y > b.size.x * b.size.y)
-	_painting.append_array(_peaks)
-	_painting.append_array(valley_things)
-	_arts.resize(_painting.size())
-	var field_task := WorkerThreadPool.add_task(_build_field, true, "Earth ground map")
-	var group := WorkerThreadPool.add_group_task(_paint_thing, _painting.size(), _painters, true,
-		"Earth art")
-	WorkerThreadPool.wait_for_group_task_completion(group)
-	# The range's foot and the peaks' shadows follow the painted peaks.
-	_mountain_field = NelvarMountainField.build(_peaks, _arts.slice(0, _peaks.size()))
-	WorkerThreadPool.wait_for_task_completion(field_task)
-	for i in _painting.size():
-		var thing := _painting[i]
-		var art: NelvarEarthArt = _arts[i]
-		art.bake()
 		var node := NelvarEarthThing.new()
-		node.setup(thing, art)
+		node.setup(thing, null)
 		if thing.kind == NelvarEarthData.Kind.STATUE:
 			node.watcher = player
-		if art.waterfall:
-			if _waterfall_material == null:
-				_waterfall_material = ShaderMaterial.new()
-				_waterfall_material.shader = WATERFALL_SHADER
-			node.material = _waterfall_material
 		actors.add_child(node)
+		var job := ["thing", thing, node]
 		if thing.kind == NelvarEarthData.Kind.PEAK:
 			peak_nodes.append(node)
+			job = ["peak", thing, node, _peaks.size()]
+			_peaks.append(thing)
 		else:
 			thing_nodes.append(node)
-		if art.sway > 0:
-			_swaying.append(node)
-	_arts.clear()
-	_painting.clear()
+		var size := maxf(thing.radius, maxf(thing.size.x, thing.size.y))
+		_queue.add(job, thing.position.distance_to(data.spawn_position) - size)
+	_peak_arts.resize(_peaks.size())
+	_peaks_left = _peaks.size()
+	_queue.start(READY_REACH)
+	_queue.wait()
 
 
-func _paint_thing(index: int) -> void:
-	_arts[index] = _painter.paint(_painting[index])
+## Runs on the painters.
+func _paint_job(job: Array) -> Variant:
+	match job[0]:
+		"field":
+			return NelvarEarthField.build(data)
+		"mountains":
+			return NelvarMountainField.build(_peaks, _peak_arts)
+	return _painter.paint(job[1])
 
 
-func _build_field() -> void:
-	_field = NelvarEarthField.build(data)
+## On the main thread: the art onto its thing; once every peak is in, the ground under them.
+func _lay(job: Array, result: Variant, late: bool) -> void:
+	match job[0]:
+		"field":
+			_field = result
+		"mountains":
+			_set_mountains(result)
+		_:
+			var node: NelvarEarthThing = job[2]
+			var art: NelvarEarthArt = result
+			art.bake()
+			if art.waterfall:
+				if _waterfall_material == null:
+					_waterfall_material = ShaderMaterial.new()
+					_waterfall_material.shader = WATERFALL_SHADER
+				node.material = _waterfall_material
+			node.set_art(art)
+			if art.sway > 0:
+				_swaying.append(node)
+			if late:
+				node.modulate.a = 0.0
+				node.create_tween().tween_property(node, "modulate:a", 1.0, APPEAR)
+			if job[0] == "peak":
+				_peak_arts[job[3]] = art
+				_peaks_left -= 1
+				if _peaks_left == 0:
+					_queue.then(["mountains"])
 
 
 func _setup_ground() -> void:
@@ -208,13 +223,18 @@ func _setup_ground() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = ("%d:earth:floor" % data.world_seed).hash()
 	material.set_shader_parameter("noise_offset", Vector2(rng.randi_range(-4096, 4096), rng.randi_range(-4096, 4096)))
-	material.set_shader_parameter("mountain_tex", _mountain_field.texture())
-	material.set_shader_parameter("mountain_origin", Vector2(_mountain_field.origin))
-	material.set_shader_parameter("mountain_size", Vector2(_mountain_field.size))
-	material.set_shader_parameter("mountain_scale", float(NelvarMountainField.SCALE))
 	ground.texel_size = STEP
 	_field = null
-	_mountain_field = null
+
+
+## The range's foot and the peaks' shadows on the floor (none until every peak is painted).
+func _set_mountains(mountains: NelvarMountainField) -> void:
+	var material := ground.backdrop_material()
+	material.set_shader_parameter("mountain_tex", mountains.texture())
+	material.set_shader_parameter("mountain_origin", Vector2(mountains.origin))
+	material.set_shader_parameter("mountain_scale", float(NelvarMountainField.SCALE))
+	material.set_shader_parameter("mountain_size", Vector2(mountains.size))
+	_peak_arts = []
 
 
 ## Cloud shadows over everything, pollen drifting in the warm air.
@@ -230,9 +250,24 @@ func _setup_sky() -> void:
 	pollen.preprocess = 4.0
 
 
-## True once every peak stands (they are all painted while the map loads).
+## True once every peak is painted (they come in while the game runs).
 func peaks_finished() -> bool:
-	return peak_nodes.size() == _peaks.size()
+	return _peaks_left == 0
+
+
+## Waits until all the art is painted and laid in (the tests).
+func finish_painting() -> void:
+	if _queue != null:
+		_queue.finish()
+
+
+func is_painting() -> bool:
+	return _queue != null and _queue.busy()
+
+
+func _exit_tree() -> void:
+	if _queue != null:
+		_queue.stop()
 
 
 # --- Every frame --------------------------------------------------------------------
@@ -247,6 +282,8 @@ func gust(world: Vector2) -> float:
 func _process(delta: float) -> void:
 	if data == null:
 		return
+	if _queue.busy():
+		_queue.lay_in()
 	_time += delta
 	ground.backdrop_material().set_shader_parameter("wind_time", _time)
 	# Only plants near the view sway; the rest keep their last pose.

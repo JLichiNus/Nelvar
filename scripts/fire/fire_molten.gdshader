@@ -26,6 +26,14 @@ int key_of(vec4 texel) {
 	return int(round(texel.a * 255.0));
 }
 
+// The node's modulate (art painted late fades in): COLOR in vertex(); the pixels written
+// here take it on, the rest have it already.
+varying vec4 tint;
+
+void vertex() {
+	tint = COLOR;
+}
+
 void fragment() {
 	vec4 texel = texture(TEXTURE, UV);
 	int key = key_of(texel);
@@ -38,13 +46,13 @@ void fragment() {
 		if (left || right) {
 			color = streak < 0.16 ? LAVA[2] : LAVA[0];
 		}
-		COLOR = vec4(color, 1.0);
+		COLOR = vec4(color, 1.0) * tint;
 	} else if (key == HOT_KEY) {
 		float churn = hash12(pixel + floor(TIME * 3.0 + hash12(pixel) * 3.0) * 5.3);
-		COLOR = vec4(churn < 0.2 ? LAVA[4] : (churn < 0.75 ? LAVA[3] : LAVA[2]), 1.0);
+		COLOR = vec4(churn < 0.2 ? LAVA[4] : (churn < 0.75 ? LAVA[3] : LAVA[2]), 1.0) * tint;
 	} else if (key == EMBER_KEY) {
 		float breath = 0.5 + 0.5 * sin(TIME * (1.2 + hash12(pixel * 1.7) * 1.6) + hash12(pixel) * 6.28);
 		vec3 color = breath > 0.82 ? LAVA[3] : (breath > 0.35 ? LAVA[2] : (breath > 0.12 ? LAVA[1] : COAL));
-		COLOR = vec4(color, 1.0);
+		COLOR = vec4(color, 1.0) * tint;
 	}
 }

@@ -456,6 +456,8 @@ func _check_scene() -> void:
 	root.add_child(game)
 	# The player's attacks join the current scene.
 	current_scene = game
+	_check(game.is_painting(), "The forest waited for all its art before the first frame")
+	game.finish_painting()
 	await physics_frame
 	await physics_frame
 	var data: NelvarThicketData = game.data

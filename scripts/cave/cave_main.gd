@@ -21,10 +21,15 @@ extends Node2D
 ## into them, and the spawner only puts them where the way on foot is short; the wind
 ## wave does not reach through the walls.
 ##
-## Loading paints everything on several cores (as on the valley); the floor, the depths,
-## the abyss and the light are drawn on the GPU.
+## Loading builds the floor's maps first, then paints what stands near the start on several
+## cores (NelvarPaintQueue, as on the valley); the rest is painted while the game runs. The
+## floor, the depths, the abyss and the light are drawn on the GPU.
 
 const STEP := NelvarIceData.PIXEL
+## The first frame waits for the art this near the start (world units); the rest fades in
+## over APPEAR seconds as it is painted.
+const READY_REACH := 700.0
+const APPEAR := 0.35
 const Surface = NelvarIceData.Surface
 const Fall = NelvarIceData.Fall
 ## Falls, thin ice and holes are NelvarIceHazards'; the tests read these here.
@@ -90,10 +95,10 @@ var snow_clock := 0.0
 var _time := 0.0
 var _swaying: Array[NelvarIceThing] = []
 var _painter := NelvarCavePainter.new()
-var _painters := clampi(OS.get_processor_count() >> 1, 2, 12)
-var _painting: Array = []
-var _arts: Array = []
+var _queue: NelvarPaintQueue
 var _field: NelvarCaveField
+var _frozen_arts: Array = []
+var _floater_arts: Array = []
 var _geyser_stage := PackedInt32Array()
 var _blasted := {}
 var _snowfalls: Array[CPUParticles2D] = []
@@ -182,6 +187,8 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	NelvarPlayer.sight_mask = 0
+	if _queue != null:
+		_queue.stop()
 
 
 func _update_status() -> void:
@@ -270,58 +277,81 @@ func _draw_outlines() -> void:
 					Color.from_hsv(clampf(distance / 2400.0, 0.0, 1.0) * 0.6, 0.8, 1.0, 0.8))
 
 
-## Everything standing in the cave, the creatures in the lakes and the walls and the
-## bodies on the water, painted on several cores; the floor's maps are built alongside.
+## The floor's maps, the creatures in the lakes and the walls and the bodies on the water
+## (their nodes take them all at once) and what stands within READY_REACH of the start, on
+## several cores before the first frame (NelvarPaintQueue); the rest after. Each thing
+## stands at once and gets its art when painted.
 func _paint_world() -> void:
-	_painting.append_array(data.things)
-	_painting.append_array(data.frozen)
-	_painting.append_array(data.floaters)
-	_arts.resize(_painting.size())
-	var field_task := WorkerThreadPool.add_task(_build_field, true, "Cave floor map")
-	var group := WorkerThreadPool.add_group_task(_paint_thing, _painting.size(), _painters, true, "Cave art")
-	WorkerThreadPool.wait_for_group_task_completion(group)
-	WorkerThreadPool.wait_for_task_completion(field_task)
-	var frozen_arts := []
-	var floater_arts := []
-	for i in _painting.size():
-		var art: NelvarIceArt = _arts[i]
-		var item: Variant = _painting[i]
-		if item is NelvarIceData.Frozen:
-			frozen_arts.append(art)
-			continue
-		if item is NelvarCaveData.Floater:
-			floater_arts.append(art)
-			continue
-		if art == null:
-			continue
-		art.bake()
-		var thing: NelvarIceData.Thing = item
+	_queue = NelvarPaintQueue.new(_paint_job, _lay, "Cave art")
+	_queue.add(["field"], 0.0, true)
+	for i in data.frozen.size():
+		_queue.add(["frozen", data.frozen[i], i], 0.0, true)
+	for i in data.floaters.size():
+		_queue.add(["floater", data.floaters[i], i], 0.0, true)
+	_frozen_arts.resize(data.frozen.size())
+	_floater_arts.resize(data.floaters.size())
+	for thing in data.things:
 		var node := NelvarIceThing.new()
-		node.setup(thing, art)
+		node.setup(thing)
 		if thing.kind == NelvarIceData.Kind.STATUE or (thing.kind == NelvarIceData.Kind.EMBEDDED and thing.accent):
 			node.watcher = player
 		actors.add_child(node)
 		thing_nodes.append(node)
-		if art.sway > 0:
-			_swaying.append(node)
-	depths.setup(data, frozen_arts, player)
-	floaters.setup(data, floater_arts)
-	_arts.clear()
-	_painting.clear()
+		var size := maxf(thing.radius, maxf(thing.size.x, thing.size.y))
+		_queue.add(["thing", thing, node], thing.position.distance_to(data.spawn_position) - size)
+	_queue.start(READY_REACH)
+	_queue.wait()
+	depths.setup(data, _frozen_arts, player)
+	floaters.setup(data, _floater_arts)
+	_frozen_arts = []
+	_floater_arts = []
 
 
-func _paint_thing(index: int) -> void:
-	var item: Variant = _painting[index]
-	if item is NelvarIceData.Frozen:
-		_arts[index] = _painter.paint_frozen(item)
-	elif item is NelvarCaveData.Floater:
-		_arts[index] = _painter.paint_floater(item)
-	else:
-		_arts[index] = _painter.paint(item)
+## Runs on the painters.
+func _paint_job(job: Array) -> Variant:
+	match job[0]:
+		"field":
+			return NelvarCaveField.build(data)
+		"frozen":
+			return _painter.paint_frozen(job[1])
+		"floater":
+			return _painter.paint_floater(job[1])
+	return _painter.paint(job[1])
 
 
-func _build_field() -> void:
-	_field = NelvarCaveField.build(data)
+## On the main thread: the art onto its thing.
+func _lay(job: Array, result: Variant, late: bool) -> void:
+	match job[0]:
+		"field":
+			_field = result
+		"frozen":
+			_frozen_arts[job[2]] = result
+		"floater":
+			_floater_arts[job[2]] = result
+		"thing":
+			var node: NelvarIceThing = job[2]
+			var art: NelvarIceArt = result
+			if art == null:
+				thing_nodes.erase(node)
+				node.queue_free()
+				return
+			art.bake()
+			node.set_art(art)
+			if art.sway > 0:
+				_swaying.append(node)
+			if late:
+				node.modulate.a = 0.0
+				node.create_tween().tween_property(node, "modulate:a", 1.0, APPEAR)
+
+
+## Waits until all the art is painted and laid in (the tests).
+func finish_painting() -> void:
+	if _queue != null:
+		_queue.finish()
+
+
+func is_painting() -> bool:
+	return _queue != null and _queue.busy()
 
 
 func _setup_ground() -> void:
@@ -444,6 +474,8 @@ func gust(world: Vector2) -> float:
 func _process(delta: float) -> void:
 	if data == null:
 		return
+	if _queue.busy():
+		_queue.lay_in()
 	_time += delta
 	var viewport := get_viewport()
 	var to_world := viewport.get_canvas_transform().affine_inverse()

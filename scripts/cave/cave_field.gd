@@ -214,7 +214,7 @@ func _snow() -> void:
 		var from := _pixel(tongue.box.position - Vector2.ONE * 30.0).max(Vector2i.ZERO)
 		var to := _pixel(tongue.box.end + Vector2.ONE * 30.0).min(size - Vector2i.ONE)
 		_snow_boxes.append(Rect2i(from, to - from))
-	var group := WorkerThreadPool.add_group_task(_snow_row, size.y, -1, true, "Cave snow")
+	var group := WorkerThreadPool.add_group_task(_snow_row, size.y, NelvarPaintQueue.threads, true, "Cave snow")
 	WorkerThreadPool.wait_for_group_task_completion(group)
 
 
@@ -272,7 +272,7 @@ func _light() -> void:
 					var k := y * light_size.x + x
 					glows[k] = maxf(glows[k], pow(1.0 - d / reach, 1.4) * (0.55 + thing.radius / 80.0))
 	_glows = glows
-	var group := WorkerThreadPool.add_group_task(_light_row, light_size.y, -1, true, "Cave light")
+	var group := WorkerThreadPool.add_group_task(_light_row, light_size.y, NelvarPaintQueue.threads, true, "Cave light")
 	WorkerThreadPool.wait_for_group_task_completion(group)
 	_glows = PackedFloat32Array()
 

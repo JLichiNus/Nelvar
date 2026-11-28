@@ -409,6 +409,7 @@ func _check_scene() -> void:
 	var game = load("res://scenes/ice2.tscn").instantiate()
 	game.set_meta("seed_override", 20261126)
 	root.add_child(game)
+	game.finish_painting()
 	# The player's attacks join the current scene.
 	current_scene = game
 	await physics_frame

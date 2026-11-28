@@ -62,12 +62,24 @@ func setup(spec: NelvarEarthData.Thing, artwork: NelvarEarthArt) -> void:
 	add_child(collider)
 
 
+## The art painted after the node went up (the collision stood from the start).
+func set_art(artwork: NelvarEarthArt) -> void:
+	art = artwork
+	if is_inside_tree():
+		_add_occluder()
+	queue_redraw()
+
+
 ## Tiny things on the ground never hide the player.
 func occludes() -> bool:
 	return thing.kind not in [Kind.LILY, Kind.MUSHROOMS, Kind.FLOWERS]
 
 
 func _enter_tree() -> void:
+	_add_occluder()
+
+
+func _add_occluder() -> void:
 	if art != null and art.texture != null and occludes():
 		NelvarOcclusionOutline.add_occluder(self, art.texture,
 			Rect2(global_position + art.local_rect.position, art.local_rect.size))
@@ -93,7 +105,7 @@ func set_gust(value: float) -> void:
 
 
 func _process(delta: float) -> void:
-	if watcher == null or not is_instance_valid(watcher):
+	if art == null or watcher == null or not is_instance_valid(watcher):
 		return
 	var distance := global_position.distance_to(watcher.global_position)
 	var wanted := 2 if distance < EYE_OPEN_DISTANCE else (_eye if distance < EYE_CLOSE_DISTANCE else 0)

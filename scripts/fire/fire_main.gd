@@ -10,10 +10,17 @@ extends Node2D
 ## right at the lava's edge scorches a little. Hoppers do not jump into the lava, but
 ## the wind can blow them in. Active fissures glow brighter for a moment, then erupt.
 ##
-## Loading paints everything on several cores at once (as on the earth map). The floor,
-## the light of the lava, the smoke shadows and the heat haze are drawn on the GPU.
+## Loading builds the floor's map and paints what lies near the start on several cores
+## (NelvarPaintQueue, as on the earth map); the rest is painted while the game runs, its
+## sparks, smoke and craters joining in, then the ground under the ridges from the painted
+## peaks. The floor, the light of the lava, the smoke shadows and the heat haze are drawn on
+## the GPU.
 
 const STEP := NelvarFireData.PIXEL
+## The first frame waits for the art this near the start (world units); the rest fades in
+## over APPEAR seconds as it is painted.
+const READY_REACH := 700.0
+const APPEAR := 0.35
 const MOLTEN_SHADER := preload("res://scripts/fire/fire_molten.gdshader")
 ## Burning in the lava: damage, and how long the player sinks before coming back.
 const LAVA_DAMAGE := 20.0
@@ -46,11 +53,16 @@ var _time := 0.0
 var _swaying: Array[NelvarFireThing] = []
 var _painter := NelvarFirePainter.new()
 var _volcano_painter := NelvarVolcanoPainter.new()
-var _painters := clampi(OS.get_processor_count() >> 1, 2, 12)
-var _painting: Array = []
-var _arts: Array = []
+var _queue: NelvarPaintQueue
 var _field: NelvarFireField
-var _mountain_field: NelvarMountainField
+## The peaks (largest first), their art as it comes in, how many still to come.
+var _peaks: Array[NelvarEarthData.Thing] = []
+var _peak_arts: Array = []
+var _peaks_left := 0
+## Sparks, wisps and plumes from the art laid in before the embers and the smoke are set up.
+var _sparks := PackedVector2Array()
+var _wisps := PackedVector2Array()
+var _plumes := PackedVector2Array()
 var _molten_material: ShaderMaterial
 var _safe_position := Vector2.ZERO
 var _heat_time := 0.0
@@ -190,85 +202,147 @@ func _outline_shape(polygon: PackedVector2Array) -> CollisionShape2D:
 	return collider
 
 
-## Everything in the basin and the ridges round it, painted on several cores; the
-## biggest ridges start first. The ground map is built alongside.
+## The floor's map and what is within READY_REACH of the start before the first frame, the
+## rest after. Each thing and peak stands at once and gets its art when painted.
 func _paint_world() -> void:
-	var peaks := data.peaks.duplicate()
-	peaks.sort_custom(func(a: NelvarEarthData.Thing, b: NelvarEarthData.Thing) -> bool:
-		return a.size.x * a.size.y > b.size.x * b.size.y)
-	_painting.append_array(peaks)
-	_painting.append_array(data.things)
-	_arts.resize(_painting.size())
-	var field_task := WorkerThreadPool.add_task(_build_field, true, "Fire ground map")
-	var group := WorkerThreadPool.add_group_task(_paint_thing, _painting.size(), _painters, true, "Fire art")
-	WorkerThreadPool.wait_for_group_task_completion(group)
-	var ridges: Array[NelvarEarthData.Thing] = []
-	var ridge_arts := []
-	for i in peaks.size():
-		ridges.append(peaks[i])
-		ridge_arts.append(_arts[i])
-	_mountain_field = NelvarMountainField.build(ridges, ridge_arts)
-	WorkerThreadPool.wait_for_task_completion(field_task)
+	_queue = NelvarPaintQueue.new(_paint_job, _lay, "Fire art")
 	_molten_material = ShaderMaterial.new()
 	_molten_material.shader = MOLTEN_SHADER
-	var wisps := PackedVector2Array()
-	var plumes := PackedVector2Array()
-	var sparks := PackedVector2Array()
-	for i in _painting.size():
-		var art: NelvarFireArt = _arts[i]
-		if art == null:
-			continue
-		art.bake()
-		if _painting[i] is NelvarEarthData.Thing:
-			var peak: NelvarEarthData.Thing = _painting[i]
-			var node := NelvarEarthThing.new()
-			node.setup(peak, art)
-			node.material = _molten_material
-			actors.add_child(node)
-			peak_nodes.append(node)
-			if art.vent.is_finite():
-				var vent := peak.position + art.vent * STEP
-				var molten := peak.accent and peak.variant == NelvarEarthData.Peak.GIANT
-				if molten:
-					plumes.append(vent)
-					var radius := peak.size.x / STEP * 0.12
-					_craters.append(Vector4(vent.x / STEP, vent.y / STEP, maxf(10.0, radius), 0.7))
-				for point in art.sparks:
-					sparks.append(peak.position + point * STEP)
-			continue
-		var thing: NelvarFireData.Thing = _painting[i]
+	_queue.add(["field"], 0.0, true)
+	_peaks.assign(data.peaks)
+	_peaks.sort_custom(func(a: NelvarEarthData.Thing, b: NelvarEarthData.Thing) -> bool:
+		return a.size.x * a.size.y > b.size.x * b.size.y)
+	for i in _peaks.size():
+		var peak := _peaks[i]
+		var node := NelvarEarthThing.new()
+		node.setup(peak, null)
+		node.material = _molten_material
+		actors.add_child(node)
+		peak_nodes.append(node)
+		_queue.add(["peak", peak, node, i], _distance(peak.position, peak.radius, peak.size))
+	for thing in data.things:
 		var node := NelvarFireThing.new()
-		node.setup(thing, art)
-		if art.molten:
-			node.material = _molten_material
+		node.setup(thing)
 		actors.add_child(node)
 		thing_nodes.append(node)
+		_queue.add(["thing", thing, node], _distance(thing.position, thing.radius, thing.size))
+	_peak_arts.resize(_peaks.size())
+	_peaks_left = _peaks.size()
+	_queue.start(READY_REACH)
+	_queue.wait()
+	embers.setup(data, _sparks)
+	smoke.setup(data, _wisps, _plumes)
+	critters.setup(data, player, embers)
+	_sparks = PackedVector2Array()
+	_wisps = PackedVector2Array()
+	_plumes = PackedVector2Array()
+
+
+## How far a thing of this `radius` and `size` at `position` is from the start.
+func _distance(position: Vector2, radius: float, size: Vector2) -> float:
+	return position.distance_to(data.spawn_position) - maxf(radius, maxf(size.x, size.y))
+
+
+## Runs on the painters.
+func _paint_job(job: Array) -> Variant:
+	match job[0]:
+		"field":
+			return NelvarFireField.build(data)
+		"peak":
+			var peak: NelvarEarthData.Thing = job[1]
+			if peak.variant == NelvarEarthData.Peak.BOULDER:
+				return _painter.paint_boulder(peak)
+			return _volcano_painter.paint(peak)
+		"mountains":
+			return NelvarMountainField.build(_peaks, _peak_arts)
+	return _painter.paint(job[1])
+
+
+## On the main thread: the art onto its thing, its sparks, smoke and crater; once every
+## peak is in, the ground under them.
+func _lay(job: Array, result: Variant, late: bool) -> void:
+	match job[0]:
+		"field":
+			_field = result
+			return
+		"mountains":
+			_set_mountains(result)
+			return
+	var art: NelvarFireArt = result
+	var sparks := PackedVector2Array()
+	var wisps := PackedVector2Array()
+	var plumes := PackedVector2Array()
+	if job[0] == "peak":
+		_peak_arts[job[3]] = art
+		_peaks_left -= 1
+		if _peaks_left == 0:
+			_queue.then(["mountains"])
+		if art == null:
+			return
+		var peak: NelvarEarthData.Thing = job[1]
+		var node: NelvarEarthThing = job[2]
+		art.bake()
+		node.set_art(art)
+		_appear(node, late)
+		if art.vent.is_finite():
+			var vent := peak.position + art.vent * STEP
+			if peak.accent and peak.variant == NelvarEarthData.Peak.GIANT:
+				plumes.append(vent)
+				var radius := peak.size.x / STEP * 0.12
+				_craters.append(Vector4(vent.x / STEP, vent.y / STEP, maxf(10.0, radius), 0.7))
+			for point in art.sparks:
+				sparks.append(peak.position + point * STEP)
+	else:
+		var thing: NelvarFireData.Thing = job[1]
+		var node: NelvarFireThing = job[2]
+		if art == null:
+			thing_nodes.erase(node)
+			node.queue_free()
+			return
+		art.bake()
+		if art.molten:
+			node.material = _molten_material
+		node.set_art(art)
+		_appear(node, late)
 		if art.sway > 0:
 			_swaying.append(node)
 		if art.vent.is_finite():
 			wisps.append(thing.position + art.vent * STEP)
-		sparks.append_array(node.spark_points())
-	_arts.clear()
-	_painting.clear()
-	embers.setup(data, sparks)
-	smoke.setup(data, wisps, plumes)
-	critters.setup(data, player, embers)
-
-
-func _paint_thing(index: int) -> void:
-	var item: Variant = _painting[index]
-	if item is NelvarEarthData.Thing:
-		var peak: NelvarEarthData.Thing = item
-		if peak.variant == NelvarEarthData.Peak.BOULDER:
-			_arts[index] = _painter.paint_boulder(peak)
-		else:
-			_arts[index] = _volcano_painter.paint(peak)
+		sparks = node.spark_points()
+	if late:
+		embers.sources.append_array(sparks)
+		smoke.add_points(wisps, plumes)
 	else:
-		_arts[index] = _painter.paint(item)
+		_sparks.append_array(sparks)
+		_wisps.append_array(wisps)
+		_plumes.append_array(plumes)
 
 
-func _build_field() -> void:
-	_field = NelvarFireField.build(data)
+## Art laid in after the first frame fades in.
+func _appear(node: CanvasItem, late: bool) -> void:
+	if late:
+		node.modulate.a = 0.0
+		node.create_tween().tween_property(node, "modulate:a", 1.0, APPEAR)
+
+
+## True once every peak is painted (they come in while the game runs).
+func peaks_finished() -> bool:
+	return _peaks_left == 0
+
+
+## Waits until all the art is painted and laid in (the tests).
+func finish_painting() -> void:
+	if _queue != null:
+		_queue.finish()
+
+
+func is_painting() -> bool:
+	return _queue != null and _queue.busy()
+
+
+func _exit_tree() -> void:
+	if _queue != null:
+		_queue.stop()
 
 
 func _setup_ground() -> void:
@@ -282,10 +356,6 @@ func _setup_ground() -> void:
 	material.set_shader_parameter("field_origin", Vector2(_field.origin))
 	material.set_shader_parameter("field_size", Vector2(_field.size))
 	material.set_shader_parameter("noise_offset", noise_offset)
-	material.set_shader_parameter("mountain_tex", _mountain_field.texture())
-	material.set_shader_parameter("mountain_origin", Vector2(_mountain_field.origin))
-	material.set_shader_parameter("mountain_size", Vector2(_mountain_field.size))
-	material.set_shader_parameter("mountain_scale", float(NelvarMountainField.SCALE))
 	ground.texel_size = STEP
 	var light := glow.backdrop_material()
 	light.set_shader_parameter("texel_size", float(STEP))
@@ -310,7 +380,16 @@ func _setup_ground() -> void:
 	haze.set_shader_parameter("glow_scale", float(NelvarFireField.GLOW_SCALE))
 	haze.set_shader_parameter("texel_size", float(STEP))
 	_field = null
-	_mountain_field = null
+
+
+## The ridges' foot and the peaks' shadows on the floor (none until every peak is painted).
+func _set_mountains(mountains: NelvarMountainField) -> void:
+	var material := ground.backdrop_material()
+	material.set_shader_parameter("mountain_tex", mountains.texture())
+	material.set_shader_parameter("mountain_origin", Vector2(mountains.origin))
+	material.set_shader_parameter("mountain_scale", float(NelvarMountainField.SCALE))
+	material.set_shader_parameter("mountain_size", Vector2(mountains.size))
+	_peak_arts = []
 
 
 ## Shadows of the smoke drifting over everything.
@@ -336,6 +415,8 @@ func gust(world: Vector2) -> float:
 func _process(delta: float) -> void:
 	if data == null:
 		return
+	if _queue.busy():
+		_queue.lay_in()
 	_time += delta
 	var viewport := get_viewport()
 	var to_world := viewport.get_canvas_transform().affine_inverse()

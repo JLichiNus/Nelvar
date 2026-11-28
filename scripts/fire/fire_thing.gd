@@ -14,7 +14,8 @@ var show_collision := false
 var lean := 0
 
 
-func setup(spec: NelvarFireData.Thing, artwork: NelvarFireArt) -> void:
+## The art may come later (set_art): the collision stands from the start.
+func setup(spec: NelvarFireData.Thing, artwork: NelvarFireArt = null) -> void:
 	thing = spec
 	art = artwork
 	name = "%s_%d" % [(Kind.keys()[spec.kind] as String).capitalize().replace(" ", ""), spec.id]
@@ -41,6 +42,13 @@ func setup(spec: NelvarFireData.Thing, artwork: NelvarFireArt) -> void:
 	add_child(collider)
 
 
+func set_art(artwork: NelvarFireArt) -> void:
+	art = artwork
+	if is_inside_tree():
+		_add_occluder()
+	queue_redraw()
+
+
 ## Low things on the ground never hide the player.
 func occludes() -> bool:
 	return thing.kind not in [Kind.VENT, Kind.ASH_FLOWER, Kind.EMBER_GRASS]
@@ -55,6 +63,10 @@ func spark_points() -> PackedVector2Array:
 
 
 func _enter_tree() -> void:
+	_add_occluder()
+
+
+func _add_occluder() -> void:
 	if art != null and art.texture != null and occludes():
 		NelvarOcclusionOutline.add_occluder(self, art.texture,
 			Rect2(global_position + art.local_rect.position, art.local_rect.size))

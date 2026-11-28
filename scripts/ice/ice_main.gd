@@ -14,10 +14,16 @@ extends Node2D
 ## open water that freezes over again. Blizzards cross the valley: inside one the
 ## player moves and attacks slower and marks in the snow drift over faster.
 ##
-## Loading paints everything on several cores at once (as on the earth map); the floor,
-## the depths and the blizzard are drawn on the GPU.
+## Loading builds the floor's map and paints the frozen creatures and what lies near the
+## start on several cores (NelvarPaintQueue, as on the earth map); the rest is painted while
+## the game runs, then the ground under the range from the painted peaks. The floor, the
+## depths and the blizzard are drawn on the GPU.
 
 const STEP := NelvarIceData.PIXEL
+## The first frame waits for the art this near the start (world units); the rest fades in
+## over APPEAR seconds as it is painted.
+const READY_REACH := 700.0
+const APPEAR := 0.35
 ## Falls, thin ice and holes are NelvarIceHazards'; the tests read these here.
 const FALL_TIME := NelvarIceHazards.FALL_TIME
 const FREEZE_TIME := NelvarIceHazards.FREEZE_TIME
@@ -96,11 +102,13 @@ var _time := 0.0
 var _swaying: Array[NelvarIceThing] = []
 var _painter := NelvarIcePainter.new()
 var _frost_painter := NelvarFrostPainter.new()
-var _painters := clampi(OS.get_processor_count() >> 1, 2, 12)
-var _painting: Array = []
-var _arts: Array = []
+var _queue: NelvarPaintQueue
 var _field: NelvarIceField
-var _mountain_field: NelvarMountainField
+## The peaks (largest first), their art as it comes in, how many still to come.
+var _peaks: Array[NelvarEarthData.Thing] = []
+var _peak_arts: Array = []
+var _peaks_left := 0
+var _frozen_arts: Array = []
 ## The cracks on thin ice now (NelvarIceHazards keeps them).
 var _cracks: Array:
 	get:
@@ -229,81 +237,119 @@ func _draw_outlines() -> void:
 		_outlines.draw_arc(hole.center, hole.radius, 0.0, TAU, 32, Color.AQUA, 2.0)
 
 
-## Everything in the valley, the peaks round it and the creatures under the ice,
-## painted on several cores; the biggest peaks start first. The floor map is built
-## alongside.
+## The floor's map, the frozen creatures (the depths take them all at once) and what is
+## within READY_REACH of the start before the first frame, the rest after. Each thing and
+## peak stands at once and gets its art when painted.
 func _paint_world() -> void:
-	var peaks := data.peaks.duplicate()
-	peaks.sort_custom(func(a: NelvarEarthData.Thing, b: NelvarEarthData.Thing) -> bool:
+	_queue = NelvarPaintQueue.new(_paint_job, _lay, "Ice art")
+	_queue.add(["field"], 0.0, true)
+	for i in data.frozen.size():
+		_queue.add(["frozen", data.frozen[i], i], 0.0, true)
+	_frozen_arts.resize(data.frozen.size())
+	_peaks.assign(data.peaks)
+	_peaks.sort_custom(func(a: NelvarEarthData.Thing, b: NelvarEarthData.Thing) -> bool:
 		return a.size.x * a.size.y > b.size.x * b.size.y)
-	_painting.append_array(peaks)
-	_painting.append_array(data.things)
-	_painting.append_array(data.frozen)
-	_arts.resize(_painting.size())
-	var field_task := WorkerThreadPool.add_task(_build_field, true, "Ice floor map")
-	var group := WorkerThreadPool.add_group_task(_paint_thing, _painting.size(), _painters, true, "Ice art")
-	WorkerThreadPool.wait_for_group_task_completion(group)
-	var ridges: Array[NelvarEarthData.Thing] = []
-	var ridge_arts := []
-	for i in peaks.size():
-		ridges.append(peaks[i])
-		ridge_arts.append(_arts[i])
-	_mountain_field = NelvarMountainField.build(ridges, ridge_arts)
-	WorkerThreadPool.wait_for_task_completion(field_task)
-	var frozen_arts := []
-	for i in _painting.size():
-		var art: NelvarIceArt = _arts[i]
-		var item: Variant = _painting[i]
-		if item is NelvarIceData.Frozen:
-			frozen_arts.append(art)
-			continue
-		if art == null:
-			continue
-		art.bake()
-		if item is NelvarEarthData.Thing:
-			var peak: NelvarEarthData.Thing = item
-			var spec := NelvarIceData.Thing.new()
-			spec.kind = NelvarIceData.Kind.ROCK
-			spec.position = peak.position
-			spec.radius = peak.radius
-			spec.appearance_seed = peak.appearance_seed
-			spec.id = i
-			var node := NelvarIceThing.new()
-			node.setup(spec, art)
-			node.name = "Peak_%d" % i
-			actors.add_child(node)
-			peak_nodes.append(node)
-			continue
-		var thing: NelvarIceData.Thing = item
+	for i in _peaks.size():
+		var peak := _peaks[i]
+		var spec := NelvarIceData.Thing.new()
+		spec.kind = NelvarIceData.Kind.ROCK
+		spec.position = peak.position
+		spec.radius = peak.radius
+		spec.appearance_seed = peak.appearance_seed
+		spec.id = i
 		var node := NelvarIceThing.new()
-		node.setup(thing, art)
+		node.setup(spec)
+		node.name = "Peak_%d" % i
+		actors.add_child(node)
+		peak_nodes.append(node)
+		_queue.add(["peak", peak, node, i], _distance(peak.position, peak.radius, peak.size))
+	for thing in data.things:
+		var node := NelvarIceThing.new()
+		node.setup(thing)
 		if thing.kind == NelvarIceData.Kind.STATUE:
 			node.watcher = player
 		actors.add_child(node)
 		thing_nodes.append(node)
-		if art.sway > 0:
-			_swaying.append(node)
-	depths.setup(data, frozen_arts, player)
-	_arts.clear()
-	_painting.clear()
+		_queue.add(["thing", thing, node], _distance(thing.position, thing.radius, thing.size))
+	_peak_arts.resize(_peaks.size())
+	_peaks_left = _peaks.size()
+	_queue.start(READY_REACH)
+	_queue.wait()
+	depths.setup(data, _frozen_arts, player)
+	_frozen_arts = []
 
 
-func _paint_thing(index: int) -> void:
-	var item: Variant = _painting[index]
-	if item is NelvarEarthData.Thing:
-		var peak: NelvarEarthData.Thing = item
-		if peak.variant == NelvarEarthData.Peak.BOULDER:
-			_arts[index] = _painter.paint_boulder(peak)
-		else:
-			_arts[index] = _frost_painter.paint(peak)
-	elif item is NelvarIceData.Frozen:
-		_arts[index] = _painter.paint_frozen(item)
-	else:
-		_arts[index] = _painter.paint(item)
+## How far a thing of this `radius` and `size` at `position` is from the start.
+func _distance(position: Vector2, radius: float, size: Vector2) -> float:
+	return position.distance_to(data.spawn_position) - maxf(radius, maxf(size.x, size.y))
 
 
-func _build_field() -> void:
-	_field = NelvarIceField.build(data)
+## Runs on the painters.
+func _paint_job(job: Array) -> Variant:
+	match job[0]:
+		"field":
+			return NelvarIceField.build(data)
+		"frozen":
+			return _painter.paint_frozen(job[1])
+		"peak":
+			var peak: NelvarEarthData.Thing = job[1]
+			if peak.variant == NelvarEarthData.Peak.BOULDER:
+				return _painter.paint_boulder(peak)
+			return _frost_painter.paint(peak)
+		"mountains":
+			return NelvarMountainField.build(_peaks, _peak_arts)
+	return _painter.paint(job[1])
+
+
+## On the main thread: the art onto its thing; once every peak is in, the ground under them.
+func _lay(job: Array, result: Variant, late: bool) -> void:
+	match job[0]:
+		"field":
+			_field = result
+		"frozen":
+			_frozen_arts[job[2]] = result
+		"mountains":
+			_set_mountains(result)
+		_:
+			if job[0] == "peak":
+				_peak_arts[job[3]] = result
+				_peaks_left -= 1
+				if _peaks_left == 0:
+					_queue.then(["mountains"])
+			var node: NelvarIceThing = job[2]
+			var art: NelvarIceArt = result
+			if art == null:
+				if job[0] == "thing":
+					thing_nodes.erase(node)
+					node.queue_free()
+				return
+			art.bake()
+			node.set_art(art)
+			if art.sway > 0:
+				_swaying.append(node)
+			if late:
+				node.modulate.a = 0.0
+				node.create_tween().tween_property(node, "modulate:a", 1.0, APPEAR)
+
+
+## True once every peak is painted (they come in while the game runs).
+func peaks_finished() -> bool:
+	return _peaks_left == 0
+
+
+## Waits until all the art is painted and laid in (the tests).
+func finish_painting() -> void:
+	if _queue != null:
+		_queue.finish()
+
+
+func is_painting() -> bool:
+	return _queue != null and _queue.busy()
+
+
+func _exit_tree() -> void:
+	if _queue != null:
+		_queue.stop()
 
 
 func _setup_ground() -> void:
@@ -320,17 +366,22 @@ func _setup_ground() -> void:
 	material.set_shader_parameter("valley_amp", data.valley.amplitudes)
 	material.set_shader_parameter("valley_phase", data.valley.phases)
 	material.set_shader_parameter("noise_offset", Vector2(rng.randi_range(-4096, 4096), rng.randi_range(-4096, 4096)))
-	material.set_shader_parameter("mountain_tex", _mountain_field.texture())
-	material.set_shader_parameter("mountain_origin", Vector2(_mountain_field.origin))
-	material.set_shader_parameter("mountain_size", Vector2(_mountain_field.size))
-	material.set_shader_parameter("mountain_scale", float(NelvarMountainField.SCALE))
 	material.set_shader_parameter("marks_tex", snow_marks.texture())
 	material.set_shader_parameter("marks_origin", Vector2(_field.origin))
 	material.set_shader_parameter("marks_size", Vector2(_field.size))
 	material.set_shader_parameter("mark_life", MARK_LIFE)
 	ground.texel_size = STEP
 	_field = null
-	_mountain_field = null
+
+
+## The range's foot and the peaks' shadows on the floor (none until every peak is painted).
+func _set_mountains(mountains: NelvarMountainField) -> void:
+	var material := ground.backdrop_material()
+	material.set_shader_parameter("mountain_tex", mountains.texture())
+	material.set_shader_parameter("mountain_origin", Vector2(mountains.origin))
+	material.set_shader_parameter("mountain_scale", float(NelvarMountainField.SCALE))
+	material.set_shader_parameter("mountain_size", Vector2(mountains.size))
+	_peak_arts = []
 
 
 ## Snow falling over everything.
@@ -382,6 +433,8 @@ func gust(world: Vector2) -> float:
 func _process(delta: float) -> void:
 	if data == null:
 		return
+	if _queue.busy():
+		_queue.lay_in()
 	_time += delta
 	var viewport := get_viewport()
 	var to_world := viewport.get_canvas_transform().affine_inverse()

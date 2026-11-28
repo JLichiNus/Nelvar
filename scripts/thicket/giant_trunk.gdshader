@@ -6,12 +6,19 @@ render_mode unshaded;
 // out in their alpha: 240 thins out, 255 stays (the trunk's foot, so its roots always show),
 // less is a shadow left as it is. Thinning lowers those pixels' alpha smoothly, at `fade` = 1
 // down to MIN_ALPHA. A trunk's top `top_fade` of the texture (a share of its height) fades
-// out smoothly to nothing.
+// out smoothly to nothing. The node's modulate still applies (art painted late fades in).
 
 uniform float fade : hint_range(0.0, 1.0) = 0.0;
 uniform float top_fade = 0.0;
 
 const float MIN_ALPHA = 0.35;
+
+// The node's modulate (COLOR in vertex(); in fragment() it is already times the texture).
+varying vec4 tint;
+
+void vertex() {
+	tint = COLOR;
+}
 
 void fragment() {
 	vec4 color = texture(TEXTURE, UV);
@@ -21,5 +28,5 @@ void fragment() {
 	if (top_fade > 0.0) {
 		color.a *= smoothstep(0.0, top_fade, UV.y);
 	}
-	COLOR = color;
+	COLOR = color * tint;
 }

@@ -530,7 +530,7 @@ func _carve() -> void:
 		var last := clampi(int((box.end.y - _data.sdf_origin.y) / CELL) / ROWS, 0, _buckets.size() - 1)
 		for b in range(first, last + 1):
 			_buckets[b].append(shape)
-	var group := WorkerThreadPool.add_group_task(_carve_row, _size.y, -1, true, "Cave walls")
+	var group := WorkerThreadPool.add_group_task(_carve_row, _size.y, NelvarPaintQueue.threads, true, "Cave walls")
 	WorkerThreadPool.wait_for_group_task_completion(group)
 	for i in _floor.size():
 		_mask[i] = 1 if _floor[i] > 0.0 else 0
@@ -716,9 +716,9 @@ func _transform(want: int) -> PackedFloat32Array:
 	_edt = PackedFloat32Array()
 	_edt.resize(_mask.size())
 	_edt_want = want
-	var rows := WorkerThreadPool.add_group_task(_transform_row, _size.y, -1, true, "Cave distance rows")
+	var rows := WorkerThreadPool.add_group_task(_transform_row, _size.y, NelvarPaintQueue.threads, true, "Cave distance rows")
 	WorkerThreadPool.wait_for_group_task_completion(rows)
-	var columns := WorkerThreadPool.add_group_task(_transform_column, _size.x, -1, true, "Cave distance columns")
+	var columns := WorkerThreadPool.add_group_task(_transform_column, _size.x, NelvarPaintQueue.threads, true, "Cave distance columns")
 	WorkerThreadPool.wait_for_group_task_completion(columns)
 	return _edt
 

@@ -49,9 +49,9 @@ class Piece extends Node2D:
 			draw_texture_rect(art.texture, art.local_rect, false)
 
 
-func setup(spec: NelvarThicketData.Giant, artwork: NelvarEarthArt) -> void:
+## The art may come later (set_art): the collision stands from the start.
+func setup(spec: NelvarThicketData.Giant, artwork: NelvarEarthArt = null) -> void:
 	giant = spec
-	art = artwork
 	name = "Giant_%d" % spec.id
 	position = spec.center
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -66,13 +66,21 @@ func setup(spec: NelvarThicketData.Giant, artwork: NelvarEarthArt) -> void:
 	_material = ShaderMaterial.new()
 	_material.shader = SHADER
 	material = _material
-	_material.set_shader_parameter("top_fade", NelvarGiantPainter.TOP_FADE / art.local_rect.size.y)
 	_eye_time = randf_range(2.0, 9.0)
-	set_process(art.eye.is_finite())
+	set_process(false)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = spec.appearance_seed + 3
 	for i in rng.randi_range(1, 3) if not spec.ring else 0:
 		_beetles.append(Vector3(rng.randf_range(-0.8, 0.8), rng.randf(), rng.randf_range(0.7, 1.3)))
+	if artwork != null:
+		set_art(artwork)
+
+
+func set_art(artwork: NelvarEarthArt) -> void:
+	art = artwork
+	_material.set_shader_parameter("top_fade", NelvarGiantPainter.TOP_FADE / art.local_rect.size.y)
+	set_process(art.eye.is_finite())
+	queue_redraw()
 
 
 ## True when the point is behind the trunk on screen: north of its base and within its

@@ -75,6 +75,19 @@ func setup(source: Object, wisp_points: PackedVector2Array, plume_points: Packed
 			_puffs.append(_bank_puff(b, true))
 
 
+## More points smoke rises from, after setup() (art painted while the game runs).
+func add_points(wisp_points: PackedVector2Array, plume_points: PackedVector2Array) -> void:
+	var wisp_timers := _timers.slice(0, wisps.size())
+	var plume_timers := _timers.slice(wisps.size())
+	for i in wisp_points.size():
+		wisp_timers.append(_rng.randf())
+	for i in plume_points.size():
+		plume_timers.append(_rng.randf())
+	wisps.append_array(wisp_points)
+	plumes.append_array(plume_points)
+	_timers = wisp_timers + plume_timers
+
+
 ## How many puffs make up a full bank.
 func _bank_target(bank: int) -> int:
 	return clampi(int(_banks[bank].z / 11.0), 10, 22)

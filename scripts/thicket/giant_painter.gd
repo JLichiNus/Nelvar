@@ -52,6 +52,8 @@ const STONE: Array[Color] = [Color8(84, 84, 82), Color8(120, 118, 110), Color8(1
 ## Rows of a big picture painted in one go on one thread: the picture is cut into bands this
 ## high so that several threads share one trunk.
 const BAND_ROWS := 48
+## The root plate is cut in bands of columns this wide instead (it is narrow and tall).
+const PLATE_COLUMNS := 4
 ## How much a trunk's foot flares out.
 const FLARE := 0.16
 
@@ -116,6 +118,26 @@ class FallenPlan extends Plan:
 	var origins: Array[Vector2] = []
 	var alongs := PackedFloat32Array()
 
+
+
+## The root plate, painted in bands of PLATE_COLUMNS columns (its strands rise up the
+## columns, so the bands share no pixels).
+class PlatePlan extends Plan:
+	var fallen: NelvarThicketData.Fallen
+	var axis := Vector2.ZERO
+	var normal := Vector2.ZERO
+	var center := Vector2.ZERO
+	var depth := 0.0
+	var half := 0.0
+	var tall := 0.0
+
+	## The bands' columns: (first, last), left to right.
+	func columns() -> Array[Vector2i]:
+		var result: Array[Vector2i] = []
+		var width := maxi(1, to.x - from.x + 1)
+		for first in range(0, width, PLATE_COLUMNS):
+			result.append(Vector2i(first, mini(first + PLATE_COLUMNS, width) - 1))
+		return result
 
 ## A piece of something long, sorted by its own lowest point (`origin`, world units).
 class Piece:
@@ -932,25 +954,57 @@ func _fallen_growth(sheet: Sheet, fallen: NelvarThicketData.Fallen, rng: RandomN
 
 
 ## The root plate torn out with the fallen giant: a wall of tangled roots and earth standing
-## on edge, stones caught in it, rootlets hanging off.
+## on edge, stones caught in it, rootlets hanging off. In one go here; plan_plate(),
+## paint_plate_columns() for each of PlatePlan.columns() (on any threads) and finish_plate()
+## paint the same: a ground pixel paints only up its own column, so the columns never meet.
 func paint_plate(fallen: NelvarThicketData.Fallen) -> Piece:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = fallen.appearance_seed + 17
-	var salt := rng.randi() & 0xffff
-	var axis := fallen.axis()
-	var normal := fallen.normal()
-	var center := fallen.plate_center / STEP
-	var depth := fallen.plate_depth / STEP
-	var half := fallen.plate_half / STEP
-	var tall := half * 0.95
-	var reach := half + depth + 4.0
-	var sheet := Sheet.new(Vector2i((center - Vector2(reach, reach + tall + 4.0)).floor()),
-		Vector2i((center + Vector2(reach, reach + 2.0)).ceil()))
+	var plan := plan_plate(fallen)
+	var bands := []
+	for columns in plan.columns():
+		bands.append(paint_plate_columns(plan, columns))
+	return finish_plate(plan, bands)
+
+
+func plan_plate(fallen: NelvarThicketData.Fallen) -> PlatePlan:
+	var plan := PlatePlan.new()
+	plan.fallen = fallen
+	plan.rng.seed = fallen.appearance_seed + 17
+	plan.salt = plan.rng.randi() & 0xffff
+	plan.axis = fallen.axis()
+	plan.normal = fallen.normal()
+	plan.center = fallen.plate_center / STEP
+	plan.depth = fallen.plate_depth / STEP
+	plan.half = fallen.plate_half / STEP
+	plan.tall = plan.half * 0.95
+	var reach := plan.half + plan.depth + 4.0
+	plan.from = Vector2i((plan.center - Vector2(reach, reach + plan.tall + 4.0)).floor())
+	plan.to = Vector2i((plan.center + Vector2(reach, reach + 2.0)).ceil())
+	return plan
+
+
+## The columns (first, last) of the root plate: [its Sheet, the lowest ground row painted
+## there (-INF: none), that row's first ground point].
+func paint_plate_columns(plan: PlatePlan, columns: Vector2i) -> Array:
+	# Locals only and Sheet.put() written out, as in paint_trunk_rows().
+	var sheet := Sheet.new(Vector2i(plan.from.x + columns.x, plan.from.y), Vector2i(plan.from.x + columns.y, plan.to.y))
+	var salt := plan.salt
+	var axis := plan.axis
+	var normal := plan.normal
+	var center := plan.center
+	var depth := plan.depth
+	var half := plan.half
+	var tall := plan.tall
+	var corner := sheet.corner
+	var width := sheet.size.x
+	var rows := sheet.size.y
+	var data := sheet.data
+	var owner := sheet.owner
+	var levels := sheet.level
 	var bottom := -INF
 	var origin := center
-	for y in sheet.size.y:
-		for x in sheet.size.x:
-			var ground := Vector2(sheet.corner + Vector2i(x, y)) + Vector2(0.5, 0.5)
+	for y in rows:
+		for x in width:
+			var ground := Vector2(corner + Vector2i(x, y)) + Vector2(0.5, 0.5)
 			var local := Vector2((ground - center).dot(axis) / depth, (ground - center).dot(normal) / half)
 			var d := local.length()
 			if d > 1.0:
@@ -959,11 +1013,13 @@ func paint_plate(fallen: NelvarThicketData.Fallen) -> Piece:
 				bottom = ground.y
 				origin = ground + Vector2(0.0, 0.5)
 			var height := tall * sqrt(maxf(0.0, 1.0 - local.y * local.y)) * (0.75 + 0.25 * sqrt(maxf(0.0, 1.0 - local.x * local.x)))
-			var gx := sheet.corner.x + x
-			var gy := sheet.corner.y + y
+			var gx := corner.x + x
+			var gy := corner.y + y
 			for z in int(height) + 1:
 				var h := height - z
 				var py := y - int(round(h))
+				if py < 0 or py >= rows:
+					continue
 				# Strands of root fanning out from the stump's middle, earth between them.
 				var spoke := atan2(h - tall * 0.45, local.y * half)
 				var strand := sin(spoke * 11.0 + NelvarPixelArt.value_noise(local.y * 4.0, h * 0.08, salt) * 5.0)
@@ -975,12 +1031,48 @@ func paint_plate(fallen: NelvarThicketData.Fallen) -> Piece:
 					color = ramp(STONE, level, gx, gy - z)
 				else:
 					color = ramp(SOIL, level + NelvarPixelArt.value_noise(gx * 0.3, (gy - z) * 0.3, salt + 1) * 0.3, gx, gy - z)
-				sheet.put(x, py, color, 255, 0, level)
+				var i := py * width + x
+				data[i * 4] = color.r8
+				data[i * 4 + 1] = color.g8
+				data[i * 4 + 2] = color.b8
+				data[i * 4 + 3] = 255
+				owner[i] = 0
+				levels[i] = level
+	return [sheet, bottom, origin]
+
+
+## The root plate from its columns (in order): its outline, the rootlets, cut out.
+func finish_plate(plan: PlatePlan, bands: Array) -> Piece:
+	var sheet := Sheet.new(plan.from, plan.to)
+	var data := PackedByteArray()
+	var owner := PackedInt32Array()
+	var level := PackedFloat32Array()
+	for y in sheet.size.y:
+		for band: Array in bands:
+			var part: Sheet = band[0]
+			var w := part.size.x
+			data.append_array(part.data.slice(y * w * 4, (y + 1) * w * 4))
+			owner.append_array(part.owner.slice(y * w, (y + 1) * w))
+			level.append_array(part.level.slice(y * w, (y + 1) * w))
+	sheet.data = data
+	sheet.owner = owner
+	sheet.level = level
+	# The lowest row's first point, as painting row by row would find it.
+	var bottom := -INF
+	var origin := plan.center
+	for band: Array in bands:
+		if band[1] > bottom:
+			bottom = band[1]
+			origin = band[2]
 	sheet.outline(OUTLINE, 0.4)
 	# Rootlets hanging off the lower edge.
+	var rng := plan.rng
+	var center := plan.center
+	var half := plan.half
+	var tall := plan.tall
 	for i in rng.randi_range(10, 18):
 		var v := rng.randf_range(-0.9, 0.9)
-		var at := center + normal * v * half - Vector2(0.0, tall * sqrt(1.0 - v * v) * rng.randf_range(0.1, 0.9))
+		var at := center + plan.normal * v * half - Vector2(0.0, tall * sqrt(1.0 - v * v) * rng.randf_range(0.1, 0.9))
 		for k in rng.randi_range(3, 8):
 			var p := Vector2i((at + Vector2(sin(k * 0.9 + i) * 0.6, k)).floor()) - sheet.corner
 			if sheet.inside(p.x, p.y):

@@ -20,12 +20,18 @@ func setup(spec: NelvarEarthData.Thing, artwork: NelvarEarthArt) -> void:
 		collision_layer = NelvarProp.LOW_OBSTACLE_LAYER
 	if is_flat():
 		z_index = -1
-	if spec.kind == Kind.AMBER and artwork.eye.is_finite():
-		set_process(true)
+	if artwork != null:
+		set_art(artwork)
 	if spec.kind == Kind.GIANT_MUSHROOM and spec.variant != 2:
 		_fade_material = ShaderMaterial.new()
 		_fade_material.shader = NelvarGiantTrunk.SHADER
 		material = _fade_material
+
+
+func set_art(artwork: NelvarEarthArt) -> void:
+	super.set_art(artwork)
+	if thing.kind == Kind.AMBER and artwork.eye.is_finite():
+		set_process(true)
 
 
 func is_flat() -> bool:

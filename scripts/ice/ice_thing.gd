@@ -31,16 +31,18 @@ var _sparkle := -1
 var _sparkle_timer := 0.0
 
 
-func setup(spec: NelvarIceData.Thing, artwork: NelvarIceArt) -> void:
+## The art may come later (set_art): the collision stands from the start.
+func setup(spec: NelvarIceData.Thing, artwork: NelvarIceArt = null) -> void:
 	thing = spec
-	art = artwork
 	name = "%s_%d" % [(Kind.keys()[spec.kind] as String).capitalize().replace(" ", ""), spec.id]
 	position = spec.position
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	collision_layer = 0
 	collision_mask = 0
 	_sparkle_timer = fmod(float(spec.appearance_seed & 0xffff) / 997.0, 3.0)
-	set_process(spec.kind == Kind.STATUE or artwork.eye.is_finite() or not artwork.sparkles.is_empty())
+	set_process(false)
+	if artwork != null:
+		set_art(artwork)
 	if not spec.solid:
 		return
 	collision_layer = NelvarProp.WORLD_LAYER
@@ -60,12 +62,24 @@ func setup(spec: NelvarIceData.Thing, artwork: NelvarIceArt) -> void:
 	add_child(collider)
 
 
+func set_art(artwork: NelvarIceArt) -> void:
+	art = artwork
+	set_process(thing.kind == Kind.STATUE or art.eye.is_finite() or not art.sparkles.is_empty())
+	if is_inside_tree():
+		_add_occluder()
+	queue_redraw()
+
+
 ## Low things on the ground never hide the player.
 func occludes() -> bool:
 	return thing.kind not in [Kind.DRY_GRASS, Kind.DRIFT, Kind.BONES]
 
 
 func _enter_tree() -> void:
+	_add_occluder()
+
+
+func _add_occluder() -> void:
 	if art != null and art.texture != null and occludes():
 		NelvarOcclusionOutline.add_occluder(self, art.texture,
 			Rect2(global_position + art.local_rect.position, art.local_rect.size))
@@ -91,6 +105,9 @@ func set_gust(value: float) -> void:
 
 
 func _process(delta: float) -> void:
+	# Processing comes on by itself when the node is ready, art or not.
+	if art == null:
+		return
 	if not art.sparkles.is_empty():
 		_sparkle_timer -= delta
 		if _sparkle_timer <= 0.0:
