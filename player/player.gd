@@ -19,6 +19,8 @@ enum SpeedBoostState { READY, ACTIVE, COOLDOWN }
 
 # Радиус круга-«следа» под ногами; на него опираются проверки мира и спавн.
 const BODY_RADIUS := 14.0
+# Номер слоя мелких валунов (NelvarProp.LOW_OBSTACLE_LAYER) для set_collision_mask_value.
+const LOW_OBSTACLE_LAYER_NUMBER := 6
 const DEAD_COLOR := Color(0.45, 0.47, 0.5, 1.0)
 ## "Low health" for mutations that wake up near death: below this share.
 const LOW_HEALTH_SHARE := 0.3
@@ -60,6 +62,8 @@ const ATTACK_PRIORITY := {
 # Покачивание корпуса над смерчем: на сколько текселей и с каким периодом.
 @export var hover_bob_texels: float = 1.0
 @export var hover_bob_period: float = 1.3
+## Share of the usual steering left while thrown through the air (launch()).
+@export var launch_control: float = 0.35
 
 @export_category("Attacks")
 @export var projectile_scene: PackedScene
@@ -126,6 +130,17 @@ const ATTACK_PRIORITY := {
 ## stats (see NelvarStats), and the code reads the current values from it.
 var stats := NelvarStats.new()
 var aim_direction := Vector2.RIGHT
+## Grip on the ground: 1 — ordinary ground, less — slippery (the ice valley's lakes).
+## The map sets it every physics frame; it scales how fast the player speeds up and
+## slows down.
+var traction := 1.0
+## Physics layers that block the player's sight (the ice cave's walls): the wind wave and
+## the compression only reach enemies the player can see. 0 (every other map): no check.
+static var sight_mask := 0
+## Shared modifiers (the ice valley's blizzard; mutations later): a multiplier of the
+## movement speed, and of the rate of attacks (cooldowns, animations, projectiles).
+var move_scale := 1.0
+var attack_rate := 1.0
 var _primary_cooldown_left := 0.0
 # Shots in the current burst and time since the last one (for the sound).
 # Shot wind: strength the shots give (0..1), the heard level that follows it
@@ -156,8 +171,15 @@ var _facing_left := false
 var _attack_animation := &""
 var _attack_facing_left := 0.0
 var _hover_time := 0.0
+# Полёт кончился, но под смерчем мелкий камень: приземлимся, когда он останется позади.
+var _landing_pending := false
 # Пустота: тело проваливается в пропасть, управление отключено.
 var _is_falling := false
+# Бросок (гейзер вулкана): тело летит по дуге, управление ослаблено.
+var _launch_time := 0.0
+var _launch_duration := 0.0
+var _launch_push := Vector2.ZERO
+var _launch_height := 0.0
 var _max_health_now := 0.0
 # Health shown by the bar, so regeneration does not spam health_changed.
 var _shown_health := 0
@@ -206,9 +228,10 @@ func _process(delta: float) -> void:
 		return
 	_update_hover(delta)
 	_update_aim()
-	_primary_cooldown_left = maxf(_primary_cooldown_left - delta, 0.0)
-	_wave_cooldown_left = maxf(_wave_cooldown_left - delta, 0.0)
-	_compression_cooldown_left = maxf(_compression_cooldown_left - delta, 0.0)
+	_primary_cooldown_left = maxf(_primary_cooldown_left - delta * attack_rate, 0.0)
+	_wave_cooldown_left = maxf(_wave_cooldown_left - delta * attack_rate, 0.0)
+	_compression_cooldown_left = maxf(_compression_cooldown_left - delta * attack_rate, 0.0)
+	torso_sprite.speed_scale = attack_rate
 
 	# Стоя на месте Ctrl ничего не делает.
 	if Input.is_action_just_pressed("toggle_run") and _is_move_input_held():
@@ -265,6 +288,9 @@ func _physics_process(delta: float) -> void:
 		"move_up",
 		"move_down"
 	)
+	if is_launched():
+		_update_launch(direction, delta)
+		return
 	# Бег возможен только в движении: остановка его сбрасывает.
 	if direction == Vector2.ZERO:
 		_is_running = false
@@ -277,13 +303,15 @@ func _physics_process(delta: float) -> void:
 		speed_multiplier *= stats.value(&"flight_speed")
 	if is_low_health():
 		speed_multiplier *= 1.0 + stats.value(&"low_health_speed") / 100.0
-	var target_velocity := direction * stats.value(&"move_speed") * speed_multiplier
+	var target_velocity := direction * stats.value(&"move_speed") * speed_multiplier * move_scale
 	# Mutations change acceleration and braking together.
 	var handling := stats.value(&"acceleration") / acceleration
-	var rate := acceleration if direction != Vector2.ZERO else deceleration
+	var rate := (acceleration if direction != Vector2.ZERO else deceleration) * traction
 	rate *= handling
 	velocity = velocity.move_toward(target_velocity, rate * delta)
 	move_and_slide()
+	if _landing_pending and not _is_over_low_obstacle():
+		_land()
 	_update_animation(direction)
 	# В полёте игрок проходит над врагами и не получает контактного урона.
 	if not is_flight_protected():
@@ -415,7 +443,48 @@ func _damage(percent: float, attack_stat: StringName) -> float:
 
 
 func is_airborne() -> bool:
-	return _speed_boost_state == SpeedBoostState.ACTIVE
+	return _speed_boost_state == SpeedBoostState.ACTIVE or is_launched()
+
+
+## True while thrown through the air (launch()).
+func is_launched() -> bool:
+	return _launch_time < _launch_duration
+
+
+## Throws the player up and along `push` (world units per second) for `duration`
+## seconds, the body rising `height` above the ground and coming down again. In the air
+## the player is airborne (lava, enemies and low stones do not touch them) and steers
+## only a little (launch_control). The flight's cooldown is not touched.
+func launch(push: Vector2, height: float, duration: float) -> void:
+	if _is_dead or _is_falling or duration <= 0.0:
+		return
+	_launch_push = push
+	_launch_height = height
+	_launch_duration = duration
+	_launch_time = 0.0
+	_landing_pending = false
+	velocity = push
+	set_collision_mask_value(LOW_OBSTACLE_LAYER_NUMBER, false)
+	if _flight_tween != null:
+		_flight_tween.kill()
+
+
+func _update_launch(direction: Vector2, delta: float) -> void:
+	_launch_time += delta
+	var progress := clampf(_launch_time / _launch_duration, 0.0, 1.0)
+	velocity = _launch_push + direction * stats.value(&"move_speed") * move_scale * launch_control
+	move_and_slide()
+	var lift := flight_height if _speed_boost_state == SpeedBoostState.ACTIVE else 0.0
+	body_visual.position.y = _body_rest_position.y - lift - sin(PI * progress) * _launch_height
+	if progress >= 1.0:
+		_launch_duration = 0.0
+		_launch_time = 0.0
+		# The landing takes most of the speed: no sliding on along the rock.
+		velocity *= 0.3
+		body_visual.position.y = _body_rest_position.y - lift
+		if _speed_boost_state != SpeedBoostState.ACTIVE:
+			set_collision_mask_value(LOW_OBSTACLE_LAYER_NUMBER, true)
+	_update_animation(direction)
 
 
 ## In flight the player passes over enemies and hazards unharmed, unless a
@@ -452,12 +521,15 @@ func is_falling() -> bool:
 
 
 # Пустота: под ногами ничего нет. Тело уходит вниз, сжимается и тает в
-# фиолетовой тьме; управление вернёт recover_at().
-func fall_into_abyss(duration: float) -> void:
+# фиолетовой тьме; управление вернёт recover_at(). Огненная кузня зовёт то же
+# самое, когда полёт кончился над лавой, — с оранжевым `tint`.
+func fall_into_abyss(duration: float, tint := Color(0.45, 0.25, 0.85, 0.0)) -> void:
 	if _is_dead or _is_falling:
 		return
 	_is_falling = true
 	_is_running = false
+	_launch_duration = 0.0
+	_launch_time = 0.0
 	velocity = Vector2.ZERO
 	wind_trail.emitting = false
 	aim_pivot.visible = false
@@ -466,7 +538,7 @@ func fall_into_abyss(duration: float) -> void:
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tween.tween_property(body_visual, "scale", body_visual.scale * 0.25, duration) \
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tween.tween_property(body_visual, "modulate", Color(0.45, 0.25, 0.85, 0.0), duration)
+	tween.tween_property(body_visual, "modulate", tint, duration)
 
 
 func recover_at(point: Vector2) -> void:
@@ -605,7 +677,7 @@ func _try_primary_attack() -> void:
 			return
 		var fan := deg_to_rad(FAN_STEP_DEGREES * (i - (count - 1) / 2.0))
 		projectile.set("damage", _damage(primary_damage_percent, &"primary_damage"))
-		projectile.set("speed", float(projectile.get("speed")) * stats.value(&"projectile_speed"))
+		projectile.set("speed", float(projectile.get("speed")) * stats.value(&"projectile_speed") * attack_rate)
 		projectile.set("pierce", roundi(stats.value(&"projectile_pierce")))
 		projectile.call("launch", projectile_spawn.global_position, aim_direction.rotated(spread + fan))
 	_primary_cooldown_left = stats.value(&"primary_cooldown")
@@ -681,7 +753,11 @@ func _try_wave_attack() -> void:
 	wave.set("damage", _damage(wave_damage_percent, &"wave_damage"))
 	wave.set("travel_distance", float(wave.get("travel_distance")) * stats.value(&"wave_range"))
 	wave.set("size_multiplier", stats.value(&"wave_size"))
+	if attack_rate != 1.0:
+		wave.set("duration", float(wave.get("duration")) / maxf(attack_rate, 0.05))
 	var wave_origin := get_aim_origin() + aim_direction * wave_spawn_distance
+	if sight_mask != 0:
+		wave.set("sight_from", global_position)
 	wave.call("launch", wave_origin, aim_direction)
 
 
@@ -689,8 +765,12 @@ func _try_speed_boost() -> void:
 	if _speed_boost_state != SpeedBoostState.READY:
 		return
 	_speed_boost_state = SpeedBoostState.ACTIVE
+	# В полёте мелкие валуны остаются внизу.
+	set_collision_mask_value(LOW_OBSTACLE_LAYER_NUMBER, false)
 	boost_duration_timer.start(stats.value(&"flight_duration"))
-	_play_lift_off()
+	# Thrown by a geyser the body is already in the air; the throw places it.
+	if not is_launched():
+		_play_lift_off()
 	lift_sound.play()
 
 
@@ -728,7 +808,7 @@ func _find_compression_target() -> Node2D:
 		if range_sq > max_range_sq:
 			continue
 		var distance_sq := cursor.distance_squared_to(enemy.global_position)
-		if distance_sq <= best_distance_sq:
+		if distance_sq <= best_distance_sq and can_see(enemy.global_position):
 			best_distance_sq = distance_sq
 			best = enemy
 	return best
@@ -774,12 +854,49 @@ func _restart_flight_tween() -> Tween:
 
 
 func _on_boost_duration_timeout() -> void:
+	# Над валуном не садимся — иначе смерч застрянет в камне.
+	if not _is_dead and _is_over_low_obstacle():
+		_landing_pending = true
+		return
+	_land()
+
+
+func _land() -> void:
+	_landing_pending = false
 	_speed_boost_state = SpeedBoostState.COOLDOWN
 	boost_cooldown_timer.start(stats.value(&"flight_cooldown"))
+	# Still thrown by a geyser: the throw ends the landing itself.
+	if is_launched():
+		return
+	set_collision_mask_value(LOW_OBSTACLE_LAYER_NUMBER, true)
 	if not _is_dead:
 		_play_landing()
 		land_sound.play()
 
 
+# Перекрывает ли след смерча мелкий валун (слой, который в полёте не мешает).
+func _is_over_low_obstacle() -> bool:
+	var query := PhysicsShapeQueryParameters2D.new()
+	query.shape = collision_shape.shape
+	query.transform = collision_shape.global_transform
+	query.collision_mask = NelvarProp.LOW_OBSTACLE_LAYER
+	query.exclude = [get_rid()]
+	return not get_world_2d().direct_space_state.intersect_shape(query, 1).is_empty()
+
+
 func _on_boost_cooldown_timeout() -> void:
 	_speed_boost_state = SpeedBoostState.READY
+
+
+## True when nothing on sight_mask stands between the player and `point` (always true
+## without a sight_mask).
+func can_see(point: Vector2) -> bool:
+	return sight_clear(get_world_2d(), global_position, point)
+
+
+## The same check from any point (the wind wave asks from where it was cast).
+static func sight_clear(world: World2D, from: Vector2, to: Vector2) -> bool:
+	if sight_mask == 0 or world == null:
+		return true
+	var query := PhysicsRayQueryParameters2D.create(from, to, sight_mask)
+	return world.direct_space_state.intersect_ray(query).is_empty()

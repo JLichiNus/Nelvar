@@ -27,6 +27,9 @@ const TRAIL_SCRIPT := preload("res://attacks/wind_projectile/wind_projectile_tra
 ## Mutations grow or shrink the wave. The sprite stays on whole texels, so
 ## the size snaps to multiples of 1/SHEET_TEXEL (4/3, 5/3, 2/3...).
 @export var size_multiplier: float = 1.0
+## Where the player stood when they cast it: on a map with walls that block sight
+## (NelvarPlayer.sight_mask) it only reaches enemies seen from there. INF: no check.
+var sight_from := Vector2.INF
 
 var direction := Vector2.RIGHT
 var _hit_targets: Dictionary = {}
@@ -165,6 +168,10 @@ func _hit(target: Node) -> void:
 		return
 	var target_id := target.get_instance_id()
 	if _hit_targets.has(target_id):
+		return
+	# Behind a wall: out of reach.
+	if sight_from.is_finite() and target is Node2D \
+			and not NelvarPlayer.sight_clear(get_world_2d(), sight_from, (target as Node2D).global_position):
 		return
 	_hit_targets[target_id] = true
 	# Enemy projectiles that can be turned back (a Whistler's bubble) are sent

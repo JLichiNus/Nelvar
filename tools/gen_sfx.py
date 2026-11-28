@@ -467,6 +467,94 @@ def runner_death(variant: int) -> np.ndarray:
     return soft_edges(finish(sound, -4.5), 0.003, 0.04)
 
 
+# --- the giant forest (Земля 2) -----------------------------------------------
+
+def flytrap_click(variant: int) -> np.ndarray:
+    """A flytrap's warning: its hairs bristle, a dry rattle of quick clicks that
+    speeds up over the 0.45 s before it snaps."""
+    rng = np.random.default_rng(30000 + variant)
+    t = seconds(0.45)
+    sound = np.zeros(t.size)
+    at = 0.0
+    gap = 0.07
+    while at < 0.43:
+        x = np.maximum(t - at, 0)
+        tick = bandpass(rng.standard_normal(t.size), 3200 + 400 * rng.random(), 2.5)
+        sound += tick * np.exp(-x / 0.004) * (t >= at) * (0.5 + at)
+        at += gap
+        gap = max(0.025, gap * 0.82)
+    return soft_edges(finish(sound, -8.0), 0.002, 0.02)
+
+
+def flytrap_snap(variant: int) -> np.ndarray:
+    """The flytrap snaps shut: a wet, leathery clap with a short thump."""
+    rng = np.random.default_rng(31000 + variant)
+    t = seconds(0.22)
+    clap = bandpass(rng.standard_normal(t.size), glide(t, [(0, 1800 + 200 * variant), (0.22, 600)]), 1.2)
+    thump = np.sin(2 * np.pi * np.cumsum(glide(t, [(0, 180), (0.22, 70)])) / RATE)
+    sound = clap * np.exp(-t / 0.03) + 0.8 * thump * np.exp(-t / 0.05)
+    return soft_edges(finish(sound, -3.0, drive=1.5), 0.001, 0.03)
+
+
+def acorn_rustle(variant: int) -> np.ndarray:
+    """Up in the crown something knocks through the leaves: a rustle swelling over
+    the 1.1 s before an acorn lands."""
+    rng = np.random.default_rng(32000 + variant)
+    t = seconds(1.1)
+    leaves = highpass(bandpass(pink_noise(t.size, rng), 4200, 0.7), 1500)
+    leaves /= np.max(np.abs(leaves))
+    flutter = 0.5 + 0.5 * np.abs(wander(t, rng, 14.0))
+    sound = leaves * flutter * (t / 1.1) ** 1.6
+    return soft_edges(finish(sound, -12.0), 0.05, 0.03)
+
+
+def acorn_thud(variant: int) -> np.ndarray:
+    """An acorn the size of a boulder hits the ground: a dull wooden knock."""
+    rng = np.random.default_rng(33000 + variant)
+    t = seconds(0.35)
+    body = np.sin(2 * np.pi * np.cumsum(glide(t, [(0, 140 + 10 * variant), (0.35, 55)])) / RATE)
+    knock = bandpass(rng.standard_normal(t.size), 900, 2.0)
+    dirt = bandpass(pink_noise(t.size, rng), 2400, 0.8)
+    sound = body * np.exp(-t / 0.09) + 0.5 * knock * np.exp(-t / 0.02) + 0.25 * dirt * np.exp(-t / 0.12)
+    return soft_edges(finish(sound, -3.0, drive=1.2), 0.001, 0.05)
+
+
+def branch_crack(_variant: int) -> np.ndarray:
+    """A branch breaks off far above: wood creaks for over a second, then cracks."""
+    rng = np.random.default_rng(34000)
+    t = seconds(1.6)
+    creak_freq = 90 + 40 * wander(t, rng, 3.0)
+    creak = np.sign(np.sin(2 * np.pi * np.cumsum(creak_freq) / RATE)) * bandpass(rng.standard_normal(t.size), 700, 1.5)
+    creak *= np.clip(t / 1.3, 0, 1) * (t < 1.35)
+    x = np.maximum(t - 1.35, 0)
+    crack = bandpass(rng.standard_normal(t.size), 2200, 0.9) * np.exp(-x / 0.06) * (t >= 1.35)
+    sound = 0.35 * creak + crack
+    return soft_edges(finish(sound, -4.0), 0.02, 0.05)
+
+
+def puffball_pop(variant: int) -> np.ndarray:
+    """A puffball bursts: a soft papery pop and the hiss of its spores."""
+    rng = np.random.default_rng(35000 + variant)
+    t = seconds(0.6)
+    pop = bandpass(rng.standard_normal(t.size), 600 + 100 * variant, 1.5) * np.exp(-t / 0.015)
+    hiss = bandpass(pink_noise(t.size, rng), glide(t, [(0, 3000), (0.6, 1400)]), 0.8)
+    hiss /= np.max(np.abs(hiss))
+    sound = pop + 0.45 * hiss * np.clip(t / 0.03, 0, 1) * np.exp(-t / 0.2)
+    return soft_edges(finish(sound, -5.0), 0.002, 0.08)
+
+
+def earth_crumble(variant: int) -> np.ndarray:
+    """Loose earth starts to give: soil trickling, a few small clods."""
+    rng = np.random.default_rng(36000 + variant)
+    t = seconds(0.5)
+    trickle = bandpass(rng.standard_normal(t.size), 1800, 1.0) * (0.4 + 0.6 * np.abs(wander(t, rng, 30.0)))
+    sound = trickle * np.clip(t / 0.1, 0, 1)
+    for start in rng.uniform(0.05, 0.45, 5):
+        x = np.maximum(t - start, 0)
+        sound += 0.8 * bandpass(rng.standard_normal(t.size), 500, 2.0) * np.exp(-x / 0.01) * (t >= start)
+    return soft_edges(finish(sound, -9.0), 0.01, 0.06)
+
+
 # name -> (builder, variants); 0 variants = a single file <name>.wav.
 SOUNDS = {
     "runner_step": (runner_step, 4),
@@ -492,6 +580,14 @@ SOUNDS = {
     "flight_lift": (flight_lift, 2),
     "flight_air": (flight_air, 0),
     "flight_land": (flight_land, 2),
+
+    "flytrap_click": (flytrap_click, 2),
+    "flytrap_snap": (flytrap_snap, 2),
+    "acorn_rustle": (acorn_rustle, 2),
+    "acorn_thud": (acorn_thud, 2),
+    "branch_crack": (branch_crack, 0),
+    "puffball_pop": (puffball_pop, 2),
+    "earth_crumble": (earth_crumble, 2),
 }
 
 

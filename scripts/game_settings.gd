@@ -6,6 +6,13 @@ extends Node
 
 signal info_panel_changed(shown: bool)
 signal start_in_void_changed(enabled: bool)
+signal start_in_air_changed(enabled: bool)
+signal start_on_earth_changed(enabled: bool)
+signal start_on_earth2_changed(enabled: bool)
+signal start_in_fire_changed(enabled: bool)
+signal start_on_ice_changed(enabled: bool)
+signal start_in_fire2_changed(enabled: bool)
+signal start_on_ice2_changed(enabled: bool)
 signal damage_vignette_changed()
 signal volume_changed(bus: StringName, value: float)
 signal display_changed()
@@ -66,6 +73,21 @@ var damage_vignette := 0.7
 var damage_vignette_directional := false
 ## Developer menu: "Играть" opens the Void (scenes/void.tscn) instead of the usual world.
 var start_in_void := false
+## Developer menu: "Играть" opens the air map (scenes/main.tscn), not a random one.
+var start_in_air := false
+## Developer menu: "Играть" opens the earth valley (scenes/earth.tscn).
+var start_on_earth := false
+## Developer menu: "Играть" opens the giant forest (scenes/earth2.tscn).
+var start_on_earth2 := false
+## Developer menu: "Играть" opens the fire forge (scenes/fire.tscn).
+var start_in_fire := false
+## Developer menu: "Играть" opens the ice valley (scenes/ice.tscn).
+var start_on_ice := false
+## Developer menu: "Играть" opens the volcano (scenes/fire2.tscn).
+var start_in_fire2 := false
+## Developer menu: "Играть" opens the ice cave (scenes/ice2.tscn). Only one of the start
+## options is on at a time.
+var start_on_ice2 := false
 ## Volume per audio bus, 0..1 (default_bus_layout.tres): everything, music,
 ## sound effects.
 const VOLUME_BUSES: Array[StringName] = [&"Master", &"Music", &"SFX"]
@@ -98,6 +120,20 @@ func _ready() -> void:
 	if config.load(PATH) == OK:
 		show_info_panel = config.get_value("hud", "show_info_panel", show_info_panel)
 		start_in_void = config.get_value("dev", "start_in_void", start_in_void)
+		start_in_air = config.get_value("dev", "start_in_air", start_in_air)
+		start_on_earth = config.get_value("dev", "start_on_earth", start_on_earth)
+		start_on_earth2 = config.get_value("dev", "start_on_earth2", start_on_earth2)
+		start_in_fire = config.get_value("dev", "start_in_fire", start_in_fire)
+		start_on_ice = config.get_value("dev", "start_on_ice", start_on_ice)
+		start_in_fire2 = config.get_value("dev", "start_in_fire2", start_in_fire2)
+		start_on_ice2 = config.get_value("dev", "start_on_ice2", start_on_ice2)
+		# Only one start option is on at a time: the first one saved on wins.
+		var kept := StringName()
+		for start: StringName in [&"void", &"air", &"earth", &"earth2", &"fire", &"ice", &"fire2", &"ice2"]:
+			if kept.is_empty() and _start_enabled(start):
+				kept = start
+		if not kept.is_empty():
+			_turn_off_other_starts(kept)
 		if config.has_section_key("hud", "damage_vignette"):
 			damage_vignette = _snap_vignette(float(config.get_value("hud", "damage_vignette")))
 		elif config.has_section_key("hud", "damage_vignette_level"):
@@ -334,8 +370,121 @@ func set_start_in_void(enabled: bool) -> void:
 	if enabled == start_in_void:
 		return
 	start_in_void = enabled
+	if enabled:
+		_turn_off_other_starts(&"void")
 	_save()
 	start_in_void_changed.emit(enabled)
+
+
+func set_start_in_air(enabled: bool) -> void:
+	if enabled == start_in_air:
+		return
+	start_in_air = enabled
+	if enabled:
+		_turn_off_other_starts(&"air")
+	_save()
+	start_in_air_changed.emit(enabled)
+
+
+func set_start_on_earth(enabled: bool) -> void:
+	if enabled == start_on_earth:
+		return
+	start_on_earth = enabled
+	if enabled:
+		_turn_off_other_starts(&"earth")
+	_save()
+	start_on_earth_changed.emit(enabled)
+
+
+func set_start_on_earth2(enabled: bool) -> void:
+	if enabled == start_on_earth2:
+		return
+	start_on_earth2 = enabled
+	if enabled:
+		_turn_off_other_starts(&"earth2")
+	_save()
+	start_on_earth2_changed.emit(enabled)
+
+
+func set_start_in_fire(enabled: bool) -> void:
+	if enabled == start_in_fire:
+		return
+	start_in_fire = enabled
+	if enabled:
+		_turn_off_other_starts(&"fire")
+	_save()
+	start_in_fire_changed.emit(enabled)
+
+
+func set_start_on_ice(enabled: bool) -> void:
+	if enabled == start_on_ice:
+		return
+	start_on_ice = enabled
+	if enabled:
+		_turn_off_other_starts(&"ice")
+	_save()
+	start_on_ice_changed.emit(enabled)
+
+
+func set_start_in_fire2(enabled: bool) -> void:
+	if enabled == start_in_fire2:
+		return
+	start_in_fire2 = enabled
+	if enabled:
+		_turn_off_other_starts(&"fire2")
+	_save()
+	start_in_fire2_changed.emit(enabled)
+
+
+func set_start_on_ice2(enabled: bool) -> void:
+	if enabled == start_on_ice2:
+		return
+	start_on_ice2 = enabled
+	if enabled:
+		_turn_off_other_starts(&"ice2")
+	_save()
+	start_on_ice2_changed.emit(enabled)
+
+
+## The start options exclude each other: turning one on turns the others off.
+func _turn_off_other_starts(kept: StringName) -> void:
+	if kept != &"void" and start_in_void:
+		start_in_void = false
+		start_in_void_changed.emit(false)
+	if kept != &"air" and start_in_air:
+		start_in_air = false
+		start_in_air_changed.emit(false)
+	if kept != &"earth" and start_on_earth:
+		start_on_earth = false
+		start_on_earth_changed.emit(false)
+	if kept != &"earth2" and start_on_earth2:
+		start_on_earth2 = false
+		start_on_earth2_changed.emit(false)
+	if kept != &"fire" and start_in_fire:
+		start_in_fire = false
+		start_in_fire_changed.emit(false)
+	if kept != &"ice" and start_on_ice:
+		start_on_ice = false
+		start_on_ice_changed.emit(false)
+	if kept != &"fire2" and start_in_fire2:
+		start_in_fire2 = false
+		start_in_fire2_changed.emit(false)
+	if kept != &"ice2" and start_on_ice2:
+		start_on_ice2 = false
+		start_on_ice2_changed.emit(false)
+
+
+func _start_enabled(start: StringName) -> bool:
+	match start:
+		&"void": return start_in_void
+		&"air": return start_in_air
+		&"earth": return start_on_earth
+		&"earth2": return start_on_earth2
+		&"fire": return start_in_fire
+		&"ice": return start_on_ice
+		&"fire2": return start_in_fire2
+		&"ice2": return start_on_ice2
+	return false
 
 
 func damage_vignette_strength() -> float:
@@ -398,6 +547,13 @@ func _save() -> void:
 	config.load(PATH)  # keep any other sections already saved
 	config.set_value("hud", "show_info_panel", show_info_panel)
 	config.set_value("dev", "start_in_void", start_in_void)
+	config.set_value("dev", "start_in_air", start_in_air)
+	config.set_value("dev", "start_on_earth", start_on_earth)
+	config.set_value("dev", "start_on_earth2", start_on_earth2)
+	config.set_value("dev", "start_in_fire", start_in_fire)
+	config.set_value("dev", "start_on_ice", start_on_ice)
+	config.set_value("dev", "start_in_fire2", start_in_fire2)
+	config.set_value("dev", "start_on_ice2", start_on_ice2)
 	config.set_value("hud", "damage_vignette", damage_vignette)
 	if config.has_section_key("hud", "damage_vignette_level"):
 		config.erase_section_key("hud", "damage_vignette_level")

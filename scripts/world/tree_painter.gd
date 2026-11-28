@@ -74,7 +74,8 @@ static func foliage(palette: int) -> Array[Color]:
 func _build_crown(tree: NelvarForestData.TreeSpec, rng: RandomNumberGenerator) -> Array[LeafMass]:
 	var axes := tree.canopy_axes()
 	var center := tree.canopy_center()
-	var tiers := 4 if tree.form == 1 else 3
+	# Tier count follows the crown size: a sapling has two pads, an old tree five or six.
+	var tiers := clampi(roundi(axes.y / 22.0), 2, 6)
 	var tier_step := axes.y * 2.0 / (float(tiers) + 0.7)
 	var tier_height := tier_step * 0.95
 	var drift := axes.x * 0.16

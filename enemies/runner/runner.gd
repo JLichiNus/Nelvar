@@ -433,12 +433,18 @@ func _update_hold(delta: float) -> void:
 		_kick(Vector2(-0.1, 0.12))
 
 
-# A dash into a trunk or a rock: it bounces off and sits dazed.
+# A dash into a trunk or a rock: it bounces off and sits dazed. At the brink of
+# an island or a bridge (NelvarWorldData.EDGE_LAYER) it only brakes.
 func _check_collisions() -> void:
 	if _state != State.DASH:
 		return
 	for i in get_slide_collision_count():
-		var normal := get_slide_collision(i).get_normal()
+		var collision := get_slide_collision(i)
+		var normal := collision.get_normal()
+		var edge := collision.get_collider() as CollisionObject2D
+		if edge != null and edge.collision_layer & NelvarWorldData.EDGE_LAYER != 0:
+			_start_skid()
+			return
 		if normal.dot(_dash_dir) < -0.55:
 			_knockback_velocity = normal * bonk_bounce
 			_stun(bonk_stun, true)

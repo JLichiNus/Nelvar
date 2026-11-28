@@ -123,7 +123,7 @@ func _check_gameplay() -> void:
 	_check(player.position.x > initial.x + 40.0, "Walking input does not move the player")
 	_check(data.has_clearance(player.position, NelvarPlayer.BODY_RADIUS - 0.2),
 		"Walking left the surface")
-	# Drive the real CharacterBody2D against a shoreline away from bridge mouths.
+	# Walk the real CharacterBody2D off a shoreline away from bridge mouths.
 	var tested_shore := false
 	for border in data.borders:
 		if not border.shore or border.start.distance_to(border.finish) < 20.0:
@@ -133,23 +133,37 @@ func _check_gameplay() -> void:
 		if data.is_walkable(middle + normal):
 			normal = -normal
 		var inside := middle - normal * (NelvarPlayer.BODY_RADIUS + 24.0)
-		if not data.has_clearance(inside, NelvarPlayer.BODY_RADIUS + 1.0):
+		# Firm footing (main.gd SAFE_CLEARANCE), so the fall comes back right here.
+		if not data.is_firm(inside, NelvarPlayer.BODY_RADIUS + 11.0):
 			continue
 		# The walk to the coast must not run into a rock instead.
 		if not game.prop_data.has_clearance(inside, NelvarPlayer.BODY_RADIUS + 40.0):
 			continue
 		player.position = inside
 		player.velocity = Vector2.ZERO
+		await physics_frame
+		var falls: int = game.falls
+		var health := player.health
 		_press_direction(normal)
 		for frame in 30:
 			await physics_frame
 		_release_controls()
-		_check(data.has_clearance(player.position, NelvarPlayer.BODY_RADIUS - 0.3),
-			"Character crossed a coast collider")
-		_check(player.position.distance_to(inside) < 70.0, "Coast did not stop movement")
+		_check(game.falls == falls + 1, "Walking off a coast did not fall")
+		_check(await _wait_recovered(player), "The fall from a coast never ended")
+		_check(data.is_firm(player.position, NelvarPlayer.BODY_RADIUS),
+			"The fall from a coast did not bring the player back on firm ground")
+		_check(player.position.distance_to(inside) < 70.0,
+			"The fall from a coast brought the player back far away")
+		_check(player.health < health, "The fall from a coast did no damage")
 		tested_shore = true
 		break
 	_check(tested_shore, "No suitable coast for the physics test")
+	# Enemies still stop at the edges.
+	var hopper: PackedScene = load("res://enemies/hopper/hopper.tscn")
+	var enemy := hopper.instantiate() as CollisionObject2D
+	_check(enemy.collision_mask & NelvarWorldData.EDGE_LAYER != 0, "Enemies walk off the edges")
+	enemy.free()
+	_check(player.collision_mask & NelvarWorldData.EDGE_LAYER == 0, "The edges stop the player")
 	# Walk across each complete bridge, through both landing seams.
 	for bridge in data.bridges:
 		var direction := bridge.start.direction_to(bridge.finish)
@@ -165,24 +179,45 @@ func _check_gameplay() -> void:
 			"Character was blocked at a bridge landing")
 		_check(data.has_clearance(player.position, NelvarPlayer.BODY_RADIUS - 0.3),
 			"Character left the bridge surface")
-	# Push sideways into a bridge rail and verify the actual body stops.
+	# Step sideways off a bridge: a fall, and back on the bridge.
 	var bridge := data.bridges[0]
 	var middle := (bridge.start + bridge.finish) * 0.5
 	var side := bridge.start.direction_to(bridge.finish).orthogonal()
 	player.position = middle
 	player.velocity = Vector2.ZERO
+	await physics_frame
+	var falls_before: int = game.falls
 	_press_direction(side)
 	for frame in 30:
 		await physics_frame
 	_release_controls()
-	_check(data.has_clearance(player.position, NelvarPlayer.BODY_RADIUS - 0.3),
-		"Character crossed a bridge side collider")
+	_check(game.falls == falls_before + 1, "Stepping off a bridge did not fall")
+	_check(await _wait_recovered(player), "The fall from a bridge never ended")
 	_check(player.position.distance_to(middle) < bridge.width * 0.5,
-		"Bridge side did not stop movement")
+		"The fall from a bridge did not bring the player back onto it")
+	# The flight carries the player over the sky without a fall.
+	var sky := middle + side * (bridge.width * 0.5 + 60.0)
+	if not data.is_walkable(sky):
+		player.call("_try_speed_boost")
+		player.position = sky
+		player.velocity = Vector2.ZERO
+		var falls_flying: int = game.falls
+		for frame in 20:
+			await physics_frame
+		_check(player.is_airborne() and game.falls == falls_flying, "The flight fell into the sky")
 	game.world_view.toggle_chunks()
 	_check(game.world_view.details.show_chunks, "Chunk debug view does not toggle")
 	game.queue_free()
 	await process_frame
+
+
+## Waits out a fall; false if the player is still falling after a few seconds.
+func _wait_recovered(player: NelvarPlayer) -> bool:
+	for frame in 240:
+		if not player.is_falling():
+			return true
+		await physics_frame
+	return not player.is_falling()
 
 
 func _press_direction(direction: Vector2) -> void:
