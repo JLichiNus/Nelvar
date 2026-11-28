@@ -9,8 +9,8 @@ extends NelvarEarthData
 ##
 ## Built on the valley's data (NelvarEarthData): the floor's outline is its Radial
 ## `valley`, the trails, clearings and ponds are its own, the things are its Things (the
-## kinds of this map are at the end of Kind), so NelvarEarthThing, the butterflies, the
-## spawner and the valley's painter work with it unchanged.
+## kinds of this map are at the end of Kind), so NelvarEarthThing, the spawner
+## and the valley's painter work with it unchanged.
 ##
 ## NelvarThicketGenerator builds it; the floor shader, NelvarGiantPainter and
 ## NelvarThicketPainter draw it. Everything here is static except the few runtime states

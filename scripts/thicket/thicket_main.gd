@@ -110,7 +110,6 @@ var _outlines: Node2D
 @onready var spores: NelvarSmoke = $Spores
 @onready var leaves: NelvarLeaves = $Leaves
 @onready var ants: NelvarAnts = $Ants
-@onready var butterflies: NelvarButterflies = $Butterflies
 @onready var pollen_layer: Node2D = $Pollen
 @onready var shade: NelvarCloudSea = $Shade
 @onready var shine: NelvarCloudSea = $Shine
@@ -155,7 +154,6 @@ func _ready() -> void:
 	falling.setup(data, player, actors, puffballs)
 	leaves.setup(data.world_seed, player)
 	ants.setup(data, player)
-	butterflies.setup(data, player)
 	flytraps.snapped.connect(_on_snap)
 	puffballs.burst.connect(_update_status.unbind(1))
 	enemy_spawner.call("start_on", data)

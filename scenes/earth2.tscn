@@ -1,4 +1,4 @@
-[gd_scene load_steps=34 format=3]
+[gd_scene load_steps=33 format=3]
 
 [ext_resource type="Script" path="res://scripts/thicket/thicket_main.gd" id="1"]
 [ext_resource type="Resource" path="res://resources/earth_thicket_config.tres" id="2"]
@@ -18,7 +18,6 @@
 [ext_resource type="Shader" path="res://scripts/thicket/canopy_shade.gdshader" id="16"]
 [ext_resource type="Shader" path="res://scripts/thicket/canopy_shine.gdshader" id="17"]
 [ext_resource type="Script" path="res://scripts/thicket/ants.gd" id="18"]
-[ext_resource type="Script" path="res://scripts/earth/butterflies.gd" id="19"]
 [ext_resource type="PackedScene" path="res://enemies/whistler/whistler.tscn" id="20"]
 [ext_resource type="Script" path="res://enemies/enemy_kind.gd" id="21"]
 [ext_resource type="Script" path="res://scripts/location_cursor.gd" id="cursor_script"]
@@ -84,12 +83,6 @@ script = ExtResource("18")
 [node name="Spores" type="Node2D" parent="."]
 z_index = 25
 script = ExtResource("14")
-
-[node name="Butterflies" type="Node2D" parent="."]
-z_index = 15
-script = ExtResource("19")
-count = 7
-wing_scale = 3
 
 [node name="Pollen" type="Node2D" parent="."]
 z_index = 20
