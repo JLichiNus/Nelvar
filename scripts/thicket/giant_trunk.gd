@@ -66,6 +66,7 @@ func setup(spec: NelvarThicketData.Giant, artwork: NelvarEarthArt) -> void:
 	_material = ShaderMaterial.new()
 	_material.shader = SHADER
 	material = _material
+	_material.set_shader_parameter("top_fade", NelvarGiantPainter.TOP_FADE / art.local_rect.size.y)
 	_eye_time = randf_range(2.0, 9.0)
 	set_process(art.eye.is_finite())
 	var rng := RandomNumberGenerator.new()
@@ -75,13 +76,18 @@ func setup(spec: NelvarThicketData.Giant, artwork: NelvarEarthArt) -> void:
 
 
 ## True when the point is behind the trunk on screen: north of its base and within its
-## silhouette (its seen height).
+## silhouette (up to the middle of its fading top).
 func hides(point: Vector2, margin: float = 0.0) -> bool:
 	var offset := point - giant.center
 	if absf(offset.x) > giant.radius * 1.1 + margin:
 		return false
 	var base := giant.radius * sqrt(maxf(0.0, 1.0 - pow(offset.x / (giant.radius * 1.16), 2.0)))
-	return offset.y < base and offset.y > -giant.height - margin
+	return offset.y < base and offset.y > -reach() - margin
+
+
+## How high the trunk is seen (world units): up to the middle of its fading top.
+func reach() -> float:
+	return NelvarGiantPainter.trunk_top(giant) - NelvarGiantPainter.TOP_FADE * 0.5
 
 
 ## Moves the beetles up the bark (called while the trunk is near the screen).

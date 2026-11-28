@@ -3,7 +3,7 @@ extends RefCounted
 ## Paints the giants of the forest (Земля 2) in the style of the valley's art: lit from the
 ## upper right, Bayer-dithered palettes on the world's art pixel grid, dark outlines on the
 ## shaded edges. A trunk is a wall wider than the screen: its foot with the flare and the
-## bark going up out of the top of the screen, melting into the dark of the crown. The
+## solid bark going up out of the top of the screen, its top fading out smoothly. The
 ## roots, the fallen giant and its root plate lie along the ground and are cut into pieces
 ## that each sort by their own lowest point.
 ##
@@ -17,6 +17,11 @@ const Part = NelvarThicketData.Part
 const FADES := 240
 ## The foot of a trunk this many art pixels high never thins out.
 const FOOT_BAND := 40.0
+## The bark goes this far (world units) above the front of a trunk's base, its top TOP_FADE
+## of it fading out (giant_trunk.gdshader): solid past the top of the screen at the default
+## zoom wherever the foot is on screen.
+const TRUNK_REACH := 1500.0
+const TOP_FADE := 700.0
 ## The sun from the upper right, high: (x right, y towards the bottom of the screen, up).
 const SUN := Vector3(0.46, -0.42, 0.78)
 
@@ -29,7 +34,6 @@ const BARK := {
 ## Size of a pine's bark plate, art pixels (around the trunk, along it).
 const PINE_PLATE := Vector2(12.0, 40.0)
 const OUTLINE := Color8(22, 18, 16)
-const CROWN_DARK := Color8(20, 28, 20)
 const MOSS: Array[Color] = [Color8(44, 68, 34), Color8(66, 96, 44), Color8(98, 130, 58), Color8(136, 162, 78)]
 const FOOT_MOSS: Array[Color] = [Color8(36, 50, 30), Color8(50, 70, 38), Color8(70, 92, 48), Color8(94, 114, 60)]
 const SOIL: Array[Color] = [Color8(46, 34, 26), Color8(70, 52, 38), Color8(98, 74, 52)]
@@ -157,6 +161,11 @@ static func ramp(colors: Array, level: float, x: int, y: int) -> Color:
 	return colors[mini(index, colors.size() - 1)]
 
 
+## How high above its centre a trunk is painted (world units).
+static func trunk_top(giant: NelvarThicketData.Giant) -> float:
+	return maxf(giant.height + TOP_FADE * 0.5, TRUNK_REACH - giant.radius)
+
+
 static func noise(x: float, y: float, salt: int) -> float:
 	return NelvarPixelArt.value_noise(x, y, salt)
 
@@ -165,16 +174,18 @@ static func noise(x: float, y: float, salt: int) -> float:
 
 ## A giant's trunk: the foot along the front of its base circle with a flare, the bark of
 ## its kind lit from the right with a bright rim, moss at the foot, shelf fungi, now and then
-## a hollow; the top third melts into the dark of the crown. `eye` is the hollow's middle.
+## a hollow; plain bark above the seen height up to trunk_top(). `eye` is the hollow's
+## middle.
 func paint_trunk(giant: NelvarThicketData.Giant) -> NelvarEarthArt:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = giant.appearance_seed
 	var r := giant.radius / STEP
 	var h := giant.height / STEP
+	var tall := trunk_top(giant) / STEP
 	var center := giant.center / STEP
 	var flare := 0.16
 	var reach := r * (1.0 + flare) + 14.0
-	var sheet := Sheet.new(Vector2i((center + Vector2(-reach, -h - 2.0)).floor()),
+	var sheet := Sheet.new(Vector2i((center + Vector2(-reach, -tall)).floor()),
 		Vector2i((center + Vector2(reach, r + 3.0)).ceil()))
 	var colors: Array = BARK[giant.species]
 	var salt := rng.randi() & 0xffff
@@ -203,18 +214,15 @@ func paint_trunk(giant: NelvarThicketData.Giant) -> NelvarEarthArt:
 						ridge_side = dx * minf(1.0, b.w / maxf(1.0, bottom + b.z - local.y))
 			bottom += ridge
 			var above := bottom - local.y
-			if above < 0.0 or local.y < -h:
+			if above < 0.0 or local.y < -tall:
 				continue
 			var half := r * (1.0 + flare * exp(-above / (r * 0.32)))
 			var lean := slant * maxf(0.0, -local.y)
 			var u := (local.x - lean) / half
 			if absf(u) > 1.0:
 				continue
-			var top := clampf((-local.y - 0.62 * h) / (0.38 * h), 0.0, 1.0)
 			var gx := sheet.corner.x + x
 			var gy := sheet.corner.y + y
-			if top * 16.0 > NelvarPixelArt.bayer(Vector2i(gx, gy)) + 0.5:
-				continue
 			var nz := sqrt(maxf(0.0, 1.0 - u * u))
 			var lit := u * SUN.x + nz * 0.72
 			var level := 0.3 + lit * 0.5
@@ -237,7 +245,6 @@ func paint_trunk(giant: NelvarThicketData.Giant) -> NelvarEarthArt:
 				color = OUTLINE if u < 0.0 else color.lerp(colors[colors.size() - 1], 0.6)
 			if above < 1.0:
 				color = color.darkened(0.45)
-			color = color.lerp(CROWN_DARK, top * 0.9)
 			sheet.put(x, y, color, FADES if above > FOOT_BAND else 255, -1, level)
 	var art := NelvarEarthArt.new()
 	_trunk_marks(sheet, giant, rng, r, h, center, salt)

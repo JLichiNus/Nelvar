@@ -605,7 +605,7 @@ func _process(delta: float) -> void:
 func _fade(delta: float) -> void:
 	var point := player.global_position
 	for node in trunk_nodes:
-		if node.giant.center.distance_to(point) < node.giant.height + node.giant.radius + 400.0 or node.fade > 0.0:
+		if node.giant.center.distance_to(point) < node.reach() + node.giant.radius + 400.0 or node.fade > 0.0:
 			node.update_fade(node.hides(point, BEHIND_MARGIN), delta)
 			node.crawl(delta)
 	for node in _mushrooms:
