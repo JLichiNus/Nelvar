@@ -26,6 +26,8 @@ const BARK := {
 	Wood.BIRCH: [Color8(96, 94, 90), Color8(150, 148, 140), Color8(196, 194, 184), Color8(228, 226, 216), Color8(246, 244, 236)],
 	Wood.DEAD: [Color8(58, 54, 52), Color8(88, 82, 76), Color8(120, 112, 102), Color8(156, 148, 134), Color8(188, 180, 164)],
 }
+## Size of a pine's bark plate, art pixels (around the trunk, along it).
+const PINE_PLATE := Vector2(12.0, 40.0)
 const OUTLINE := Color8(22, 18, 16)
 const CROWN_DARK := Color8(20, 28, 20)
 const MOSS: Array[Color] = [Color8(44, 68, 34), Color8(66, 96, 44), Color8(98, 130, 58), Color8(136, 162, 78)]
@@ -261,18 +263,56 @@ func _bark(species: int, colors: Array, around: float, y: float, above: float, l
 				return ramp(colors, level - 0.25, gx, gy)
 			return ramp(colors, level + (furrow - 0.5) * 0.4, gx, gy)
 		Wood.PINE:
-			# Plates of bark in wavy rows, each row its own width and offset.
-			var wavy := y + (noise(around * 0.06, y * 0.01, salt) - 0.5) * 10.0
-			var row := floori(wavy / 6.0)
-			var v := fposmod(wavy, 6.0)
-			var width := 7.0 + NelvarPixelArt.hash01(row, 3, salt) * 8.0
-			var shift := NelvarPixelArt.hash01(row, 7, salt) * 30.0
-			var cell := floori((around + shift) / width)
-			var u := fposmod(around + shift, width)
-			var tone := NelvarPixelArt.hash01(cell, row, salt) - 0.5
-			if v < 1.0 or u < 1.0 + NelvarPixelArt.hash01(cell, row, salt + 1):
-				return ramp(colors, level - 0.5, gx, gy)
-			return ramp(colors, level + tone * 0.4 + (0.12 if v < 2.0 else -0.05 * v / 6.0), gx, gy)
+			# Thick plates of an old pine: irregular, much longer than wide, split by furrows that
+			# wander up the trunk (cells of a jittered grid measured stretched along the trunk).
+			var warp := (noise(around * 0.04, y * 0.015, salt) - 0.5) * 10.0
+			var q := Vector2(around + warp, y) / PINE_PLATE
+			var base := Vector2i(q.floor())
+			var f1 := INF
+			var f2 := INF
+			var near := Vector2.ZERO
+			var second := Vector2.ZERO
+			var plate := Vector2i.ZERO
+			for j in range(-1, 2):
+				for i in range(-1, 2):
+					var c := base + Vector2i(i, j)
+					var p := Vector2(c) + Vector2(0.15 + 0.7 * NelvarPixelArt.hash01(c.x, c.y, salt + 1),
+						0.1 + 0.8 * NelvarPixelArt.hash01(c.x, c.y, salt + 2))
+					var d := q.distance_to(p)
+					if d < f1:
+						f2 = f1
+						second = near
+						f1 = d
+						near = p
+						plate = c
+					elif d < f2:
+						f2 = d
+						second = p
+			# Distance to the furrow in art pixels (roughly). The furrows between plates side by
+			# side run up the trunk wide and deep; the cracks between plates one above the
+			# other are thin.
+			var normal := (second - near).normalized() * PINE_PLATE
+			var edge := (f2 - f1) * 0.5 * normal.length()
+			var across := absf(normal.normalized().x)
+			var furrow := (0.7 + noise(around * 0.2, y * 0.05, salt + 6) * 1.6) * lerpf(0.4, 1.0, across)
+			if edge < furrow:
+				return ramp(colors, level - (0.75 if edge < furrow * 0.5 and across > 0.5 else 0.55), gx, gy)
+			var o := q - near
+			var tone := NelvarPixelArt.hash01(plate.x, plate.y, salt + 3) - 0.5
+			# A flat plate, its edge along a deep furrow lit on the right side, shaded on the left;
+			# its lower lip in shadow.
+			var shade := tone * 0.25 + o.x * 0.12
+			if edge < furrow + 1.5:
+				if across > 0.5:
+					shade += 0.15 if second.x < near.x else -0.18
+				elif second.y > near.y:
+					shade -= 0.15
+			# Fibres along the trunk, and the orange underneath where the top layer flaked off.
+			var fibre := noise(around * 0.6, y * 0.07, salt + 4)
+			var flake := noise(around * 0.15, y * 0.04, salt + 5)
+			if flake > 0.72 and tone > -0.2:
+				return ramp(colors, level + 0.25 + (fibre - 0.5) * 0.2, gx, gy)
+			return ramp(colors, level + shade + (fibre - 0.5) * 0.25, gx, gy)
 		Wood.BIRCH:
 			if above < 90.0 * noise(around * 0.1, 0.0, salt + 2) + 20.0:
 				# The rough black foot of an old birch.
