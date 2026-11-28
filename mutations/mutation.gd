@@ -24,7 +24,6 @@ const VERSION_COLORS := [
 ]
 const SPONTANEOUS_NAME := "Спонтанная"
 const SPONTANEOUS_COLOR := Color(0.78, 0.66, 1.0)
-const LAYER_NAMES := ["Тело", "Способность", "Правило"]
 const STAGE_NAMES := ["I", "II", "III", "IV"]
 ## How much each version values every stat when it picks a mutation for all
 ## four of them (LORE §4.3). Air — the player's version (the wind elemental) —

@@ -83,7 +83,7 @@ func _draw_layer_mark(color: Color) -> void:
 		draw_rect(Rect2(corner + cell * ART_PIXEL, Vector2.ONE * ART_PIXEL), color)
 
 
-## The hover hint's content: name with stage and the one-line summary.
+## The hover hint's content: name and the one-line summary.
 func build_hint() -> Control:
 	if mutation == null:
 		return null
@@ -91,8 +91,7 @@ func build_hint() -> Control:
 	rows.add_theme_constant_override("separation", 3)
 	# 3x the 11 px bitmap font: one font pixel = one art pixel, so the text
 	# scales as evenly as the rest of the art on non-integer window scales.
-	rows.add_child(MutationText.line("%s %s" % [mutation.title, NelvarMutation.stage_name(stage)],
-		owner_color(), HINT_FONT_SIZE))
+	rows.add_child(MutationText.line(mutation.title, owner_color(), HINT_FONT_SIZE))
 	rows.add_child(MutationText.line(mutation.summary, Color.WHITE, HINT_FONT_SIZE))
 	# The hint takes the content's minimum size: wrapped labels would make
 	# it as tall as one word per line.

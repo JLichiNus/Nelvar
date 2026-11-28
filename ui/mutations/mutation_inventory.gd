@@ -3,7 +3,7 @@ extends PanelContainer
 ## The pause menu's inventory: a long, low grid of the received mutations'
 ## tiles. Pointing at a tile (or moving the keyboard focus onto it) shows a
 ## card under the plate with the full description — what the mutation is, its exact
-## gains and costs at the stage reached, its layer and who picked each stage.
+## gains and costs at the stage reached.
 ##
 ## The card is drawn inside the panel rather than as Godot's tooltip, as in
 ## the HUD strip: a tooltip waits before it appears and lives in its own
@@ -27,7 +27,6 @@ var _info: Label
 var _grid: GridContainer
 var _empty: Label
 var _card: PanelContainer
-var _player_version := NelvarMutation.Version.AIR
 var _hovered: Button
 var _shown: Button
 
@@ -99,9 +98,7 @@ func refresh(director: NelvarMutationDirector) -> void:
 	_empty.visible = entries.is_empty()
 	_grid.visible = not entries.is_empty()
 	if director != null:
-		_player_version = director.player_version
-		_info.text = "Мутаций: %d   ·   выбираешь ты: %d%%" % [
-			director.mutation_count, roundi(director.player_share() * 100.0)]
+		_info.text = "выбираешь ты: %d%%" % roundi(director.player_share() * 100.0)
 	else:
 		_info.text = ""
 	for entry in entries:
@@ -227,27 +224,4 @@ func _place_card() -> void:
 
 func _describe(entry: Dictionary) -> Control:
 	var mutation: NelvarMutation = entry["mutation"]
-	var stage: int = entry["stage"]
-	var owners: Array = entry["owners"]
-	# One name when every stage was picked by the same one.
-	var picks := PackedStringArray()
-	if not owners.is_empty() and owners.count(owners[0]) == owners.size():
-		picks.append(_who(owners[0]))
-	else:
-		for i in owners.size():
-			picks.append("%s — %s" % [NelvarMutation.stage_name(i + 1), _who(owners[i])])
-	var notes: Array[Label] = [
-		MutationText.line("Выбор: %s" % ", ".join(picks), MutationText.MUTED_COLOR)]
-	if stage < mutation.max_stage:
-		notes.append(MutationText.line("Может выпасть снова и усилиться.",
-			MutationText.MUTED_COLOR))
-	return MutationText.describe(mutation, stage, _owner_color(entry), notes)
-
-
-func _who(owner: int) -> String:
-	if owner == _player_version:
-		return "ты"
-	if owner == NelvarMutation.SPONTANEOUS:
-		return "спонтанно"
-	return NelvarMutation.version_name(owner)
-
+	return MutationText.describe(mutation, entry["stage"], _owner_color(entry))

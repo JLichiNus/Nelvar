@@ -28,7 +28,7 @@ static func add_effects(rows: VBoxContainer, mutation: NelvarMutation, stage: in
 
 
 ## The full description, wide and low: what the mutation is on the left
-## (title, layer and stage, summary), its exact numbers on the right with
+## (title, summary), its exact numbers on the right with
 ## `notes` under them.
 static func describe(mutation: NelvarMutation, stage: int, title_color: Color,
 		notes: Array[Label] = []) -> HBoxContainer:
@@ -39,11 +39,6 @@ static func describe(mutation: NelvarMutation, stage: int, title_color: Color,
 	var about := _column(ABOUT_WIDTH)
 	columns.add_child(about)
 	about.add_child(line(mutation.title, title_color, 33))
-	var stage_text := "стадия %s" % NelvarMutation.stage_name(stage)
-	if mutation.max_stage > 1:
-		stage_text += " из %s" % NelvarMutation.stage_name(mutation.max_stage)
-	about.add_child(line("%s   ·   %s" % [
-		NelvarMutation.LAYER_NAMES[mutation.layer], stage_text], MUTED_COLOR))
 	about.add_child(_gap())
 	about.add_child(line(mutation.summary, Color.WHITE))
 
