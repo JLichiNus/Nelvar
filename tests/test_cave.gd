@@ -56,7 +56,6 @@ func _run() -> void:
 			_check_art(data)
 	print("Cave: %d seeds in %.1f s · %.1f halls · %.1f loops each" % [count,
 		float(Time.get_ticks_msec() - started) / 1000.0, float(halls) / count, float(loops) / count])
-	_check_settings()
 	await _check_scene()
 	if _failures.is_empty():
 		print("PASS: %d checks; the cave's layout, walls, floor, art, hazards and the scene behave" % _checks)
@@ -356,51 +355,6 @@ func _check_art(data: NelvarCaveData) -> void:
 		if art == null or art.image.is_invisible():
 			broken.append("floater")
 	_check(broken.is_empty(), "Art: %s" % ", ".join(broken))
-
-
-# --- The start setting -------------------------------------------------------------------
-
-## The start options exclude each other; «Играть» opens the cave when its option is on.
-func _check_settings() -> void:
-	var settings: Node = root.get_node("GameSettings")
-	var path: String = settings.PATH
-	var saved := FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else PackedByteArray()
-	var flags := ["start_in_void", "start_on_earth", "start_on_earth2", "start_in_fire", "start_on_ice", "start_in_fire2",
-		"start_on_ice2"]
-	var was := []
-	for flag in flags:
-		was.append(settings.get(flag))
-	var clashes := 0
-	for i in flags.size():
-		settings.call("set_" + flags[i], true)
-		for j in flags.size():
-			if bool(settings.get(flags[j])) != (i == j):
-				clashes += 1
-	settings.set_start_on_ice2(false)
-	for flag in flags:
-		if settings.get(flag):
-			clashes += 1
-	_check(clashes == 0, "The start options do not exclude each other (%d clashes)" % clashes)
-	for i in flags.size():
-		settings.set(flags[i], was[i])
-	if saved.is_empty():
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-	else:
-		var file := FileAccess.open(path, FileAccess.WRITE)
-		file.store_buffer(saved)
-		file.close()
-	var menu := FileAccess.get_file_as_string("res://ui/main_menu/main_menu.gd")
-	_check(menu.contains("res://scenes/ice2.tscn") and menu.contains("GameSettings.start_on_ice2"),
-		"«Играть» does not open the cave")
-	var panel: Node = load("res://ui/main_menu/settings_panel.tscn").instantiate()
-	var check: Node = panel.get_node_or_null("Rows/Body/PageColumn/Scroll/Pages/DevPage/StartOnIce2")
-	var rows: Node = panel.get_node("Rows/Body/PageColumn/Scroll/Pages/DevPage")
-	_check(check is CheckButton and (check as CheckButton).text == "Запускать игру на Льду"
-		and check.get_index() == rows.get_node("StartInFire2").get_index() + 1,
-		"The developer menu has no Лёд 2 start right under Огонь 2")
-	panel.free()
-	var hint := FileAccess.get_file_as_string("res://ui/main_menu/settings_panel.tscn")
-	_check(hint.contains("«Играть» откроет ледяную пещеру (Лёд 2)"), "The developer menu does not say «Играть» opens the cave")
 
 
 # --- The scene -----------------------------------------------------------------------------

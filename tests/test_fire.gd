@@ -1,6 +1,6 @@
 extends SceneTree
 ## The fire forge: layout rules (lava, crossings, roads, passages), reachability over
-## the crossings, artwork, the ground map, the start setting, and the real scene: lava
+## the crossings, artwork, the ground map, and the real scene: lava
 ## stops the walking player, the flight carries them over it, coming down in it burns
 ## and throws them back, hoppers blown into it burn, fissures erupt, salamanders dive,
 ## the wind blows the smoke away.
@@ -45,7 +45,6 @@ func _run() -> void:
 	_check(streams >= count, "Only %d lava streams over %d forges" % [streams, count])
 	print("Fire: %d seeds in %.2f s · %d streams · %.1f%% of open ground reachable" % [count,
 		float(Time.get_ticks_msec() - started) / 1000.0, streams, reached / mini(count, 8) * 100.0])
-	_check_settings()
 	await _check_scene()
 	if _failures.is_empty():
 		print("PASS: %d checks; forge layout, crossings, art, lava, flight, eruptions and the scene behave" % _checks)
@@ -277,70 +276,6 @@ func _check_field(data: NelvarFireData) -> void:
 		if field.glow[value * 4] > 200:
 			lit += 1
 	_check(lit > 20, "The light map is dark")
-
-
-# --- The start setting -------------------------------------------------------------
-
-## The start options exclude each other. The saved settings are put back as they were.
-func _check_settings() -> void:
-	var settings: Node = root.get_node("GameSettings")
-	var path: String = settings.PATH
-	var saved := FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else PackedByteArray()
-	var was := [settings.start_in_void, settings.start_on_earth, settings.start_in_fire, settings.start_on_ice,
-		settings.start_in_fire2, settings.start_on_ice2, settings.start_on_earth2, settings.start_in_air]
-	settings.set_start_on_earth(true)
-	settings.set_start_in_fire(true)
-	_check(settings.start_in_fire and not settings.start_on_earth and not settings.start_in_void,
-		"The fire did not replace the earth at start")
-	settings.set_start_in_void(true)
-	_check(settings.start_in_void and not settings.start_in_fire, "The Void did not replace the fire at start")
-	settings.set_start_in_fire(true)
-	_check(settings.start_in_fire and not settings.start_in_void, "The fire did not replace the Void at start")
-	settings.set_start_on_ice(true)
-	_check(settings.start_on_ice and not settings.start_in_fire and not settings.start_on_earth
-		and not settings.start_in_void, "The ice did not replace the fire at start")
-	settings.set_start_on_earth(true)
-	_check(settings.start_on_earth and not settings.start_on_ice, "Earth did not replace the ice at start")
-	settings.set_start_in_fire2(true)
-	_check(settings.start_in_fire2 and not settings.start_on_earth and not settings.start_in_fire,
-		"The volcano did not replace the earth at start")
-	settings.set_start_in_fire(true)
-	_check(settings.start_in_fire and not settings.start_in_fire2, "The forge did not replace the volcano at start")
-	settings.set_start_on_ice2(true)
-	_check(settings.start_on_ice2 and not settings.start_in_fire, "The ice cave did not replace the forge at start")
-	settings.set_start_in_fire(true)
-	_check(settings.start_in_fire and not settings.start_on_ice2, "The forge did not replace the ice cave at start")
-	settings.set_start_on_earth2(true)
-	_check(settings.start_on_earth2 and not settings.start_in_fire, "The giant forest did not replace the forge at start")
-	settings.set_start_in_fire(true)
-	_check(settings.start_in_fire and not settings.start_on_earth2, "The forge did not replace the giant forest at start")
-	settings.set_start_in_air(true)
-	_check(settings.start_in_air and not settings.start_in_fire, "The air did not replace the forge at start")
-	settings.set_start_in_fire(true)
-	_check(settings.start_in_fire and not settings.start_in_air, "The forge did not replace the air at start")
-	settings.start_in_void = was[0]
-	settings.start_on_earth = was[1]
-	settings.start_in_fire = was[2]
-	settings.start_on_ice = was[3]
-	settings.start_in_fire2 = was[4]
-	settings.start_on_ice2 = was[5]
-	settings.start_on_earth2 = was[6]
-	settings.start_in_air = was[7]
-	if saved.is_empty():
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-	else:
-		var file := FileAccess.open(path, FileAccess.WRITE)
-		file.store_buffer(saved)
-		file.close()
-	var menu := FileAccess.get_file_as_string("res://ui/main_menu/main_menu.gd")
-	_check(menu.contains("res://scenes/fire.tscn") and menu.contains("GameSettings.start_in_fire"),
-		"«Играть» does not open the forge")
-	var panel: Node = load("res://ui/main_menu/settings_panel.tscn").instantiate()
-	_check(panel.get_node_or_null("Rows/Body/PageColumn/Scroll/Pages/DevPage/StartInFire") is CheckButton, "The developer menu has no fire start")
-	_check(panel.get_node_or_null("Rows/Body/PageColumn/Scroll/Pages/DevPage/StartOnIce") is CheckButton, "The developer menu has no ice start")
-	_check(menu.contains("res://scenes/ice.tscn") and menu.contains("GameSettings.start_on_ice"),
-		"«Играть» does not open the ice valley")
-	panel.free()
 
 
 # --- The scene ---------------------------------------------------------------------

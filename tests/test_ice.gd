@@ -1,7 +1,7 @@
 extends SceneTree
 ## The ice valley: layout rules (lakes, thin ice, crevasses and their bridges, trails,
 ## passages, frozen creatures), reachability over the bridges, artwork, the floor map,
-## the start setting, and the real scene: the ice is slippery, a wide crevasse drops a
+## and the real scene: the ice is slippery, a wide crevasse drops a
 ## walking player and throws them back, the flight carries them over it and a run over a
 ## narrow one, thin ice breaks under a standing player and not under a running one, a
 ## hole freezes over, hoppers blown into a crevasse or a hole die, a blizzard slows the
@@ -50,7 +50,6 @@ func _run() -> void:
 	_check(crevasses >= count * 2, "Only %d crevasses over %d valleys" % [crevasses, count])
 	print("Ice: %d seeds in %.2f s · %d crevasses · %d bridges · %.1f%% of open ground reachable" % [count,
 		float(Time.get_ticks_msec() - started) / 1000.0, crevasses, bridges, reached / mini(count, 8) * 100.0])
-	_check_settings()
 	await _check_scene()
 	if _failures.is_empty():
 		print("PASS: %d checks; valley layout, bridges, art, ice, crevasses, thin ice, blizzards and the scene behave" % _checks)
@@ -286,64 +285,6 @@ func _check_field(data: NelvarIceData) -> void:
 		if value >= NelvarIceField.BANK_FROM and value <= 200:
 			banks += 1
 	_check(banks * 2 >= data.snow_banks.size(), "The floor map misses the drifted snow")
-
-
-# --- The start setting -------------------------------------------------------------
-
-## The start options exclude each other; «Играть» opens the ice valley when its
-## option is on. The saved settings are put back as they were.
-func _check_settings() -> void:
-	var settings: Node = root.get_node("GameSettings")
-	var path: String = settings.PATH
-	var saved := FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else PackedByteArray()
-	var was := [settings.start_in_void, settings.start_on_earth, settings.start_in_fire, settings.start_on_ice,
-		settings.start_in_fire2, settings.start_on_ice2, settings.start_on_earth2]
-	settings.set_start_in_fire(true)
-	settings.set_start_on_ice(true)
-	_check(settings.start_on_ice and not settings.start_in_fire and not settings.start_on_earth
-		and not settings.start_in_void, "The ice did not replace the fire at start")
-	settings.set_start_in_void(true)
-	_check(settings.start_in_void and not settings.start_on_ice, "The Void did not replace the ice at start")
-	settings.set_start_on_ice(true)
-	_check(settings.start_on_ice and not settings.start_in_void, "The ice did not replace the Void at start")
-	settings.set_start_in_fire2(true)
-	_check(settings.start_in_fire2 and not settings.start_on_ice, "The volcano did not replace the ice at start")
-	settings.set_start_on_ice(true)
-	_check(settings.start_on_ice and not settings.start_in_fire2, "The ice did not replace the volcano at start")
-	settings.set_start_on_ice2(true)
-	_check(settings.start_on_ice2 and not settings.start_on_ice, "The ice cave did not replace the ice valley at start")
-	settings.set_start_on_ice(true)
-	_check(settings.start_on_ice and not settings.start_on_ice2, "The ice valley did not replace the ice cave at start")
-	settings.set_start_on_earth2(true)
-	_check(settings.start_on_earth2 and not settings.start_on_ice, "The giant forest did not replace the ice valley at start")
-	settings.set_start_on_ice(true)
-	_check(settings.start_on_ice and not settings.start_on_earth2, "The ice valley did not replace the giant forest at start")
-	settings.set_start_on_ice(false)
-	_check(not (settings.start_on_ice or settings.start_in_void or settings.start_on_earth or settings.start_in_fire
-		or settings.start_in_fire2 or settings.start_on_ice2 or settings.start_on_earth2), "Turning the ice off left another start on")
-	settings.start_in_void = was[0]
-	settings.start_on_earth = was[1]
-	settings.start_in_fire = was[2]
-	settings.start_on_ice = was[3]
-	settings.start_in_fire2 = was[4]
-	settings.start_on_ice2 = was[5]
-	settings.start_on_earth2 = was[6]
-	if saved.is_empty():
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-	else:
-		var file := FileAccess.open(path, FileAccess.WRITE)
-		file.store_buffer(saved)
-		file.close()
-	_check(ResourceLoader.exists("res://scenes/ice.tscn"), "There is no ice scene")
-	var menu := FileAccess.get_file_as_string("res://ui/main_menu/main_menu.gd")
-	_check(menu.contains("res://scenes/ice.tscn") and menu.contains("GameSettings.start_on_ice"),
-		"«Играть» does not open the ice valley")
-	_check(not menu.contains("Ледяной долины ещё нет"), "«Играть» still falls back from the ice valley")
-	var panel: Node = load("res://ui/main_menu/settings_panel.tscn").instantiate()
-	_check(panel.get_node_or_null("Rows/Body/PageColumn/Scroll/Pages/DevPage/StartOnIce") is CheckButton, "The developer menu has no ice start")
-	panel.free()
-	var hint := FileAccess.get_file_as_string("res://ui/main_menu/settings_panel.tscn")
-	_check(hint.contains("«Играть» откроет ледяную долину"), "The developer menu does not say «Играть» opens the ice")
 
 
 # --- The scene ---------------------------------------------------------------------

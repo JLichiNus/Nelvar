@@ -1,6 +1,6 @@
 extends SceneTree
 ## The earth valley: layout rules, reachability, artwork, the ground map, and the
-## real scene (walls, water, plants, statues, peaks, enemy spawns, the start setting).
+## real scene (walls, water, plants, statues, peaks, enemy spawns).
 ## Run: godot --headless --path . --script tests/test_earth.gd -- --seeds=30
 
 const Kind = NelvarEarthData.Kind
@@ -39,7 +39,6 @@ func _run() -> void:
 			_check_field(data)
 	print("Earth: %d seeds in %.2f s · %.1f%% of open ground reachable" % [count,
 		float(Time.get_ticks_msec() - started) / 1000.0, reached / mini(count, 8) * 100.0])
-	_check_settings()
 	await _check_scene()
 	if _failures.is_empty():
 		print("PASS: %d checks; valley layout, reachability, art, walls, water and the scene behave" % _checks)
@@ -225,31 +224,6 @@ func _check_field(data: NelvarEarthData) -> void:
 		var middle := trail.points[trail.points.size() / 2]
 		_check(at.call(middle, 1) < 20, "The ground map misses a trail")
 	_check(at.call(data.spawn_position + Vector2(0.0, 200.0), 1) > 0, "The ground map is all trail")
-
-
-# --- The start setting -------------------------------------------------------------
-
-## The two start options exclude each other. The player's saved settings are put
-## back exactly as they were.
-func _check_settings() -> void:
-	var settings: Node = root.get_node("GameSettings")
-	var path: String = settings.PATH
-	var saved := FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else PackedByteArray()
-	var was_void: bool = settings.start_in_void
-	var was_earth: bool = settings.start_on_earth
-	settings.set_start_in_void(true)
-	settings.set_start_on_earth(true)
-	_check(settings.start_on_earth and not settings.start_in_void, "Earth did not replace the Void at start")
-	settings.set_start_in_void(true)
-	_check(settings.start_in_void and not settings.start_on_earth, "The Void did not replace the earth at start")
-	settings.start_in_void = was_void
-	settings.start_on_earth = was_earth
-	if saved.is_empty():
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-	else:
-		var file := FileAccess.open(path, FileAccess.WRITE)
-		file.store_buffer(saved)
-		file.close()
 
 
 # --- The scene ---------------------------------------------------------------------

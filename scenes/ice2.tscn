@@ -15,14 +15,13 @@
 [ext_resource type="Shader" path="res://scripts/cave/cave_abyss.gdshader" id="15"]
 [ext_resource type="Shader" path="res://scripts/cave/cave_shade.gdshader" id="16"]
 [ext_resource type="Shader" path="res://scripts/cave/cave_shine.gdshader" id="17"]
-[ext_resource type="Resource" path="res://ui/main_menu/elements/ice.tres" id="reality"]
 [ext_resource type="PackedScene" path="res://ui/location_ui/location_ui.tscn" id="location_ui"]
+[ext_resource type="Resource" path="res://locations/ice_cave.tres" id="definition"]
 
 [node name="Ice2" type="Node2D"]
 script = ExtResource("1")
 config = ExtResource("2")
-reality = ExtResource("reality")
-title = "ЛЁД 2 · ПЕЩЕРА"
+definition = ExtResource("definition")
 controls = "WASD / стрелки — ходьба   ·   Ctrl — бег (узкие провалы, подтаявший лёд)   ·   Shift — полёт (не сквозь стены)
 ЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)   ·   E — мутация
 Колесо — масштаб   ·   F3 — коллизии   ·   F12 — скрыть панель   ·   Esc — пауза"

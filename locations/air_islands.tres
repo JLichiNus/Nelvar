@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="NelvarLocationDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://core/location_def.gd" id="1"]
+[ext_resource type="Resource" path="res://ui/main_menu/elements/air.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"air_islands"
+reality = ExtResource("2")
+title = "ВОЗДУХ · ОСТРОВА"
+scene = "res://scenes/main.tscn"
+random_start = true
+dev_label = "Запускать игру в Воздухе"
+dev_hint = "«Играть» откроет острова над облаками вместо случайной карты"

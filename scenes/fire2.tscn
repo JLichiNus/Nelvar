@@ -16,14 +16,13 @@
 [ext_resource type="Shader" path="res://scripts/crater/crater_below.gdshader" id="below"]
 [ext_resource type="Script" path="res://scripts/crater/geysers.gd" id="geysers"]
 [ext_resource type="Script" path="res://scripts/crater/lava_splashes.gd" id="splashes"]
-[ext_resource type="Resource" path="res://ui/main_menu/elements/fire.tres" id="reality"]
 [ext_resource type="PackedScene" path="res://ui/location_ui/location_ui.tscn" id="location_ui"]
+[ext_resource type="Resource" path="res://locations/fire_volcano.tres" id="definition"]
 
 [node name="Fire2" type="Node2D"]
 script = ExtResource("1")
 config = ExtResource("2")
-reality = ExtResource("reality")
-title = "ОГОНЬ 2 · ВУЛКАН"
+definition = ExtResource("definition")
 controls = "WASD / стрелки — ходьба   ·   Ctrl — бег   ·   Shift — полёт (над лавой и обрывом)
 ЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)   ·   E — мутация
 Колесо — масштаб   ·   F3 — коллизии   ·   F12 — скрыть панель   ·   Esc — пауза"

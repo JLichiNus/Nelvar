@@ -3,8 +3,7 @@ extends SceneTree
 ## out most of the lake and stones between them, never touching the shore or each other,
 ## drifting slowly and making a way on foot from the shore to the middle, some stones
 ## sinking; geysers and things on the rock), the ground and light maps, the floes' masks,
-## the start setting, and the real
-## scene: a step into the lava is a fall that throws the player back hurt (onto the floe
+## and the real scene: a step into the lava is a fall that throws the player back hurt (onto the floe
 ## they last stood on safely, if it never sinks), the summit's edge holds them, a floe holds and carries
 ## them unharmed, a sinking floe takes them down, geysers throw them, splashes burn,
 ## hoppers die in the lava, off the edge and on a sinking floe.
@@ -50,7 +49,6 @@ func _run() -> void:
 			_check_art(data)
 	print("Volcano: %d seeds in %.2f s · %.1f floes each" % [count,
 		float(Time.get_ticks_msec() - started) / 1000.0, float(floes) / count])
-	_check_settings()
 	await _check_scene()
 	if _failures.is_empty():
 		print("PASS: %d checks; volcano layout, floes, maps, art, falls, rides, geysers, splashes and the scene behave" % _checks)
@@ -300,45 +298,6 @@ func _check_art(data: NelvarCraterData) -> void:
 	for path in ["res://scripts/crater/crater_ground.gdshader", "res://scripts/crater/crater_below.gdshader",
 			"res://scripts/crater/crater_island.gdshader", "res://scripts/crater/lava_splashes.gdshader"]:
 		_check(load(path) is Shader, path + " does not load")
-
-
-# --- The start setting -------------------------------------------------------------
-
-## The start options exclude each other. The saved settings are put back as they were.
-func _check_settings() -> void:
-	var settings: Node = root.get_node("GameSettings")
-	var path: String = settings.PATH
-	var saved := FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) else PackedByteArray()
-	var was := [settings.start_in_void, settings.start_on_earth, settings.start_in_fire, settings.start_on_ice,
-		settings.start_in_fire2, settings.start_on_ice2, settings.start_on_earth2]
-	var setters := ["set_start_in_void", "set_start_on_earth", "set_start_in_fire", "set_start_on_ice",
-		"set_start_in_fire2", "set_start_on_ice2", "set_start_on_earth2"]
-	var flags := ["start_in_void", "start_on_earth", "start_in_fire", "start_on_ice", "start_in_fire2", "start_on_ice2",
-		"start_on_earth2"]
-	for i in setters.size():
-		settings.call(setters[i], true)
-		for j in flags.size():
-			_check(bool(settings.get(flags[j])) == (i == j), "Start options %s and %s do not exclude each other" % [flags[i], flags[j]])
-	settings.set_start_in_fire2(true)
-	settings.set_start_in_fire2(false)
-	for flag in flags:
-		_check(not settings.get(flag), "Turning Fire 2 off left %s on" % flag)
-	for i in flags.size():
-		settings.set(flags[i], was[i])
-	if saved.is_empty():
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
-	else:
-		var file := FileAccess.open(path, FileAccess.WRITE)
-		file.store_buffer(saved)
-		file.close()
-	var menu := FileAccess.get_file_as_string("res://ui/main_menu/main_menu.gd")
-	_check(menu.contains("res://scenes/fire2.tscn") and menu.contains("GameSettings.start_in_fire2"),
-		"«Играть» does not open the volcano")
-	var panel: Node = load("res://ui/main_menu/settings_panel.tscn").instantiate()
-	var check: Node = panel.get_node_or_null("Rows/Body/PageColumn/Scroll/Pages/DevPage/StartInFire2")
-	_check(check is CheckButton and (check as CheckButton).text == "Запускать игру в Огне",
-		"The developer menu has no Fire 2 start")
-	panel.free()
 
 
 # --- The scene ---------------------------------------------------------------------

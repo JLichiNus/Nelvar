@@ -7,16 +7,15 @@
 [ext_resource type="Script" path="res://scripts/void/void_arena.gd" id="5"]
 [ext_resource type="Script" path="res://scripts/fx/wind_particles.gd" id="6"]
 [ext_resource type="Shader" path="res://scripts/void/void_vignette.gdshader" id="7"]
-[ext_resource type="Resource" path="res://ui/main_menu/elements/void.tres" id="reality_void"]
 [ext_resource type="PackedScene" path="res://ui/location_ui/location_ui.tscn" id="location_ui"]
+[ext_resource type="Resource" path="res://locations/void.tres" id="definition"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_vignette"]
 shader = ExtResource("7")
 
 [node name="Void" type="Node2D"]
 script = ExtResource("1")
-reality = ExtResource("reality_void")
-title = "ПУСТОТА"
+definition = ExtResource("definition")
 controls = "WASD / стрелки — ходьба   ·   Ctrl — разбег через широкую щель   ·   Shift — перелёт через пропасть
 ЛКМ — снаряд   ·   ПКМ — волна   ·   Колесо — масштаб   ·   F12 — скрыть панель   ·   Esc — пауза"
 

@@ -13,14 +13,13 @@
 [ext_resource type="Script" path="res://scripts/fire/smoke.gd" id="13"]
 [ext_resource type="Shader" path="res://scripts/fire/fire_glow.gdshader" id="14"]
 [ext_resource type="Script" path="res://scripts/fire/heat_haze.gd" id="15"]
-[ext_resource type="Resource" path="res://ui/main_menu/elements/fire.tres" id="reality"]
 [ext_resource type="PackedScene" path="res://ui/location_ui/location_ui.tscn" id="location_ui"]
+[ext_resource type="Resource" path="res://locations/fire_forge.tres" id="definition"]
 
 [node name="Fire" type="Node2D"]
 script = ExtResource("1")
 config = ExtResource("2")
-reality = ExtResource("reality")
-title = "ОГОНЬ · КУЗНЯ"
+definition = ExtResource("definition")
 controls = "WASD / стрелки — ходьба   ·   Ctrl — бег   ·   Shift — полёт (над лавой)
 ЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)   ·   E — мутация
 Колесо — масштаб   ·   F3 — коллизии   ·   F12 — скрыть панель   ·   Esc — пауза"

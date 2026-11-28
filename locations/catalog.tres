@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="NelvarLocationCatalog" load_steps=11 format=3]
+
+[ext_resource type="Script" path="res://core/location_catalog.gd" id="1"]
+[ext_resource type="Script" path="res://core/location_def.gd" id="def"]
+[ext_resource type="Resource" path="res://locations/void.tres" id="void"]
+[ext_resource type="Resource" path="res://locations/air_islands.tres" id="air_islands"]
+[ext_resource type="Resource" path="res://locations/fire_volcano.tres" id="fire_volcano"]
+[ext_resource type="Resource" path="res://locations/ice_cave.tres" id="ice_cave"]
+[ext_resource type="Resource" path="res://locations/earth_forest.tres" id="earth_forest"]
+[ext_resource type="Resource" path="res://locations/fire_forge.tres" id="fire_forge"]
+[ext_resource type="Resource" path="res://locations/ice_valley.tres" id="ice_valley"]
+[ext_resource type="Resource" path="res://locations/earth_valley.tres" id="earth_valley"]
+
+[resource]
+script = ExtResource("1")
+locations = Array[ExtResource("def")]([ExtResource("void"), ExtResource("air_islands"), ExtResource("fire_volcano"), ExtResource("ice_cave"), ExtResource("earth_forest"), ExtResource("fire_forge"), ExtResource("ice_valley"), ExtResource("earth_valley")])

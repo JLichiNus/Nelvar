@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="NelvarLocationDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://core/location_def.gd" id="1"]
+[ext_resource type="Resource" path="res://ui/main_menu/elements/void.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"void"
+reality = ExtResource("2")
+title = "ПУСТОТА"
+scene = "res://scenes/void.tscn"
+random_start = false
+dev_label = "Запускать игру в Пустоте"
+dev_hint = "«Играть» откроет Пустоту вместо случайной карты"

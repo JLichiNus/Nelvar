@@ -11,14 +11,13 @@
 [ext_resource type="Script" path="res://scripts/fx/wind_particles.gd" id="9"]
 [ext_resource type="Script" path="res://scripts/ice/snow_marks.gd" id="10"]
 [ext_resource type="Script" path="res://scripts/ice/blizzard.gd" id="13"]
-[ext_resource type="Resource" path="res://ui/main_menu/elements/ice.tres" id="reality"]
 [ext_resource type="PackedScene" path="res://ui/location_ui/location_ui.tscn" id="location_ui"]
+[ext_resource type="Resource" path="res://locations/ice_valley.tres" id="definition"]
 
 [node name="Ice" type="Node2D"]
 script = ExtResource("1")
 config = ExtResource("2")
-reality = ExtResource("reality")
-title = "ЛЁД · ДОЛИНА"
+definition = ExtResource("definition")
 controls = "WASD / стрелки — ходьба   ·   Ctrl — бег (через узкие расщелины)   ·   Shift — полёт
 ЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)   ·   E — мутация
 Колесо — масштаб   ·   F3 — коллизии   ·   F12 — скрыть панель   ·   Esc — пауза"

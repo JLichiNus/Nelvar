@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="NelvarLocationDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://core/location_def.gd" id="1"]
+[ext_resource type="Resource" path="res://ui/main_menu/elements/ice.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"ice_cave"
+reality = ExtResource("2")
+title = "ЛЁД 2 · ПЕЩЕРА"
+scene = "res://scenes/ice2.tscn"
+random_start = true
+dev_label = "Запускать игру на Льду"
+dev_hint = "«Играть» откроет ледяную пещеру (Лёд 2) вместо случайной карты"

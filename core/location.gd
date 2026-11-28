@@ -12,15 +12,21 @@ extends Node2D
 
 const ZOOM_STEP := 1.15
 
-## The reality this map belongs to: colours, cursor, pause menu, music (its id).
-@export var reality: NelvarMenuElement
-## The info panel's title, before the seed: "ЛЁД 2 · ПЕЩЕРА".
-@export var title := ""
+## This map in the catalog (locations/): its reality and title come from there.
+@export var definition: NelvarLocationDef
 ## The info panel's controls line: what the keys do on this map.
 @export_multiline var controls := ""
 ## Seconds a message (say()) stays up.
 @export var message_hold := 3.0
 
+## The reality this map belongs to: colours, cursor, pause menu, music (its id).
+var reality: NelvarMenuElement:
+	get:
+		return definition.reality if definition != null else null
+## The info panel's title, before the seed: "ЛЁД 2 · ПЕЩЕРА".
+var title: String:
+	get:
+		return definition.title if definition != null else ""
 ## This visit's seed (_pick_seed()), set before _build().
 var world_seed := 0
 ## F3 view on.

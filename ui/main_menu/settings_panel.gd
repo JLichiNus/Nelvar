@@ -35,14 +35,6 @@ const PREVIOUS_KEY := KEY_Q
 @onready var info_panel_check: CheckButton = %InfoPanel
 @onready var vignette_level: NelvarSlider = %VignetteLevel
 @onready var vignette_direction_check: CheckButton = %VignetteDirection
-@onready var start_in_void_check: CheckButton = %StartInVoid
-@onready var start_in_air_check: CheckButton = %StartInAir
-@onready var start_on_earth_check: CheckButton = %StartOnEarth
-@onready var start_on_earth2_check: CheckButton = %StartOnEarth2
-@onready var start_in_fire_check: CheckButton = %StartInFire
-@onready var start_on_ice_check: CheckButton = %StartOnIce
-@onready var start_in_fire2_check: CheckButton = %StartInFire2
-@onready var start_on_ice2_check: CheckButton = %StartOnIce2
 @onready var categories: VBoxContainer = %Categories
 @onready var pages: VBoxContainer = %Pages
 @onready var scroll: ScrollContainer = %Scroll
@@ -70,24 +62,7 @@ func _ready() -> void:
 	for child in pages.get_children():
 		_pages.append(child)
 	if OS.is_debug_build():
-		start_in_void_check.set_pressed_no_signal(GameSettings.start_in_void)
-		start_in_void_check.toggled.connect(GameSettings.set_start_in_void)
-		GameSettings.start_in_void_changed.connect(start_in_void_check.set_pressed_no_signal)
-		# The start options exclude each other (GameSettings turns the others off).
-		_bind_start(start_in_air_check, GameSettings.start_in_air,
-			GameSettings.set_start_in_air, GameSettings.start_in_air_changed)
-		_bind_start(start_on_earth_check, GameSettings.start_on_earth,
-			GameSettings.set_start_on_earth, GameSettings.start_on_earth_changed)
-		_bind_start(start_on_earth2_check, GameSettings.start_on_earth2,
-			GameSettings.set_start_on_earth2, GameSettings.start_on_earth2_changed)
-		_bind_start(start_in_fire_check, GameSettings.start_in_fire,
-			GameSettings.set_start_in_fire, GameSettings.start_in_fire_changed)
-		_bind_start(start_on_ice_check, GameSettings.start_on_ice,
-			GameSettings.set_start_on_ice, GameSettings.start_on_ice_changed)
-		_bind_start(start_in_fire2_check, GameSettings.start_in_fire2,
-			GameSettings.set_start_in_fire2, GameSettings.start_in_fire2_changed)
-		_bind_start(start_on_ice2_check, GameSettings.start_on_ice2,
-			GameSettings.set_start_on_ice2, GameSettings.start_on_ice2_changed)
+		_add_dev_starts()
 	else:
 		# Public builds: no developer category at all.
 		_tabs.pop_back()
@@ -150,10 +125,38 @@ func _ready() -> void:
 
 
 ## Ties a developer start option's check to its GameSettings value both ways.
-func _bind_start(check: CheckButton, enabled: bool, setter: Callable, changed: Signal) -> void:
-	check.set_pressed_no_signal(enabled)
-	check.toggled.connect(setter)
-	changed.connect(check.set_pressed_no_signal)
+## The developer start options, one per map of the catalog: «Играть» opens the one that
+## is on. They exclude each other; with none on «Играть» picks a random map.
+func _add_dev_starts() -> void:
+	var page := %DevPage
+	for location in NelvarLocations.catalog().locations:
+		var check := CheckButton.new()
+		check.name = _dev_start_name(location.id)
+		check.text = location.dev_label
+		check.add_theme_font_size_override(&"font_size", 22)
+		check.set_meta(HINT_META, location.dev_hint)
+		check.set_pressed_no_signal(GameSettings.dev_start == location.id)
+		check.toggled.connect(_on_dev_start_toggled.bind(location.id))
+		page.add_child(check)
+	GameSettings.dev_start_changed.connect(_on_dev_start_changed)
+
+
+func _on_dev_start_toggled(on: bool, id: StringName) -> void:
+	if on:
+		GameSettings.set_dev_start(id)
+	elif GameSettings.dev_start == id:
+		GameSettings.set_dev_start(StringName())
+
+
+func _on_dev_start_changed(id: StringName) -> void:
+	for location in NelvarLocations.catalog().locations:
+		var check := %DevPage.get_node_or_null(NodePath(_dev_start_name(location.id))) as CheckButton
+		if check != null:
+			check.set_pressed_no_signal(location.id == id)
+
+
+static func _dev_start_name(id: StringName) -> String:
+	return "Start_%s" % id
 
 
 func _unhandled_input(event: InputEvent) -> void:

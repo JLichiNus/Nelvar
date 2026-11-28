@@ -20,11 +20,12 @@ godot --path . -- --seed=20261120
 Here `godot` means the path to your Godot 4.7.2 executable.
 
 `scenes/main.tscn` is the air location (resources and some classes still carry
-`earth_*` names). With no developer start option on, «Играть» opens one of Воздух
-(`main.tscn`), Огонь 2, Лёд 2 and Земля 2 at random. Settings → «Разработчик» lists the
-start options in this order: «в Пустоте» (`scenes/void.tscn`), «в Воздухе», «в Огне»,
-«на Льду», «на Земле» (the second versions: volcano, ice cave, giant forest), then the
-first versions «в Огне alpha», «на Льду alpha», «на Земле alpha». `test_world.tscn` is a flat
+`earth_*` names). With no developer start option on, «Играть» opens one of the maps
+marked `random_start` in the catalog (Воздух, Огонь 2, Лёд 2 and Земля 2) at random.
+Settings → «Разработчик» lists one start option per map of the catalog, in its order:
+«в Пустоте», «в Воздухе», «в Огне», «на Льду», «на Земле» (the second versions: volcano,
+ice cave, giant forest), then the first versions «в Огне alpha», «на Льду alpha», «на
+Земле alpha». `test_world.tscn` is a flat
 arena for tuning combat without the generator (F6).
 
 Debug keys: **F3** shows occupied chunks, collision boundaries, trunk circles,
@@ -103,13 +104,22 @@ mutations, the pause menu and the cursor. The location binds it to its player an
 its reality in `_enter_tree`, before any widget is ready, so a new map needs no
 HUD of its own.
 
-The scene's root sets `reality` (one of `ui/main_menu/elements/*.tres`: its accent
-and font for the pause menu, cursor, HUD colours, and its id picks the music
-playlist), `title` (the info panel's title before the seed), `controls` (the info
+Every map has an entry in the catalog: a `NelvarLocationDef` in `locations/`
+(`core/location_def.gd`) with its id, reality (one of `ui/main_menu/elements/*.tres`:
+accent and font for the pause menu, cursor, HUD colours; its id picks the music
+playlist), title (the info panel's, before the seed), scene, whether «Играть» may
+start there at random, and its developer start option. `locations/catalog.tres`
+(`NelvarLocationCatalog`, reached through `NelvarLocations.catalog()`) lists them all; the main menu asks it where «Играть» opens
+(`start_location()`), the developer menu builds its start options from it, and
+`GameSettings.dev_start` keeps the chosen map's id (settings saved with the old
+one-flag-per-map keys carry over). A new map: its scene, its `.tres` in
+`locations/`, a line in the catalog.
+
+The scene's root points to its entry (`definition`) and sets `controls` (the info
 panel's keys line) and `message_hold`. The base class picks the seed (see
 «Running»), shows a generation failure (`fail()`), says messages (`say()`), zooms
 on the wheel and calls `_set_debug(shown)` on F3. `tests/test_locations.gd`
-checks all of this on every map.
+checks the catalog, the developer start and all of this on every map.
 
 ## Enemies
 
@@ -824,14 +834,14 @@ godot --headless --path . --script tests/test_runner.gd
 - **Earth** — the valley layout (ponds, dry trails, passages between solid
   things, tree species, a closed ring of peaks), that nearly all open ground is
   reachable from the spawn, repeatable art on the world grid, the ground map,
-  the start setting, and in the real scene: the mountain foot and ponds stop the
+  and in the real scene: the mountain foot and ponds stop the
   player, projectiles fly over water, trunks block and tall grass does not,
   statues open their eye, plants sway, every peak is painted and enemies appear
   on open ground.
 - **Fire** — the forge's layout (lava, crossings, roads, islands, fissures,
   passages, a closed ring of ridges), that open ground is reachable across the
   crossings, repeatable art on the world grid (volcanoes with lava running down
-  them), the ground and light maps, the start setting, and in the real scene:
+  them), the ground and light maps, and in the real scene:
   lava stops the walking player, the flight carries them over a lake, coming
   down in it burns and throws them back, crossings let them over a stream, a
   hopper blown into the lava burns, a fissure erupts and hurts, a salamander
@@ -840,7 +850,7 @@ godot --headless --path . --script tests/test_runner.gd
   the ice and bridged, trails off the ice and the cracks, passages, frozen
   creatures under the ice, a closed ring of peaks), that open ground is
   reachable over the bridges, repeatable art on the world grid, the floor map,
-  the start setting, and in the real scene: the player coasts much further on
+  and in the real scene: the player coasts much further on
   the ice, a wide crevasse drops a walker and throws them back hurt, the flight
   crosses it and a run crosses a narrow one, thin ice breaks under a standing
   player and not under a running one, a hole freezes over, hoppers blown into a
@@ -851,7 +861,7 @@ godot --headless --path . --script tests/test_runner.gd
   the way round), that floes never run aground or touch each other, drift
   slowly, make a way on foot from the shore to every floe and to the vent's
   moat, and about the asked share of them sink, determinism, the light and haze
-  maps, the floes' masks, the five start options, and in the real scene: a floe
+  maps, the floes' masks, and in the real scene: a floe
   holds the player unharmed and carries them exactly as far as it drifts, a fall
   from it comes back onto it, a step into the lava and off the edge are falls
   that throw the player back hurt while a moment over the lava is not, a sinking
@@ -867,7 +877,7 @@ godot --headless --path . --script tests/test_runner.gd
   melting ice or water and through ways wider than a hopper, the wall over every
   south face, that the collision, the queries and the shader's field see one
   boundary, the floor and light maps against the queries, repeatable art for
-  every kind, creature and crystal, the six start options, and in the real
+  every kind, creature and crystal, and in the real
   scene: the walls hold even in flight, melting ice gives under a walker and not
   under a runner and at once under a stander, open water and a chasm drop the
   player and bring them back hurt, a run crosses a narrow place of a chasm, thin
@@ -883,7 +893,9 @@ godot --headless --path . --script tests/test_runner.gd
   their element; stats really change the player and the HUD; the choice opens
   on E, pauses and picks with 1/2/3; the next player of a run goes on with its
   health, level and mutations, a waiting choice included.
-- **Locations** — every map builds on `NelvarLocation` and gets the shared
+- **Locations** — the catalog knows every scene and «Играть» opens the right
+  map; the developer start is one setting, old flags carry over, one option per
+  map in the developer menu; every map builds on `NelvarLocation` and gets the shared
   interface bound to its own player: the HUD, the mutations, the pause menu and
   cursor of its reality, the panel's title with the seed, messages, F3 and zoom.
 - **Whistler** — breath, fans and trills; bubbles against walking and flying

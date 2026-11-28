@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="NelvarLocationDef" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://core/location_def.gd" id="1"]
+[ext_resource type="Resource" path="res://ui/main_menu/elements/earth.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+id = &"earth_forest"
+reality = ExtResource("2")
+title = "ЗЕМЛЯ 2 · ИСПОЛИНСКИЙ ЛЕС"
+scene = "res://scenes/earth2.tscn"
+random_start = true
+dev_label = "Запускать игру на Земле"
+dev_hint = "«Играть» откроет исполинский лес (Земля 2) вместо случайной карты"

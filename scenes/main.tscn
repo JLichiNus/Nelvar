@@ -11,8 +11,8 @@
 [ext_resource type="PackedScene" path="res://enemies/whistler/whistler.tscn" id="whistler"]
 [ext_resource type="Script" path="res://enemies/enemy_kind.gd" id="enemy_kind"]
 [ext_resource type="PackedScene" path="res://enemies/runner/runner.tscn" id="runner"]
-[ext_resource type="Resource" path="res://ui/main_menu/elements/air.tres" id="reality_air"]
 [ext_resource type="PackedScene" path="res://ui/location_ui/location_ui.tscn" id="location_ui"]
+[ext_resource type="Resource" path="res://locations/air_islands.tres" id="definition"]
 
 [sub_resource type="Resource" id="Resource_kind_hopper"]
 script = ExtResource("enemy_kind")
@@ -34,8 +34,7 @@ max_alive = 3
 [node name="Nelvar" type="Node2D"]
 script = ExtResource("1")
 world_config = ExtResource("4")
-reality = ExtResource("reality_air")
-title = "ВОЗДУХ · ОСТРОВА"
+definition = ExtResource("definition")
 controls = "WASD / стрелки — ходьба   ·   Ctrl — бег   ·   Shift — полёт\nЛКМ — снаряд   ·   ПКМ — волна   ·   R — сжатие (наведи на врага)   ·   E — мутация\nКолесо — масштаб   ·   F3 — чанки и коллизии   ·   F12 — скрыть панель   ·   Esc — пауза"
 
 [node name="CloudSea" type="CanvasLayer" parent="."]
