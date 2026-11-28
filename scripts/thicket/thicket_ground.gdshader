@@ -2,8 +2,8 @@ shader_type canvas_item;
 render_mode unshaded;
 
 // The floor of the giant forest (Земля 2) under the player the size of a beetle: forest
-// litter in broad patches with scraps of leaves (oak, birch, pine needles as long as a
-// stick under each kind of giant), grains of soil the size of pebbles, cushions of moss and
+// litter in broad patches with pine needles as long as a stick (thick under a pine),
+// grains of soil the size of pebbles, cushions of moss and
 // white threads of mycelium on the damp ground, now and then the glistening trail of a
 // snail; brighter mossy ground on the clearings; the ant trails worn bare; churned soil
 // and rootlets along the roots, their shade, the giants' long shadows down and to the left;
@@ -66,8 +66,6 @@ const vec3 CLAY[3] = vec3[3](vec3(92.0, 66.0, 44.0) / 255.0, vec3(124.0, 92.0, 6
 const vec3 RESIN[4] = vec3[4](vec3(122.0, 62.0, 10.0) / 255.0, vec3(178.0, 102.0, 20.0) / 255.0,
 	vec3(222.0, 152.0, 42.0) / 255.0, vec3(250.0, 208.0, 112.0) / 255.0);
 const vec3 LOOSE[3] = vec3[3](vec3(34.0, 24.0, 18.0) / 255.0, vec3(52.0, 38.0, 28.0) / 255.0, vec3(74.0, 56.0, 40.0) / 255.0);
-const vec3 OAK_SCRAP[3] = vec3[3](vec3(122.0, 76.0, 34.0) / 255.0, vec3(162.0, 108.0, 46.0) / 255.0, vec3(198.0, 148.0, 68.0) / 255.0);
-const vec3 BIRCH_SCRAP[3] = vec3[3](vec3(170.0, 140.0, 40.0) / 255.0, vec3(206.0, 176.0, 60.0) / 255.0, vec3(232.0, 208.0, 96.0) / 255.0);
 const vec3 NEEDLE[3] = vec3[3](vec3(112.0, 56.0, 30.0) / 255.0, vec3(150.0, 82.0, 42.0) / 255.0, vec3(182.0, 112.0, 58.0) / 255.0);
 const vec3 GRAIN[3] = vec3[3](vec3(70.0, 62.0, 52.0) / 255.0, vec3(112.0, 100.0, 86.0) / 255.0, vec3(150.0, 138.0, 118.0) / 255.0);
 const vec3 BARK[4] = vec3[4](vec3(40.0, 32.0, 28.0) / 255.0, vec3(62.0, 48.0, 40.0) / 255.0,
@@ -173,9 +171,8 @@ float pond_depth(vec4 field) {
 	return floor(field.r * 255.0 + 0.5) - 128.0;
 }
 
-// A scrap lying in a cell of `cell` pixels: a short line (needle) or a small blob (leaf),
-// alpha 0 where there is none. `kind` 0 oak, 1 pine, 2 birch.
-vec4 scrap(vec2 pixel, vec2 np, float cell, float density, int kind) {
+// A pine needle lying in a cell of `cell` pixels: a short line, alpha 0 where there is none.
+vec4 needle(vec2 pixel, vec2 np, float cell, float density) {
 	vec2 c = floor(np / cell);
 	vec3 h = hash32(c + 7.3);
 	if (h.x > density) {
@@ -185,18 +182,10 @@ vec4 scrap(vec2 pixel, vec2 np, float cell, float density, int kind) {
 	vec2 d = np - center;
 	float angle = hash12(c + 3.1) * 6.2832;
 	vec2 dir = vec2(cos(angle), sin(angle));
-	if (kind == 1) {
-		float along = dot(d, dir);
-		float across = abs(dot(d, vec2(-dir.y, dir.x)));
-		if (abs(along) < 3.5 + h.y * 2.0 && across < 0.6) {
-			return vec4(ramp3(NEEDLE, 0.3 + along * 0.08 + h.z * 0.4, pixel), 1.0);
-		}
-		return vec4(0.0);
-	}
-	vec2 q = vec2(dot(d, dir), dot(d, vec2(-dir.y, dir.x))) / vec2(2.2 + h.y * 1.6, 1.2 + h.z);
-	if (dot(q, q) < 1.0) {
-		float level = 0.35 + q.y * 0.3 + h.y * 0.4;
-		return vec4(kind == 2 ? ramp3(BIRCH_SCRAP, level, pixel) : ramp3(OAK_SCRAP, level, pixel), 1.0);
+	float along = dot(d, dir);
+	float across = abs(dot(d, vec2(-dir.y, dir.x)));
+	if (abs(along) < 3.5 + h.y * 2.0 && across < 0.6) {
+		return vec4(ramp3(NEEDLE, 0.3 + along * 0.08 + h.z * 0.4, pixel), 1.0);
 	}
 	return vec4(0.0);
 }
@@ -326,11 +315,10 @@ void fragment() {
 				color = SUNNY[4];
 			}
 		} else {
-			// Scraps of the litter: the kind of the giant above; pine needles anywhere a little.
-			int scraps = kind == 1 ? 1 : (kind == 2 ? 2 : 0);
-			vec4 bit = scrap(pixel, np, 9.0, 0.32 * (1.0 - sun), scraps);
+			// Pine needles in the litter: thick under a pine, a few anywhere.
+			vec4 bit = kind == 1 ? needle(pixel, np, 9.0, 0.32 * (1.0 - sun)) : vec4(0.0);
 			if (bit.a == 0.0) {
-				bit = scrap(pixel, np + vec2(4.5, 2.5), 13.0, 0.12, scraps == 0 ? 1 : 0);
+				bit = needle(pixel, np + vec2(4.5, 2.5), 13.0, 0.12);
 			}
 			if (bit.a > 0.0 && moss < 0.7) {
 				color = bit.rgb;
