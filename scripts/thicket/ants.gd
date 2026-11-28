@@ -1,16 +1,23 @@
 class_name NelvarAnts
 extends Node2D
 ## Columns of ants along the ant trails of the giant forest: 8–20 ants each, almost as big
-## as the player, many carrying a scrap of leaf. A column steps aside round the player and
-## never touches anyone. A few columns keep near the player: one left far behind starts
-## again on a trail out of sight ahead. Drawn on the floor in whole art pixels, legs moving.
+## as the player, many carrying a scrap of leaf. The columns do not give way: an ant the
+## player walks over (not flies over) is squashed flat and leaves a smear that fades, the
+## column walking on with a gap. A few columns keep near the player: one left far behind
+## starts again, whole, on a trail out of sight ahead. Drawn on the floor in whole art
+## pixels, legs moving.
 
 const STEP := NelvarEarthData.PIXEL
 const COLUMNS := 3
 const ANTS := Vector2i(8, 20)
 const SPACING := Vector2(34.0, 46.0)
 const SPEED := Vector2(38.0, 58.0)
-const AVOID := 70.0
+## How close the player's middle comes to an ant to squash it (world units).
+const SQUASH := 16.0
+## How long a smear lies on the floor, fading over its last third (seconds).
+const SPLAT_LIFE := 14.0
+const SPLATS := 48
+const SMEAR := Color8(58, 30, 22)
 const FAR := 1500.0
 const BODY := Color8(40, 22, 18)
 const SHINE := Color8(96, 58, 42)
@@ -27,13 +34,21 @@ class Column:
 	var spacing := 40.0
 	var speed := 48.0
 	var loads := PackedInt32Array()
-	## Each ant's sideways step (world units), eased.
-	var aside := PackedFloat32Array()
+	## 1 while the ant is alive, 0 once squashed.
+	var alive := PackedByteArray()
+
+
+class Splat:
+	var position := Vector2.ZERO
+	var along := Vector2.RIGHT
+	var load := -1
+	var age := 0.0
 
 
 var data: NelvarThicketData
 var player: Node2D
 var columns: Array[Column] = []
+var splats: Array[Splat] = []
 ## Cumulative lengths of each trail's polyline.
 var _lengths: Array[PackedFloat32Array] = []
 var _rng := RandomNumberGenerator.new()
@@ -85,10 +100,14 @@ func _restart(column: Column, near: float, far: float) -> void:
 	column.spacing = _rng.randf_range(SPACING.x, SPACING.y)
 	column.speed = _rng.randf_range(SPEED.x, SPEED.y)
 	column.loads.resize(column.count)
-	column.aside.resize(column.count)
 	for i in column.count:
 		column.loads[i] = _rng.randi_range(0, LOADS.size()) - 1
-		column.aside[i] = 0.0
+	_revive(column)
+
+
+func _revive(column: Column) -> void:
+	column.alive.resize(column.count)
+	column.alive.fill(1)
 
 
 ## The point `at` along trail `t` (clamped to its ends).
@@ -108,19 +127,42 @@ func _point(t: int, at: float) -> Vector2:
 	return points[lo].lerp(points[hi], (at - lengths[lo]) / span)
 
 
-## Positions of a column's ants now (world).
+## Where along its trail ant `i` of a column is.
+func _along(column: Column, i: int) -> float:
+	return column.head - column.direction * i * column.spacing
+
+
+## Whether ant `i` is on the trail now (and not squashed).
+func is_walking(column: Column, i: int) -> bool:
+	var at := _along(column, i)
+	return column.alive[i] == 1 and at >= 0.0 and at <= _lengths[column.trail][_lengths[column.trail].size() - 1]
+
+
+## Where ant `i` of a column is now (world), wobbling a little off the trail.
+func ant_position(column: Column, i: int) -> Vector2:
+	var at := _along(column, i)
+	var p := _point(column.trail, at)
+	var ahead := _point(column.trail, at + column.direction * 6.0)
+	var side := p.direction_to(ahead).orthogonal()
+	return p + side * sin(_time * 3.0 + i * 1.7) * 3.0
+
+
+## Positions of a column's walking ants now (world).
 func ant_positions(column: Column) -> PackedVector2Array:
 	var result := PackedVector2Array()
-	var total := _lengths[column.trail][_lengths[column.trail].size() - 1]
 	for i in column.count:
-		var at := column.head - column.direction * i * column.spacing
-		if at < 0.0 or at > total:
-			continue
-		var p := _point(column.trail, at)
-		var ahead := _point(column.trail, at + column.direction * 6.0)
-		var side := p.direction_to(ahead).orthogonal()
-		result.append(p + side * (column.aside[i] + sin(_time * 3.0 + i * 1.7) * 3.0))
+		if is_walking(column, i):
+			result.append(ant_position(column, i))
 	return result
+
+
+## The way ant `i` faces, snapped to one of the four art directions.
+func _facing(column: Column, i: int, spot: Vector2) -> Vector2:
+	var ahead := _point(column.trail, _along(column, i) + column.direction * 8.0)
+	var direction := spot.direction_to(ahead)
+	if direction == Vector2.ZERO:
+		return Vector2.RIGHT
+	return Vector2(signf(direction.x), 0.0) if absf(direction.x) > absf(direction.y) else Vector2(0.0, signf(direction.y))
 
 
 func _process(delta: float) -> void:
@@ -128,6 +170,7 @@ func _process(delta: float) -> void:
 		return
 	_time += delta
 	var center := player.global_position
+	var grounded: bool = not (player.has_method(&"is_airborne") and player.is_airborne())
 	for column in columns:
 		var total := _lengths[column.trail][_lengths[column.trail].size() - 1]
 		column.head += column.direction * column.speed * delta
@@ -136,43 +179,85 @@ func _process(delta: float) -> void:
 			# Gone off the trail's end: turn round with a fresh line.
 			column.direction = -column.direction
 			column.head = clampf(column.head, 0.0, total)
-		# Step aside round the player.
-		for i in column.count:
-			var at := column.head - column.direction * i * column.spacing
-			var p := _point(column.trail, at)
-			var want := 0.0
-			var offset := p - center
-			if offset.length() < AVOID:
-				var ahead := _point(column.trail, at + column.direction * 6.0)
-				var side := p.direction_to(ahead).orthogonal()
-				want = (AVOID - offset.length() + 20.0) * (1.0 if offset.dot(side) >= 0.0 else -1.0)
-			column.aside[i] = move_toward(column.aside[i], want, delta * 160.0)
+			_revive(column)
+		if grounded:
+			for i in column.count:
+				if is_walking(column, i):
+					var p := ant_position(column, i)
+					if p.distance_to(center) < SQUASH:
+						_squash(column, i, p)
 		if _point(column.trail, column.head).distance_to(center) > FAR:
 			_restart(column, 500.0, 900.0)
+	for splat in splats:
+		splat.age += delta
+	while not splats.is_empty() and splats[0].age > SPLAT_LIFE:
+		splats.pop_front()
 	queue_redraw()
+
+
+func _squash(column: Column, i: int, spot: Vector2) -> void:
+	column.alive[i] = 0
+	var splat := Splat.new()
+	splat.position = spot
+	splat.along = _facing(column, i, spot)
+	splat.load = column.loads[i]
+	splats.append(splat)
+	if splats.size() > SPLATS:
+		splats.pop_front()
 
 
 func _draw() -> void:
 	var cell := Vector2.ONE * STEP
+	for splat in splats:
+		_draw_splat(splat, cell)
 	for column in columns:
-		var positions := ant_positions(column)
-		for i in positions.size():
-			var at := (positions[i] / STEP).floor()
+		for i in column.count:
+			if not is_walking(column, i):
+				continue
+			var spot := ant_position(column, i)
+			var at := (spot / STEP).floor()
 			var step := int(_time * 10.0 + i) % 2
 			# Three body segments along the way it walks (drawn sideways or upright).
-			var ahead := _point(column.trail, column.head - column.direction * i * column.spacing + column.direction * 8.0)
-			var direction := positions[i].direction_to(ahead)
-			var along := Vector2(signf(direction.x), 0.0) if absf(direction.x) > absf(direction.y) else Vector2(0.0, signf(direction.y))
-			if along == Vector2.ZERO:
-				along = Vector2.RIGHT
+			var along := _facing(column, i, spot)
 			var across := Vector2(-along.y, along.x)
 			for k in [-2, -1, 0, 1, 2]:
 				draw_rect(Rect2((at + along * k) * STEP, cell), BODY if k != 1 else SHINE)
 			for k in [-1, 0, 1]:
 				var swing := (1 if (k + step) % 2 == 0 else 0)
-				draw_rect(Rect2((at + along * (k + swing * 0.0) + across * 2.0 + along * swing) * STEP, cell), LEG)
+				draw_rect(Rect2((at + along * k + across * 2.0 + along * swing) * STEP, cell), LEG)
 				draw_rect(Rect2((at + along * k - across * 2.0 - along * swing) * STEP, cell), LEG)
-			if column.loads[i] >= 0 and i < column.loads.size():
+			if column.loads[i] >= 0:
 				var load := LOADS[column.loads[i]]
 				draw_rect(Rect2((at + along * 2.0 + Vector2(0, -2)) * STEP, cell * 2.0), load)
 				draw_rect(Rect2((at + along * 2.0 + Vector2(0, -2)) * STEP, cell), load.lightened(0.3))
+
+
+## A squashed ant: the body pressed into a flat round blot, legs splayed out, a few drops
+## spattered round it and its scrap of leaf dropped beside, all fading out over the last
+## third of its life.
+func _draw_splat(splat: Splat, cell: Vector2) -> void:
+	var fade := clampf((SPLAT_LIFE - splat.age) / (SPLAT_LIFE / 3.0), 0.0, 1.0)
+	var at := (splat.position / STEP).floor()
+	var along := splat.along
+	var across := Vector2(-along.y, along.x)
+	var body := Color(BODY, fade)
+	var smear := Color(SMEAR, 0.7 * fade)
+	var leg := Color(LEG, fade)
+	for a in [-1, 0, 1]:
+		for b in [-1, 0, 1]:
+			draw_rect(Rect2((at + along * a + across * b) * STEP, cell), body if (a == 0 or b == 0) else smear)
+	draw_rect(Rect2((at + along * 2.0) * STEP, cell), body)
+	draw_rect(Rect2((at - along * 2.0) * STEP, cell), Color(SHINE, fade))
+	for s in [-1.0, 1.0]:
+		draw_rect(Rect2((at + along * 2.0 + across * 2.0 * s) * STEP, cell), leg)
+		draw_rect(Rect2((at + across * 3.0 * s) * STEP, cell), leg)
+		draw_rect(Rect2((at - along * 2.0 + across * 2.0 * s) * STEP, cell), leg)
+	# Drops, placed by the spot (the same each frame).
+	var h := hash(at)
+	for k in 3:
+		var drop := Vector2(((h >> (k * 6)) & 7) - 3.5, ((h >> (k * 6 + 3)) & 7) - 3.5).round()
+		if absf(drop.x) + absf(drop.y) >= 3.0:
+			draw_rect(Rect2((at + drop) * STEP, cell), smear)
+	if splat.load >= 0:
+		var load := Color(LOADS[splat.load], fade)
+		draw_rect(Rect2((at + along * 3.0 + across * 2.0) * STEP, cell * 2.0), load)

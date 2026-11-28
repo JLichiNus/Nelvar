@@ -481,6 +481,7 @@ func _check_scene() -> void:
 	await _check_puffball(game, data, player)
 	await _check_acorn(game, data, player)
 	await _check_hoppers(game, data, player)
+	await _check_ants(game, player)
 	await _check_fade(game, data, player)
 	var key := InputEventKey.new()
 	key.keycode = KEY_F3
@@ -765,6 +766,30 @@ func _check_hoppers(game: Node, data: NelvarThicketData, player: NelvarPlayer) -
 
 
 ## A trunk thins out while the player is behind it, and comes back.
+## Ants do not step aside: the player standing on one squashes it and leaves a smear.
+func _check_ants(game: Node, player: NelvarPlayer) -> void:
+	var ants: NelvarAnts = game.ants
+	var column: NelvarAnts.Column = null
+	var index := -1
+	for c in ants.columns:
+		for i in c.count:
+			if ants.is_walking(c, i):
+				column = c
+				index = i
+				break
+		if column != null:
+			break
+	_check(column != null, "No ant walks a trail")
+	if column == null:
+		return
+	var splats := ants.splats.size()
+	player.global_position = ants.ant_position(column, index)
+	for i in 3:
+		await process_frame
+		player.global_position = ants.ant_position(column, index)
+	_check(column.alive[index] == 0 and ants.splats.size() > splats, "The player stood on an ant and it was not squashed")
+
+
 func _check_fade(game: Node, data: NelvarThicketData, player: NelvarPlayer) -> void:
 	var trunk: NelvarGiantTrunk = game.trunk_nodes[0]
 	var giant := trunk.giant
