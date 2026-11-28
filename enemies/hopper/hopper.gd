@@ -39,6 +39,13 @@ enum State { IDLE, JUMPING, DEAD }
 @export var eye_color := Color("3a1222")
 @export var shadow_color := Color(0.0, 0.0, 0.0, 0.35)
 
+## Карта, по которой прыгает враг (ставит спавнер). Если у неё есть
+## is_safe_landing(point), прыжки выбираются так, чтобы не приземлиться в
+## опасное место (лава кузни). Отброс ветром этого не проверяет.
+## grip_at(point) — сцепление (лёд: отброс гаснет медленнее, приземление
+## проскальзывает), jump_scale_at(point) — множитель дальности прыжка (метель).
+var ground: Object
+
 # Текстуры одинаковы у всех прыгунов с одинаковыми параметрами — печём один раз.
 static var _texture_cache := {}
 
@@ -88,7 +95,7 @@ func _physics_process(delta: float) -> void:
 	_bounce_off_walls()
 	_knockback_velocity = _knockback_velocity.move_toward(
 		Vector2.ZERO,
-		knockback_friction * delta
+		knockback_friction * _grip() * delta
 	)
 
 
@@ -99,6 +106,22 @@ func take_damage(amount: float) -> void:
 	_flash()
 	if health <= 0.0:
 		_die()
+
+
+## Сцепление с землёй под врагом: 1 — обычная земля; в прыжке трения нет.
+func _grip() -> float:
+	if _state == State.JUMPING or ground == null or not ground.has_method("grip_at"):
+		return 1.0
+	return ground.call("grip_at", global_position)
+
+
+## В прыжке враг над землёй: лава и выбросы его не трогают.
+func is_airborne() -> bool:
+	return _state == State.JUMPING
+
+
+func is_dead() -> bool:
+	return _state == State.DEAD
 
 
 func apply_knockback(force: Vector2) -> void:
@@ -173,11 +196,27 @@ func _update_idle(delta: float) -> void:
 
 
 func _start_jump() -> void:
+	var direction := Vector2.from_angle(randf() * TAU)
+	var distance := randf_range(jump_distance_min, jump_distance_max)
+	if ground != null and ground.has_method("jump_scale_at"):
+		distance *= ground.call("jump_scale_at", global_position)
+	if ground != null and ground.has_method("is_safe_landing"):
+		# Несколько попыток в разные стороны; если опасно везде — пропускаем прыжок.
+		var found := false
+		for attempt in 8:
+			var landing := global_position + direction * distance
+			var middle := global_position + direction * distance * 0.5
+			if ground.call("is_safe_landing", landing) and ground.call("is_safe_landing", middle):
+				found = true
+				break
+			direction = direction.rotated(TAU / 8.0 * 3.0)
+		if not found:
+			_restart_visual_tween().tween_property(visual, "scale", Vector2.ONE, landing_recovery)
+			_enter_idle()
+			return
 	_state = State.JUMPING
 	_is_winding_up = false
 	_jump_time = 0.0
-	var direction := Vector2.from_angle(randf() * TAU)
-	var distance := randf_range(jump_distance_min, jump_distance_max)
 	_jump_velocity = direction * distance / maxf(jump_duration, 0.01)
 
 	var tween := _restart_visual_tween()
@@ -196,6 +235,11 @@ func _update_jump(delta: float) -> void:
 
 
 func _land() -> void:
+	# На льду приземление проскальзывает: часть скорости прыжка остаётся.
+	if ground != null and ground.has_method("grip_at"):
+		var grip: float = ground.call("grip_at", global_position)
+		if grip < 1.0:
+			_knockback_velocity += _jump_velocity * (1.0 - grip) * 0.35
 	_jump_velocity = Vector2.ZERO
 	visual.position = Vector2.ZERO
 	shadow.scale = Vector2.ONE

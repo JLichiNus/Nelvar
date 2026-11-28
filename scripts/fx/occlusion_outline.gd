@@ -124,6 +124,9 @@ func _find_occluders() -> Array[Occluder]:
 			if seen.has(occluder):
 				continue
 			seen[occluder] = true
+			# Реестр статический и переживает смену сцены — забытая запись не должна ронять игру.
+			if not is_instance_valid(occluder.node):
+				continue
 			if occluder.node.global_position.y > depth and occluder.rect.intersects(bounds):
 				found.append(occluder)
 	if found.size() > MAX_OCCLUDERS:

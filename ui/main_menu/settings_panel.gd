@@ -36,6 +36,13 @@ const PREVIOUS_KEY := KEY_Q
 @onready var vignette_level: NelvarSlider = %VignetteLevel
 @onready var vignette_direction_check: CheckButton = %VignetteDirection
 @onready var start_in_void_check: CheckButton = %StartInVoid
+@onready var start_in_air_check: CheckButton = %StartInAir
+@onready var start_on_earth_check: CheckButton = %StartOnEarth
+@onready var start_on_earth2_check: CheckButton = %StartOnEarth2
+@onready var start_in_fire_check: CheckButton = %StartInFire
+@onready var start_on_ice_check: CheckButton = %StartOnIce
+@onready var start_in_fire2_check: CheckButton = %StartInFire2
+@onready var start_on_ice2_check: CheckButton = %StartOnIce2
 @onready var categories: VBoxContainer = %Categories
 @onready var pages: VBoxContainer = %Pages
 @onready var scroll: ScrollContainer = %Scroll
@@ -66,6 +73,21 @@ func _ready() -> void:
 		start_in_void_check.set_pressed_no_signal(GameSettings.start_in_void)
 		start_in_void_check.toggled.connect(GameSettings.set_start_in_void)
 		GameSettings.start_in_void_changed.connect(start_in_void_check.set_pressed_no_signal)
+		# The start options exclude each other (GameSettings turns the others off).
+		_bind_start(start_in_air_check, GameSettings.start_in_air,
+			GameSettings.set_start_in_air, GameSettings.start_in_air_changed)
+		_bind_start(start_on_earth_check, GameSettings.start_on_earth,
+			GameSettings.set_start_on_earth, GameSettings.start_on_earth_changed)
+		_bind_start(start_on_earth2_check, GameSettings.start_on_earth2,
+			GameSettings.set_start_on_earth2, GameSettings.start_on_earth2_changed)
+		_bind_start(start_in_fire_check, GameSettings.start_in_fire,
+			GameSettings.set_start_in_fire, GameSettings.start_in_fire_changed)
+		_bind_start(start_on_ice_check, GameSettings.start_on_ice,
+			GameSettings.set_start_on_ice, GameSettings.start_on_ice_changed)
+		_bind_start(start_in_fire2_check, GameSettings.start_in_fire2,
+			GameSettings.set_start_in_fire2, GameSettings.start_in_fire2_changed)
+		_bind_start(start_on_ice2_check, GameSettings.start_on_ice2,
+			GameSettings.set_start_on_ice2, GameSettings.start_on_ice2_changed)
 	else:
 		# Public builds: no developer category at all.
 		_tabs.pop_back()
@@ -125,6 +147,13 @@ func _ready() -> void:
 	vignette_direction_check.toggled.connect(GameSettings.set_damage_vignette_directional)
 	GameSettings.damage_vignette_changed.connect(_show_vignette_settings)
 	_show_vignette_settings()
+
+
+## Ties a developer start option's check to its GameSettings value both ways.
+func _bind_start(check: CheckButton, enabled: bool, setter: Callable, changed: Signal) -> void:
+	check.set_pressed_no_signal(enabled)
+	check.toggled.connect(setter)
+	changed.connect(check.set_pressed_no_signal)
 
 
 func _unhandled_input(event: InputEvent) -> void:

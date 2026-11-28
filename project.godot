@@ -110,6 +110,11 @@ toggle_info_panel={
 2d_physics/layer_2="Player"
 2d_physics/layer_3="PlayerAttacks"
 2d_physics/layer_4="Enemies"
+2d_physics/layer_5="Water"
+2d_physics/layer_6="LowObstacles"
+2d_physics/layer_7="Lava"
+2d_physics/layer_8="Edges"
+2d_physics/layer_9="Walls"
 
 [physics]
 

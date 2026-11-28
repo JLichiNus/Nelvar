@@ -10,6 +10,8 @@ func generate(world: NelvarWorldData, config: NelvarForestConfig) -> NelvarFores
 		rng.seed = ("%d:forest:%d" % [world.world_seed, island.id]).hash()
 		var group_range := config.large_island_groups if island.large else config.small_island_groups
 		var group_count := rng.randi_range(group_range.x, group_range.y)
+		if not island.large and rng.randf() >= config.small_island_grove_chance:
+			group_count = 0
 		for group in group_count:
 			var best_cluster: NelvarForestData.Cluster
 			var best_trees: Array[NelvarForestData.TreeSpec] = []
@@ -83,9 +85,12 @@ func _members(cluster: NelvarForestData.Cluster, island: NelvarWorldData.Island,
 		var tree := NelvarForestData.TreeSpec.new()
 		tree.position = cluster.center + offset.rotated(cluster.rotation)
 		tree.island_id = island.id
-		tree.trunk_radius = rng.randf_range(config.trunk_radius.x, config.trunk_radius.y)
-		tree.canopy_radius = rng.randf_range(config.canopy_radius.x, config.canopy_radius.y)
-		tree.trunk_height = rng.randf_range(config.trunk_height.x, config.trunk_height.y)
+		var scale := _size_scale(config, rng)
+		# Trunks thicken slower than crowns grow, so young trees stay slender.
+		tree.trunk_radius = rng.randf_range(config.trunk_radius.x, config.trunk_radius.y) * sqrt(scale)
+		tree.canopy_radius = rng.randf_range(config.canopy_radius.x, config.canopy_radius.y) * scale
+		tree.trunk_height = rng.randf_range(config.trunk_height.x, config.trunk_height.y) \
+			* scale * rng.randf_range(0.85, 1.15)
 		tree.lean = rng.randf_range(3.0, 15.0)  # ветер дует вправо
 		tree.palette = cluster.palette if rng.randf() < 0.8 else rng.randi_range(0, 2)
 		tree.form = cluster.form if rng.randf() < 0.8 else rng.randi_range(0, 2)
@@ -93,6 +98,16 @@ func _members(cluster: NelvarForestData.Cluster, island: NelvarWorldData.Island,
 		if _fits(tree, island, existing, result, world, config):
 			result.append(tree)
 	return result
+
+
+## Young, grown or old: groves mix trees of clearly different sizes.
+func _size_scale(config: NelvarForestConfig, rng: RandomNumberGenerator) -> float:
+	var roll := rng.randf()
+	if roll < config.young_tree_chance:
+		return rng.randf_range(config.young_tree_scale.x, config.young_tree_scale.y)
+	if roll < config.young_tree_chance + config.old_tree_chance:
+		return rng.randf_range(config.old_tree_scale.x, config.old_tree_scale.y)
+	return rng.randf_range(0.85, 1.12)
 
 
 func _fits(tree: NelvarForestData.TreeSpec, island: NelvarWorldData.Island,
@@ -122,7 +137,11 @@ func _fits(tree: NelvarForestData.TreeSpec, island: NelvarWorldData.Island,
 
 func _separated(a: NelvarForestData.TreeSpec, b: NelvarForestData.TreeSpec,
 		config: NelvarForestConfig) -> bool:
-	var spacing := maxf(config.tree_spacing, a.trunk_radius + b.trunk_radius + config.passage_width)
+	# Big crowns need more room, young trees may stand closer.
+	var typical := (config.canopy_radius.x + config.canopy_radius.y) * 0.5
+	var crowns := (a.canopy_radius + b.canopy_radius) * 0.5 / typical
+	var room := config.tree_spacing * clampf(crowns, 0.7, 1.5)
+	var spacing := maxf(room, a.trunk_radius + b.trunk_radius + config.passage_width)
 	return a.position.distance_squared_to(b.position) >= spacing * spacing
 
 

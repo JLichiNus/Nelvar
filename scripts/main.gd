@@ -1,4 +1,21 @@
 extends Node2D
+## The air map: islands and bridges over a sea of clouds.
+##
+## Shores and bridge sides do not stop the player (NelvarWorldData.EDGE_LAYER): off
+## the ground they keep going for a moment (COYOTE_TIME), longer is a fall through
+## the clouds. They come back where they last stood firmly, a little worse for it.
+## Flight carries them over the sky, even from island to island; landing in it is a
+## fall too.
+
+## Seconds off the ground before the fall.
+const COYOTE_TIME := 0.15
+const FALL_TIME := 0.75
+const FALL_DAMAGE := 10.0
+## A spot counts as firm footing this far from any edge (the body radius plus a
+## little, still less than half a bridge: the middle of a bridge is firm).
+const SAFE_CLEARANCE := NelvarPlayer.BODY_RADIUS + 10.0
+## The body fades into the pale clouds below.
+const FALL_TINT := Color(0.86, 0.92, 1.0, 0.0)
 
 @export var world_config: NelvarWorldConfig
 @export var forest_config: NelvarForestConfig = preload("res://resources/earth_forest_config.tres")
@@ -9,6 +26,10 @@ var forest_data: NelvarForestData
 var prop_data: NelvarPropData
 var tree_nodes: Array[NelvarTree] = []
 var prop_nodes: Array[NelvarProp] = []
+## Falls through the clouds this run.
+var falls := 0
+var _air_time := 0.0
+var _safe_position := Vector2.ZERO
 @onready var cloud_sea: NelvarCloudSea = $CloudSea
 @onready var wind: NelvarWindParticles = $Wind
 @onready var world_view: NelvarWorldView = $World
@@ -62,6 +83,7 @@ func _ready() -> void:
 		actors.add_child(node)
 		prop_nodes.append(node)
 	player.position = world_data.spawn_position
+	_safe_position = player.position
 	player.camera.reset_smoothing()
 	enemy_spawner.call("start", world_data, forest_data, prop_data)
 	seed_label.text = "ЗЕМЛЯ · СИД %d" % world_data.world_seed
@@ -77,6 +99,33 @@ func _ready() -> void:
 	print("Nelvar seed: %d | islands: %d | bridges: %d | chunks: %d | trees: %d | groves: %d | rocks: %d | bushes: %d" % [
 		world_data.world_seed, world_data.islands.size(), world_data.bridges.size(),
 		world_data.leaves.size(), tree_nodes.size(), forest_data.clusters.size(), rocks, bushes])
+
+
+func _physics_process(delta: float) -> void:
+	if world_data == null or player.is_falling() or player.health <= 0.0:
+		return
+	var feet := player.global_position
+	if player.is_airborne() or world_data.is_walkable(feet):
+		_air_time = 0.0
+		if not player.is_airborne() and world_data.is_firm(feet, SAFE_CLEARANCE):
+			_safe_position = feet
+		return
+	_air_time += delta
+	if _air_time > COYOTE_TIME:
+		_fall()
+
+
+## Nothing underfoot: the player sinks through the clouds and comes back on the
+## ground they last stood on firmly.
+func _fall() -> void:
+	falls += 1
+	_air_time = 0.0
+	player.fall_into_abyss(FALL_TIME, FALL_TINT)
+	await get_tree().create_timer(FALL_TIME + 0.35, false).timeout
+	if not is_instance_valid(player):
+		return
+	player.recover_at(_safe_position)
+	player.take_damage(FALL_DAMAGE)
 
 
 func _unhandled_input(event: InputEvent) -> void:
