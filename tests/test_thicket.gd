@@ -440,9 +440,9 @@ func _check_settings() -> void:
 	var panel: Node = load("res://ui/main_menu/settings_panel.tscn").instantiate()
 	var check: Node = panel.get_node_or_null("Rows/Body/PageColumn/Scroll/Pages/DevPage/StartOnEarth2")
 	var rows: Node = panel.get_node("Rows/Body/PageColumn/Scroll/Pages/DevPage")
-	_check(check is CheckButton and (check as CheckButton).text == "Запускать игру на Земле 2"
-		and check.get_index() == rows.get_node("StartOnEarth").get_index() + 1,
-		"The developer menu has no Земля 2 start right under the earth")
+	_check(check is CheckButton and (check as CheckButton).text == "Запускать игру на Земле"
+		and check.get_index() == rows.get_node("StartOnIce2").get_index() + 1,
+		"The developer menu has no Земля 2 start right under Лёд 2")
 	panel.free()
 	var hint := FileAccess.get_file_as_string("res://ui/main_menu/settings_panel.tscn")
 	_check(hint.contains("«Играть» откроет исполинский лес (Земля 2)"), "The developer menu does not say «Играть» opens the forest")

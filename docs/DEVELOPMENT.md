@@ -20,8 +20,11 @@ godot --path . -- --seed=20261120
 Here `godot` means the path to your Godot 4.7.2 executable.
 
 `scenes/main.tscn` is the air location (resources and some classes still carry
-`earth_*` names). Settings → «Меню разработчика» → «Запускать игру в Пустоте»
-makes «Играть» open `scenes/void.tscn` instead. `test_world.tscn` is a flat
+`earth_*` names). With no developer start option on, «Играть» opens one of Воздух
+(`main.tscn`), Огонь 2, Лёд 2 and Земля 2 at random. Settings → «Разработчик» lists the
+start options in this order: «в Пустоте» (`scenes/void.tscn`), «в Воздухе», «в Огне»,
+«на Льду», «на Земле» (the second versions: volcano, ice cave, giant forest), then the
+first versions «в Огне alpha», «на Льду alpha», «на Земле alpha». `test_world.tscn` is a flat
 arena for tuning combat without the generator (F6).
 
 Debug keys: **F3** shows occupied chunks, collision boundaries, trunk circles,
@@ -231,7 +234,7 @@ and outline it when it stands behind them. Counts and sizes are in
 
 ## The earth valley (developer start)
 
-Settings → «Разработчик» → «Запускать игру на Земле» makes «Играть» open
+Settings → «Разработчик» → «Запускать игру на Земле alpha» makes «Играть» open
 `scenes/earth.tscn`: a plain of grass and groves ringed by snowy mountains, in the
 style of the «Земля» menu background. Only one of the start options is on at a
 time; each option's hint says what «Играть» opens.
@@ -285,7 +288,7 @@ and butterflies flutter between flowers and scatter from the player
 
 ## The giant forest, Earth 2 (developer start)
 
-Settings → «Разработчик» → «Запускать игру на Земле 2» (right under «на Земле»)
+Settings → «Разработчик» → «Запускать игру на Земле»
 makes «Играть» open `scenes/earth2.tscn`: the floor of a forest of giants with the player
 the size of a beetle. Trunks wider than the screen rise out of the top of the view into
 the dark of the crowns; grass blades are taller than the player, an acorn is a boulder, a
@@ -379,7 +382,7 @@ glint now and then in a trunk's hollow. The warnings are heard as well as seen
 
 ## The fire forge (developer start)
 
-Settings → «Разработчик» → «Запускать игру в Огне» makes «Играть» open
+Settings → «Разработчик» → «Запускать игру в Огне alpha» makes «Играть» open
 `scenes/fire.tscn`: a basin of ash and basalt ringed by black ridges and volcanoes, in
 the style of the «Огонь» menu background — a world that is still being forged rather
 than one that burnt. Only one of the start options is on at a time.
@@ -429,7 +432,7 @@ when the player comes close (`NelvarFireCritters`). F3 shows the walls and the f
 
 ## The ice valley (developer start)
 
-Settings → «Разработчик» → «Запускать игру на Льду» makes «Играть» open
+Settings → «Разработчик» → «Запускать игру на Льду alpha» makes «Играть» open
 `scenes/ice.tscn`: a snowy valley ringed by snowy mountains, in the style of the «Лёд»
 menu background — snow with sastrugi and sparkles, dry stems poking out of it, pines
 under snow, dead trees, rocks with snow caps, drifts, blocks of ice, petrified creatures
@@ -488,7 +491,7 @@ and their thin ice, the crevasses with their bridges and the holes.
 
 ## The volcano, Fire 2 (developer start)
 
-Settings → «Разработчик» → «Запускать игру в Огне 2» makes «Играть» open
+Settings → «Разработчик» → «Запускать игру в Огне» makes «Играть» open
 `scenes/fire2.tscn`: the top of one huge volcano. A broad rim of basalt and ash runs
 right round the crater; the crater is a lake of lava filled almost to the brim, most of
 it taken by broad floes of magma crust; past the rim's outer edge the mountain's side
@@ -558,8 +561,10 @@ is on it goes down with it. After the first fall the game says what to do («Э�
 over a shore or a broad floe's edge 250–800 from the player (`NelvarLavaSplashes`): it bulges
 and bubbles for 1.3 s, then a tongue of lava sloshes over (10 HP and a shove away from
 the lake); the fresh lava burns (4 HP every 0.5 s) and slows to 0.6 for 3 s, sets into a
-safe crust for 8 s and fades. Hoppers burn in the lava (floes hold them),
-die off the edge and on a sinking floe, and never land in a geyser or fresh lava.
+safe crust for 8 s and fades. Hoppers appear on the rim and on the floes that never sink
+(`NelvarCraterData.can_spawn_at`) and may land on such floes too; they burn
+in the lava (floes hold them), die off the edge and on a sinking floe, and never land in a
+geyser or fresh lava.
 
 The floor (`scripts/crater/crater_ground.gdshader`) computes the lake, the capes and
 the summit's edge exactly as `NelvarCraterData` does (the edge from a table of
@@ -590,7 +595,7 @@ now (the ones that sink in cyan), the geysers and the splashes.
 
 ## The ice cave, Ice 2 (developer start)
 
-Settings → «Разработчик» → «Запускать игру на Льду 2» (right under «на Льду») makes
+Settings → «Разработчик» → «Запускать игру на Льду» makes
 «Играть» open `scenes/ice2.tscn`: a maze of halls and winding passages cut into a mass of
 blue ice with dead creatures frozen into it. Mostly dusk; under holes in the roof the sun
 shines in slanting shafts, snow falls and lies, pines grow; the biggest halls are cold,

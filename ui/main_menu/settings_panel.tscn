@@ -267,49 +267,56 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
 text = "Запускать игру в Пустоте"
-metadata/hint = "«Играть» откроет Пустоту вместо обычного мира"
+metadata/hint = "«Играть» откроет Пустоту вместо случайной карты"
 
-[node name="StartOnEarth" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
+[node name="StartInAir" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
-text = "Запускать игру на Земле"
-metadata/hint = "«Играть» откроет земляную долину вместо обычного мира"
-
-[node name="StartOnEarth2" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 22
-text = "Запускать игру на Земле 2"
-metadata/hint = "«Играть» откроет исполинский лес (Земля 2) вместо обычного мира"
-
-[node name="StartInFire" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 22
-text = "Запускать игру в Огне"
-metadata/hint = "«Играть» откроет огненную кузню вместо обычного мира"
-
-[node name="StartOnIce" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 22
-text = "Запускать игру на Льду"
-metadata/hint = "«Играть» откроет ледяную долину вместо обычного мира"
-
-[node name="StartOnIce2" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
-unique_name_in_owner = true
-layout_mode = 2
-theme_override_font_sizes/font_size = 22
-text = "Запускать игру на Льду 2"
-metadata/hint = "«Играть» откроет ледяную пещеру (Лёд 2) вместо обычного мира"
+text = "Запускать игру в Воздухе"
+metadata/hint = "«Играть» откроет острова над облаками вместо случайной карты"
 
 [node name="StartInFire2" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_font_sizes/font_size = 22
-text = "Запускать игру в Огне 2"
-metadata/hint = "«Играть» откроет вулкан (Огонь 2) вместо обычного мира"
+text = "Запускать игру в Огне"
+metadata/hint = "«Играть» откроет вулкан (Огонь 2) вместо случайной карты"
+
+[node name="StartOnIce2" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Запускать игру на Льду"
+metadata/hint = "«Играть» откроет ледяную пещеру (Лёд 2) вместо случайной карты"
+
+[node name="StartOnEarth2" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Запускать игру на Земле"
+metadata/hint = "«Играть» откроет исполинский лес (Земля 2) вместо случайной карты"
+
+[node name="StartInFire" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Запускать игру в Огне alpha"
+metadata/hint = "«Играть» откроет огненную кузню (первая версия Огня) вместо случайной карты"
+
+[node name="StartOnIce" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Запускать игру на Льду alpha"
+metadata/hint = "«Играть» откроет ледяную долину (первая версия Льда) вместо случайной карты"
+
+[node name="StartOnEarth" type="CheckButton" parent="Rows/Body/PageColumn/Scroll/Pages/DevPage"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "Запускать игру на Земле alpha"
+metadata/hint = "«Играть» откроет земляную долину (первая версия Земли) вместо случайной карты"
 
 [node name="Footer" type="HBoxContainer" parent="Rows"]
 unique_name_in_owner = true

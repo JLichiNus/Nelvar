@@ -1,6 +1,6 @@
 class_name NelvarCraterConfig
 extends Resource
-## Generation parameters of the volcano (developer setting "Запускать игру в Огне 2").
+## Generation parameters of the volcano (developer setting "Запускать игру в Огне").
 ## Distances are world units; the crater is centred on the origin.
 
 @export_group("Lake")

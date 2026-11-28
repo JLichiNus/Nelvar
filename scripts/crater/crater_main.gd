@@ -1,6 +1,6 @@
 class_name NelvarCraterMain
 extends Node2D
-## The volcano, Огонь 2 (developer setting "Запускать игру в Огне 2"): the top of one
+## The volcano, Огонь 2 (developer setting "Запускать игру в Огне"): the top of one
 ## huge mountain. The player runs round the crater's broad rim; the crater is a lake of
 ## lava crowded with floes of magma crust; below the summit's edge clouds of ash drift
 ## far down.
@@ -318,9 +318,15 @@ func _setup_ground() -> void:
 	# The floor finds the clouds below where they are on screen, to hide the mountain's
 	# foot behind them.
 	material.set_shader_parameter("below_holes", below.hole_amount)
+	# The mountain's side sinks in perspective round the screen's centre, down to the
+	# clouds' parallax.
+	material.set_shader_parameter("below_parallax", below.parallax)
 	below.view_updated.connect(func(shift: Vector2, breath: float) -> void:
 		material.set_shader_parameter("below_shift", shift)
-		material.set_shader_parameter("below_breath", breath))
+		material.set_shader_parameter("below_breath", breath)
+		var view := get_viewport()
+		var center := view.get_canvas_transform().affine_inverse() * (view.get_visible_rect().size * 0.5)
+		material.set_shader_parameter("view_center", center / float(STEP)))
 	var light := glow.backdrop_material()
 	light.set_shader_parameter("texel_size", float(STEP))
 	light.set_shader_parameter("noise_offset", noise_offset)

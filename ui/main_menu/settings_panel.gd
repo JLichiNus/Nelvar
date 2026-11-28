@@ -36,6 +36,7 @@ const PREVIOUS_KEY := KEY_Q
 @onready var vignette_level: NelvarSlider = %VignetteLevel
 @onready var vignette_direction_check: CheckButton = %VignetteDirection
 @onready var start_in_void_check: CheckButton = %StartInVoid
+@onready var start_in_air_check: CheckButton = %StartInAir
 @onready var start_on_earth_check: CheckButton = %StartOnEarth
 @onready var start_on_earth2_check: CheckButton = %StartOnEarth2
 @onready var start_in_fire_check: CheckButton = %StartInFire
@@ -73,6 +74,8 @@ func _ready() -> void:
 		start_in_void_check.toggled.connect(GameSettings.set_start_in_void)
 		GameSettings.start_in_void_changed.connect(start_in_void_check.set_pressed_no_signal)
 		# The start options exclude each other (GameSettings turns the others off).
+		_bind_start(start_in_air_check, GameSettings.start_in_air,
+			GameSettings.set_start_in_air, GameSettings.start_in_air_changed)
 		_bind_start(start_on_earth_check, GameSettings.start_on_earth,
 			GameSettings.set_start_on_earth, GameSettings.start_on_earth_changed)
 		_bind_start(start_on_earth2_check, GameSettings.start_on_earth2,

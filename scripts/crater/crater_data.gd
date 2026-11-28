@@ -327,14 +327,34 @@ func is_open_ground(point: Vector2, margin: float = 0.0) -> bool:
 	return geyser_at(point, margin) == null
 
 
-## Where a hopper may come down: firm ground, out of fresh lava.
+## Where a hopper may come down: firm ground or a floe that never sinks, out of fresh lava.
 func is_safe_landing(point: Vector2) -> bool:
-	if not is_open_ground(point, 22.0):
+	if not is_open_ground(point, 22.0) and steady_floe_at(point, 22.0) == null:
 		return false
+	return not _in_fresh_lava(point, 16.0)
+
+
+## Where an enemy may appear: clear rock on the rim or a floe that never sinks (as it is
+## at `now`), `radius` in from its edge, out of fresh lava.
+func can_spawn_at(point: Vector2, radius: float) -> bool:
+	if not has_clearance(point, radius) and steady_floe_at(point, radius) == null:
+		return false
+	return not _in_fresh_lava(point, radius)
+
+
+## The floe that never sinks under the point at `now`, `margin` in from its edge, or null.
+func steady_floe_at(point: Vector2, margin: float = 0.0) -> Isle:
+	for floe: Isle in _floes_near(point):
+		if not floe.sinks() and floe.depth_at(point, now) >= margin:
+			return floe
+	return null
+
+
+func _in_fresh_lava(point: Vector2, margin: float) -> bool:
 	for area in fresh_lava:
-		if point.distance_to(Vector2(area.x, area.y)) < area.z + 16.0:
-			return false
-	return true
+		if point.distance_to(Vector2(area.x, area.y)) < area.z + margin:
+			return true
+	return false
 
 
 ## Smooth maximum: rounds the corner where two shapes meet over about `k`.

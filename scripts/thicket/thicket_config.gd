@@ -1,7 +1,7 @@
 class_name NelvarThicketConfig
 extends Resource
 ## Generation parameters of the giant forest, Земля 2 (developer setting "Запускать игру
-## на Земле 2"). Distances are world units; the forest floor is centred on the origin.
+## на Земле"). Distances are world units; the forest floor is centred on the origin.
 ## The player is a beetle here: a trunk is wider than the screen, a grass blade taller
 ## than the player, an acorn a boulder.
 

@@ -1,7 +1,7 @@
 class_name NelvarCaveConfig
 extends Resource
 ## Generation parameters of the ice cave, Лёд 2 (developer setting "Запускать игру на
-## Льду 2"). Distances are world units; the cave is centred on the origin.
+## Льду"). Distances are world units; the cave is centred on the origin.
 
 @export_group("Cave")
 ## The whole cave: solid ice all round it.

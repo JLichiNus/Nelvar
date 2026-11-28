@@ -1,6 +1,6 @@
 class_name NelvarCaveMain
 extends Node2D
-## The ice cave, Лёд 2 (developer setting "Запускать игру на Льду 2"): a maze of halls and
+## The ice cave, Лёд 2 (developer setting "Запускать игру на Льду"): a maze of halls and
 ## winding passages cut into blue ice with dead creatures frozen into it. Mostly dusk (an
 ## overlay multiplies it in; the player carries their own soft light); under holes in the
 ## roof the sun shines in slanting shafts, snow falls and lies, pines grow. The big halls

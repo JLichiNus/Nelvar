@@ -336,7 +336,7 @@ func _check_settings() -> void:
 		"«Играть» does not open the volcano")
 	var panel: Node = load("res://ui/main_menu/settings_panel.tscn").instantiate()
 	var check: Node = panel.get_node_or_null("Rows/Body/PageColumn/Scroll/Pages/DevPage/StartInFire2")
-	_check(check is CheckButton and (check as CheckButton).text == "Запускать игру в Огне 2",
+	_check(check is CheckButton and (check as CheckButton).text == "Запускать игру в Огне",
 		"The developer menu has no Fire 2 start")
 	panel.free()
 
@@ -356,9 +356,13 @@ func _check_scene() -> void:
 	if data == null:
 		game.queue_free()
 		return
+	var on_floes := 0
 	for enemy in get_nodes_in_group("enemies"):
-		_check(data.has_clearance(enemy.global_position, 20.0), "An enemy appeared off the rock")
+		_check(data.can_spawn_at(enemy.global_position, 20.0), "An enemy appeared off the rock and the floes")
+		if data.steady_floe_at(enemy.global_position) != null:
+			on_floes += 1
 		enemy.queue_free()
+	_check(on_floes > 0, "No enemy appeared on the floes")
 	game.enemy_spawner.set_process(false)
 	game.splashes.set("_next", INF)
 	await physics_frame

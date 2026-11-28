@@ -49,6 +49,10 @@ var _size := Vector2i.ZERO
 var _buckets: Array = []
 var _edt := PackedFloat32Array()
 var _edt_want := 0
+## The two distance transforms and the field being filled (read by _sdf_row's threads).
+var _to_wall := PackedFloat32Array()
+var _to_floor := PackedFloat32Array()
+var _sdf_out := PackedFloat32Array()
 ## The reachability grid: open floor, and what the hazards kept so far block.
 var _reach_size := Vector2i.ZERO
 var _open := PackedByteArray()
@@ -628,86 +632,145 @@ func _cut_thin(vertical: bool, least: float) -> void:
 
 ## Crumbs of ice (small wall islands) melt into the floor; floor cut off from the main
 ## floor freezes into the wall.
+##
+## Labelled by runs (rows of like samples, found with the native find()) joined with the
+## runs touching them in the row above: the loops go over runs, not samples. The main
+## floor is the biggest piece, the first in reading order on a tie.
 func _clean_islands() -> void:
-	var labels := PackedInt32Array()
-	labels.resize(_mask.size())
-	labels.fill(-1)
-	var sizes: Array[int] = []
-	var borders: Array[bool] = []
-	var kinds: Array[int] = []
-	for start in _mask.size():
-		if labels[start] >= 0:
-			continue
-		var kind := _mask[start]
-		var label := sizes.size()
-		var queue := PackedInt32Array([start])
-		labels[start] = label
-		var count := 0
-		var border := false
-		while count < queue.size():
-			var index := queue[count]
-			count += 1
-			var x := index % _size.x
-			var y := index / _size.x
-			if x == 0 or y == 0 or x == _size.x - 1 or y == _size.y - 1:
-				border = true
-			for next: int in [index - 1, index + 1, index - _size.x, index + _size.x]:
-				if next < 0 or next >= _mask.size():
-					continue
-				if (next == index - 1 and x == 0) or (next == index + 1 and x == _size.x - 1):
-					continue
-				if labels[next] < 0 and _mask[next] == kind:
-					labels[next] = label
-					queue.append(next)
-		sizes.append(count)
-		borders.append(border)
-		kinds.append(kind)
+	var mask := _mask
+	var w := _size.x
+	var h := _size.y
+	var starts := PackedInt32Array()
+	var ends := PackedInt32Array()
+	var kinds := PackedByteArray()
+	var row_first := PackedInt32Array()
+	row_first.resize(h + 1)
+	for y in h:
+		row_first[y] = starts.size()
+		var base := y * w
+		var x := 0
+		while x < w:
+			var kind := mask[base + x]
+			var next := mask.find(1 - kind, base + x + 1)
+			var end := w if next < 0 or next >= base + w else next - base
+			starts.append(x)
+			ends.append(end)
+			kinds.append(kind)
+			x = end
+	var count := starts.size()
+	row_first[h] = count
+	var parent := PackedInt32Array()
+	parent.resize(count)
+	for i in count:
+		parent[i] = i
+	for y in range(1, h):
+		var i := row_first[y - 1]
+		var i_end := row_first[y]
+		var j := row_first[y]
+		var j_end := row_first[y + 1]
+		while i < i_end and j < j_end:
+			if starts[i] < ends[j] and starts[j] < ends[i] and kinds[i] == kinds[j]:
+				var a := i
+				while parent[a] != a:
+					parent[a] = parent[parent[a]]
+					a = parent[a]
+				var b := j
+				while parent[b] != b:
+					parent[b] = parent[parent[b]]
+					b = parent[b]
+				# The root stays the earlier run: the piece's first in reading order.
+				if a < b:
+					parent[b] = a
+				elif b < a:
+					parent[a] = b
+			if ends[i] <= ends[j]:
+				i += 1
+			else:
+				j += 1
+	var sizes := PackedInt32Array()
+	sizes.resize(count)
+	var borders := PackedByteArray()
+	borders.resize(count)
+	var roots := PackedInt32Array()
+	roots.resize(count)
+	for y in h:
+		for r in range(row_first[y], row_first[y + 1]):
+			var root := r
+			while parent[root] != root:
+				root = parent[root]
+			roots[r] = root
+			sizes[root] += ends[r] - starts[r]
+			if y == 0 or y == h - 1 or starts[r] == 0 or ends[r] == w:
+				borders[root] = 1
 	var main_floor := -1
-	for label in sizes.size():
-		if kinds[label] == 1 and (main_floor < 0 or sizes[label] > sizes[main_floor]):
-			main_floor = label
-	for index in _mask.size():
-		var label := labels[index]
-		if kinds[label] == 0 and not borders[label] and sizes[label] < 70:
-			_mask[index] = 1
-		elif kinds[label] == 1 and label != main_floor:
-			_mask[index] = 0
+	for r in count:
+		if roots[r] == r and kinds[r] == 1 and (main_floor < 0 or sizes[r] > sizes[main_floor]):
+			main_floor = r
+	for y in h:
+		for r in range(row_first[y], row_first[y + 1]):
+			var root := roots[r]
+			var value := -1
+			if kinds[r] == 0:
+				if borders[root] == 0 and sizes[root] < 70:
+					value = 1
+			elif root != main_floor:
+				value = 0
+			if value >= 0:
+				for x in range(y * w + starts[r], y * w + ends[r]):
+					mask[x] = value
+	_mask = mask
 
 
 ## Signed distance from the mask: the distance transform everywhere, the exact depth near
 ## an outline the cleaning left alone.
+## Row by row on several cores; "near an outline the cleaning changed" (a sample within
+## two whose mask and exact depth disagree) is only looked up where the exact depth counts.
 func _signed_distance() -> void:
-	var to_wall := _transform(0)
-	var to_floor := _transform(1)
-	var changed := PackedByteArray()
-	changed.resize(_mask.size())
-	for index in _mask.size():
-		if (_mask[index] == 1) != (_floor[index] > 0.0):
-			changed[index] = 1
-	var near := changed.duplicate()
-	for y in _size.y:
-		for x in _size.x:
-			if changed[y * _size.x + x] == 0:
-				continue
-			for dy in range(-2, 3):
-				for dx in range(-2, 3):
-					var nx := x + dx
-					var ny := y + dy
-					if nx >= 0 and ny >= 0 and nx < _size.x and ny < _size.y:
-						near[ny * _size.x + nx] = 1
-	var sdf := PackedFloat32Array()
-	sdf.resize(_mask.size())
-	for index in _mask.size():
+	_to_wall = _transform(0)
+	_to_floor = _transform(1)
+	_sdf_out = PackedFloat32Array()
+	_sdf_out.resize(_mask.size())
+	var rows := WorkerThreadPool.add_group_task(_sdf_row, _size.y, NelvarPaintQueue.threads, true, "Cave distance")
+	WorkerThreadPool.wait_for_group_task_completion(rows)
+	_data.sdf = _sdf_out
+	_sdf_out = PackedFloat32Array()
+	_to_wall = PackedFloat32Array()
+	_to_floor = PackedFloat32Array()
+
+
+func _sdf_row(y: int) -> void:
+	var mask := _mask
+	var exacts := _floor
+	var to_wall := _to_wall
+	var to_floor := _to_floor
+	var sdf := _sdf_out
+	var w := _size.x
+	var h := _size.y
+	var y0 := maxi(y - 2, 0)
+	var y1 := mini(y + 2, h - 1)
+	for x in w:
+		var index := y * w + x
 		var value: float
-		if _mask[index] == 1:
+		if mask[index] == 1:
 			value = -(sqrt(to_wall[index]) * CELL - CELL * 0.5)
 		else:
 			value = sqrt(to_floor[index]) * CELL - CELL * 0.5
-		var exact := _floor[index]
-		if near[index] == 0 and absf(exact) < BAND:
-			value = lerpf(-exact, value, smoothstep(BAND * 0.6, BAND, absf(exact)))
+		var exact := exacts[index]
+		if absf(exact) < BAND:
+			var near := false
+			var x0 := maxi(x - 2, 0)
+			var x1 := mini(x + 2, w - 1)
+			for ny in range(y0, y1 + 1):
+				for nx in range(x0, x1 + 1):
+					var k := ny * w + nx
+					if (mask[k] == 1) != (exacts[k] > 0.0):
+						near = true
+						break
+				if near:
+					break
+			if not near:
+				value = lerpf(-exact, value, smoothstep(BAND * 0.6, BAND, absf(exact)))
 		sdf[index] = value
-	_data.sdf = sdf
 
 
 ## Squared distance (in samples) to the nearest sample whose mask is `want`

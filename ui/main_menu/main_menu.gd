@@ -3,21 +3,25 @@ extends Control
 ## wave from that button across the landscape, turning it into the same place in
 ## that button's reality.
 
+## The air map: islands and bridges over a sea of clouds (developer setting
+## "Запускать игру в Воздухе").
 const GAME_SCENE := "res://scenes/main.tscn"
 ## Developer setting "Запускать игру в Пустоте" starts here instead.
 const VOID_SCENE := "res://scenes/void.tscn"
-## Developer setting "Запускать игру на Земле": the earth valley.
+## Developer setting "Запускать игру на Земле alpha": the earth valley.
 const EARTH_SCENE := "res://scenes/earth.tscn"
-## Developer setting "Запускать игру на Земле 2": the giant forest.
+## Developer setting "Запускать игру на Земле": the giant forest (Земля 2).
 const EARTH2_SCENE := "res://scenes/earth2.tscn"
-## Developer setting "Запускать игру в Огне": the fire forge.
+## Developer setting "Запускать игру в Огне alpha": the fire forge.
 const FIRE_SCENE := "res://scenes/fire.tscn"
-## Developer setting "Запускать игру на Льду": the ice valley.
+## Developer setting "Запускать игру на Льду alpha": the ice valley.
 const ICE_SCENE := "res://scenes/ice.tscn"
-## Developer setting "Запускать игру в Огне 2": the volcano.
+## Developer setting "Запускать игру в Огне": the volcano (Огонь 2).
 const FIRE2_SCENE := "res://scenes/fire2.tscn"
-## Developer setting "Запускать игру на Льду 2": the ice cave.
+## Developer setting "Запускать игру на Льду": the ice cave (Лёд 2).
 const ICE2_SCENE := "res://scenes/ice2.tscn"
+## With no developer start option on, «Играть» picks one of these at random.
+const RANDOM_SCENES: Array[String] = [GAME_SCENE, FIRE2_SCENE, ICE2_SCENE, EARTH2_SCENE]
 const TRANSITION_TIME := 0.3
 ## Speed-up for a wave that is interrupted by another hover.
 const HURRY_SPEED := 2.5
@@ -591,23 +595,25 @@ func _on_play_pressed() -> void:
 		button.disabled = true
 	_fade_out_music()
 	_keep_click_sound()
-	var scene := GAME_SCENE
+	var scene: String = RANDOM_SCENES.pick_random()
 	# Developer start options: public builds ignore a saved one.
 	if OS.is_debug_build():
 		if GameSettings.start_in_void:
 			scene = VOID_SCENE
-		elif GameSettings.start_on_earth:
-			scene = EARTH_SCENE
+		elif GameSettings.start_in_air:
+			scene = GAME_SCENE
+		elif GameSettings.start_in_fire2:
+			scene = FIRE2_SCENE
+		elif GameSettings.start_on_ice2:
+			scene = ICE2_SCENE
 		elif GameSettings.start_on_earth2:
 			scene = EARTH2_SCENE
 		elif GameSettings.start_in_fire:
 			scene = FIRE_SCENE
 		elif GameSettings.start_on_ice:
 			scene = ICE_SCENE
-		elif GameSettings.start_in_fire2:
-			scene = FIRE2_SCENE
-		elif GameSettings.start_on_ice2:
-			scene = ICE2_SCENE
+		elif GameSettings.start_on_earth:
+			scene = EARTH_SCENE
 	get_tree().change_scene_to_file(scene)
 
 

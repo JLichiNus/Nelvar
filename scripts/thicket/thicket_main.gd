@@ -1,6 +1,6 @@
 class_name NelvarThicketMain
 extends Node2D
-## The giant forest, Земля 2 (developer setting "Запускать игру на Земле 2"): the floor of a
+## The giant forest, Земля 2 (developer setting "Запускать игру на Земле"): the floor of a
 ## forest of giants, the player the size of a beetle. Trunks wider than the screen go up
 ## into the dark of the crowns; grass blades are taller than the player, an acorn is a
 ## boulder, a mushroom's cap a roof. The sun comes through the crowns in flecks and in rays

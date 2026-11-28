@@ -3,7 +3,7 @@ extends Node2D
 ## миром (start(world, forest, props)) — на суше в кольце вокруг игрока,
 ## не в небе, не в стволах деревьев и не в камнях. Другие карты (земляная
 ## долина) передают start_on(ground): у него есть spawn_position и
-## has_clearance(point, radius).
+## has_clearance(point, radius) или can_spawn_at(point, radius).
 
 
 ## The only kind when enemy_kinds is empty.
@@ -152,7 +152,10 @@ func _pick_world_spawn_point() -> Variant:
 			* randf_range(min_distance_from_player, max_distance)
 		if _world != null and not _world.has_clearance(point, spawn_clearance):
 			continue
-		if _ground != null and not _ground.call("has_clearance", point, spawn_clearance):
+		# can_spawn_at, если есть, заменяет has_clearance (вулкан: ещё и плиты магмы).
+		if _ground != null and not _ground.call(
+				"can_spawn_at" if _ground.has_method("can_spawn_at") else "has_clearance",
+				point, spawn_clearance):
 			continue
 		if _ground != null and _ground.has_method("path_distance") and is_instance_valid(player):
 			var walk: float = _ground.call("path_distance", point)
