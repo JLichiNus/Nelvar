@@ -46,6 +46,8 @@ const HINT_SINK := "Маленький лист тонет под весом. Н
 const MESSAGE_FADE := 0.6
 const MESSAGE_HOLD := 3.0
 const MAX_GLOWS := 16
+## Bands of rows the floor's maps are built in, at once.
+const FIELD_BANDS := 32
 const GLOW := Color(0.18, 0.42, 0.44)
 const DEW_SPLASH := Color(0.74, 0.9, 0.96)
 const CRUMBLE := preload("res://assets/audio/sfx/earth_crumble.tres")
@@ -73,10 +75,14 @@ var fallen_fade := 0.0
 var _time := 0.0
 var _painter := NelvarThicketPainter.new()
 var _giant_painter := NelvarGiantPainter.new()
+## One painter a physical core: GDScript threads past that slow each other down.
 var _painters := clampi(OS.get_processor_count() >> 1, 2, 12)
-## Paint jobs ([kind, item]) and their results.
+## Paint jobs ([kind, item], a band: [kind, plan, rows]) and their results.
 var _jobs: Array = []
 var _results: Array = []
+## The trunks and the fallen giant laid together from their bands: [plan, bands], the art.
+var _finishing: Array = []
+var _finished: Array = []
 var _field: NelvarThicketField
 var _swaying: Array[NelvarThicketThing] = []
 var _mushrooms: Array[NelvarThicketThing] = []
@@ -323,15 +329,27 @@ func _draw_outlines() -> void:
 
 
 ## Everything on the floor, the trunks, the roots, the fallen giant and the traps' and
-## puffballs' looks, painted on several cores (the biggest first); the floor's maps alongside.
+## puffballs' looks, painted on several cores (the biggest first), the trunks, the fallen
+## giant and the floor's maps in bands of rows; then the bands laid together.
 func _paint_world() -> void:
-	for giant in data.giants:
-		_jobs.append(["trunk", giant])
+	_field = NelvarThicketField.start(data, FIELD_BANDS)
+	var trunks: Array[NelvarGiantPainter.TrunkPlan] = []
+	var fallen_plan: NelvarGiantPainter.FallenPlan = null
 	if data.fallen != null:
-		_jobs.append(["fallen", data.fallen])
 		_jobs.append(["plate", data.fallen])
 	for root in data.roots:
 		_jobs.append(["root", root])
+	if data.fallen != null:
+		fallen_plan = _giant_painter.plan_fallen(data.fallen)
+		for rows in fallen_plan.bands():
+			_jobs.append(["fallen", fallen_plan, rows])
+	for giant in data.giants:
+		var plan := _giant_painter.plan_trunk(giant)
+		trunks.append(plan)
+		for rows in plan.bands():
+			_jobs.append(["trunk", plan, rows])
+	for band in _field.band_count():
+		_jobs.append(["field", band])
 	for thing in data.things:
 		_jobs.append(["thing", thing])
 	for trap in data.flytraps:
@@ -341,26 +359,46 @@ func _paint_world() -> void:
 	for raft in data.rafts:
 		_jobs.append(["raft", raft])
 	_results.resize(_jobs.size())
-	var field_task := WorkerThreadPool.add_task(_build_field, true, "Thicket floor map")
 	var group := WorkerThreadPool.add_group_task(_paint_job, _jobs.size(), _painters, true, "Thicket art")
 	WorkerThreadPool.wait_for_group_task_completion(group)
-	WorkerThreadPool.wait_for_task_completion(field_task)
+	var bands := {}
+	for i in _jobs.size():
+		if _jobs[i][0] == "trunk" or _jobs[i][0] == "fallen":
+			if not bands.has(_jobs[i][1]):
+				bands[_jobs[i][1]] = []
+			bands[_jobs[i][1]].append(_results[i])
+	for plan in trunks:
+		_finishing.append([plan, bands[plan]])
+	if fallen_plan != null:
+		_finishing.append([fallen_plan, bands[fallen_plan]])
+	_finished.resize(_finishing.size())
+	var finishing := WorkerThreadPool.add_group_task(_finish_job, _finishing.size(), _painters, true, "Thicket art, finishing")
+	_field.finish()
+	WorkerThreadPool.wait_for_group_task_completion(finishing)
 	var trap_arts := []
 	var puff_arts := []
 	var raft_arts := []
 	_fallen_material = ShaderMaterial.new()
 	_fallen_material.shader = NelvarGiantTrunk.SHADER
+	for i in trunks.size():
+		var art: NelvarEarthArt = _finished[i]
+		art.bake()
+		var node := NelvarGiantTrunk.new()
+		node.setup(trunks[i].giant, art)
+		actors.add_child(node)
+		trunk_nodes.append(node)
+	if fallen_plan != null:
+		for piece: NelvarGiantPainter.Piece in _finished[trunks.size()]:
+			piece.art.bake()
+			var node := NelvarGiantTrunk.Piece.new()
+			node.setup(piece, _fallen_material)
+			node.name = "Fallen_%d" % fallen_pieces.size()
+			actors.add_child(node)
+			fallen_pieces.append(node)
 	for i in _jobs.size():
 		var job: Array = _jobs[i]
 		var result: Variant = _results[i]
 		match job[0]:
-			"trunk":
-				var art: NelvarEarthArt = result
-				art.bake()
-				var node := NelvarGiantTrunk.new()
-				node.setup(job[1], art)
-				actors.add_child(node)
-				trunk_nodes.append(node)
 			"root":
 				for piece: NelvarGiantPainter.Piece in result:
 					piece.art.bake()
@@ -372,14 +410,6 @@ func _paint_world() -> void:
 					NelvarOcclusionOutline.add_occluder(node, piece.art.texture,
 						Rect2(piece.origin + piece.art.local_rect.position, piece.art.local_rect.size))
 					node.tree_exiting.connect(NelvarOcclusionOutline.remove_occluder.bind(node))
-			"fallen":
-				for piece: NelvarGiantPainter.Piece in result:
-					piece.art.bake()
-					var node := NelvarGiantTrunk.Piece.new()
-					node.setup(piece, _fallen_material)
-					node.name = "Fallen_%d" % fallen_pieces.size()
-					actors.add_child(node)
-					fallen_pieces.append(node)
 			"plate":
 				var piece: NelvarGiantPainter.Piece = result
 				if piece != null:
@@ -423,20 +453,24 @@ func _paint_world() -> void:
 	rafts.setup(data, raft_arts)
 	_jobs.clear()
 	_results.clear()
+	_finishing.clear()
+	_finished.clear()
 
 
 func _paint_job(index: int) -> void:
 	var job: Array = _jobs[index]
 	match job[0]:
 		"trunk":
-			_results[index] = _giant_painter.paint_trunk(job[1])
+			_results[index] = _giant_painter.paint_trunk_rows(job[1], job[2])
 		"fallen":
-			_results[index] = _giant_painter.paint_fallen(job[1])
+			_results[index] = _giant_painter.paint_fallen_rows(job[1], job[2])
 		"plate":
 			_results[index] = _giant_painter.paint_plate(job[1])
 		"root":
 			var root: NelvarThicketData.Root = job[1]
 			_results[index] = _giant_painter.paint_root(root, data.giants[root.giant].species)
+		"field":
+			_field.build_band(data, job[1])
 		"thing":
 			_results[index] = _painter.paint(job[1])
 		"trap":
@@ -450,8 +484,12 @@ func _paint_job(index: int) -> void:
 			_results[index] = _painter.paint_raft(job[1])
 
 
-func _build_field() -> void:
-	_field = NelvarThicketField.build(data)
+func _finish_job(index: int) -> void:
+	var plan: NelvarGiantPainter.Plan = _finishing[index][0]
+	if plan is NelvarGiantPainter.TrunkPlan:
+		_finished[index] = _giant_painter.finish_trunk(plan, _finishing[index][1])
+	else:
+		_finished[index] = _giant_painter.finish_fallen(plan, _finishing[index][1])
 
 
 func _setup_ground() -> void:

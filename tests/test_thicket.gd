@@ -472,7 +472,7 @@ func _check_scene() -> void:
 	game.enemy_spawner.set_process(false)
 	await physics_frame
 	_check(game.thing_nodes.size() == data.things.size() and game.trunk_nodes.size() == data.giants.size()
-		and game.root_pieces.size() > data.roots.size() and not game.fallen_pieces.is_empty(),
+		and game.root_pieces.size() >= data.roots.size() and not game.fallen_pieces.is_empty(),
 		"Some things, trunks, roots or the fallen giant are missing")
 	await _check_loose(game, data, player)
 	await _check_water(game, data, player)
@@ -503,7 +503,6 @@ func _check_loose(game: Node, data: NelvarThicketData, player: NelvarPlayer) -> 
 				break
 		if spot.is_finite():
 			break
-	_check(spot.is_finite(), "No loose earth to stand on")
 	if not spot.is_finite():
 		return
 	await _heal(player)

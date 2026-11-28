@@ -16,7 +16,7 @@ const SHADOW := Color(0.16, 0.26, 0.3, 0.22)
 static func ramp(colors: Array[Color], level: float, cell: Vector2i) -> Color:
 	var t := clampf(level, 0.0, 0.9999) * (colors.size() - 1)
 	var index := int(t)
-	if (t - index) * 16.0 > bayer(cell) + 0.5:
+	if (t - index) * 16.0 > BAYER[(cell.y & 3) * 4 + (cell.x & 3)] + 0.5:
 		return colors[index + 1]
 	return colors[index]
 
@@ -32,10 +32,21 @@ static func value_noise(x: float, y: float, salt: int) -> float:
 	var fy := y - iy
 	var sx := fx * fx * (3.0 - 2.0 * fx)
 	var sy := fy * fy * (3.0 - 2.0 * fy)
-	var a := hash01(ix, iy, salt)
-	var b := hash01(ix + 1, iy, salt)
-	var c := hash01(ix, iy + 1, salt)
-	var d := hash01(ix + 1, iy + 1, salt)
+	# hash01() of the four corners, written out: in a painter running on many threads a
+	# GDScript call costs far more than the hash itself.
+	var corner := ix * 374761393 + iy * 668265263 + salt * 2246822519
+	var h := corner & 0xffffffff
+	h = ((h ^ (h >> 13)) * 1274126177) & 0xffffffff
+	var a := float((h ^ (h >> 16)) & 0xffff) / 65535.0
+	h = (corner + 374761393) & 0xffffffff
+	h = ((h ^ (h >> 13)) * 1274126177) & 0xffffffff
+	var b := float((h ^ (h >> 16)) & 0xffff) / 65535.0
+	h = (corner + 668265263) & 0xffffffff
+	h = ((h ^ (h >> 13)) * 1274126177) & 0xffffffff
+	var c := float((h ^ (h >> 16)) & 0xffff) / 65535.0
+	h = (corner + 374761393 + 668265263) & 0xffffffff
+	h = ((h ^ (h >> 13)) * 1274126177) & 0xffffffff
+	var d := float((h ^ (h >> 16)) & 0xffff) / 65535.0
 	return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy
 
 

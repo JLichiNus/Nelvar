@@ -985,8 +985,6 @@ func _lily_room(center: Vector2, radius: float, pond: NelvarEarthData.Radial,
 
 func _hazards(rng: RandomNumberGenerator) -> void:
 	_resin(rng)
-	_loose(rng)
-	_flytraps(rng)
 	_puffballs(rng)
 
 
@@ -1311,7 +1309,7 @@ func _things(rng: RandomNumberGenerator) -> void:
 	_acorns(rng)
 	# Flat and soft things last: they fill in between.
 	_place(rng, Kind.GRASS_BLADES, _config.grass_clumps, func() -> Array:
-		var point := _sunny_spot(rng) if rng.randf() < 0.6 else _spot(rng, true)
+		var point := _sunny_spot(rng) if rng.randf() < 0.3 else _spot(rng, true)
 		return [point, rng.randf_range(18.0, 34.0), false, false, 4.0, Vector2(0.0, rng.randf_range(80.0, 160.0))])
 	_place(rng, Kind.CLOVER, _config.clovers, func() -> Array:
 		return [_sunny_spot(rng), rng.randf_range(34.0, 56.0), false, false, 4.0, Vector2.ZERO])

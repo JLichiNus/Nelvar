@@ -49,6 +49,74 @@ const DARK_HOLE: Array[Color] = [Color8(8, 6, 6), Color8(18, 13, 11), Color8(30,
 const STONE: Array[Color] = [Color8(84, 84, 82), Color8(120, 118, 110), Color8(160, 156, 144)]
 
 
+## Rows of a big picture painted in one go on one thread: the picture is cut into bands this
+## high so that several threads share one trunk.
+const BAND_ROWS := 48
+## How much a trunk's foot flares out.
+const FLARE := 0.16
+
+
+## A big picture painted in bands: what its rows need. The rows of each band are painted on
+## their own thread (the band's own Sheet); finishing lays them in and goes on with `rng`.
+class Plan:
+	var rng := RandomNumberGenerator.new()
+	var salt := 0
+	## The world art pixels of the picture's top-left and bottom-right.
+	var from := Vector2i.ZERO
+	var to := Vector2i.ZERO
+
+	## The bands' rows: (first, last), top to bottom.
+	func bands() -> Array[Vector2i]:
+		var result: Array[Vector2i] = []
+		var rows := maxi(1, to.y - from.y + 1)
+		for first in range(0, rows, BAND_ROWS):
+			result.append(Vector2i(first, mini(first + BAND_ROWS, rows) - 1))
+		return result
+
+	func band(rows: Vector2i) -> Sheet:
+		return Sheet.new(Vector2i(from.x, from.y + rows.x), Vector2i(to.x, from.y + rows.y))
+
+	func sheet(painted: Array) -> Sheet:
+		var whole := Sheet.new(from, to)
+		whole.stack(painted)
+		return whole
+
+
+class TrunkPlan extends Plan:
+	var giant: NelvarThicketData.Giant
+	var r := 0.0
+	var h := 0.0
+	var tall := 0.0
+	var center := Vector2.ZERO
+	var colors: Array
+	var slant := 0.0
+	## Per column: the height of the base (the front of the circle) and the buttress running
+	## down there: its ridge on the base, the column across it (-1..1), its reach and height.
+	var bottoms := PackedFloat64Array()
+	var ridges := PackedFloat64Array()
+	var ridge_dx := PackedFloat64Array()
+	var ridge_reach := PackedFloat64Array()
+	var ridge_height := PackedFloat64Array()
+
+
+class FallenPlan extends Plan:
+	var fallen: NelvarThicketData.Fallen
+	var axis := Vector2.ZERO
+	var normal := Vector2.ZERO
+	var start := Vector2.ZERO
+	var length := 0.0
+	var radius := 0.0
+	var tunnel := 0.0
+	var sink := 0.0
+	var hollow_center := 0.0
+	var top := 0.0
+	var ground_half := 0.0
+	var open := 0.0
+	var pieces := 0
+	var origins: Array[Vector2] = []
+	var alongs := PackedFloat32Array()
+
+
 ## A piece of something long, sorted by its own lowest point (`origin`, world units).
 class Piece:
 	var origin := Vector2.ZERO
@@ -98,6 +166,16 @@ class Sheet:
 
 	func image() -> Image:
 		return Image.create_from_data(size.x, size.y, false, Image.FORMAT_RGBA8, data)
+
+	## Lays in the bands painted on other threads (each from band()), top to bottom.
+	func stack(bands: Array) -> void:
+		data = PackedByteArray()
+		owner = PackedInt32Array()
+		level = PackedFloat32Array()
+		for part: Sheet in bands:
+			data.append_array(part.data)
+			owner.append_array(part.owner)
+			level.append_array(part.level)
 
 	## Dark outline on the shaded outer edge (the lit upper right stays open).
 	func outline(color: Color, limit: float) -> void:
@@ -156,7 +234,7 @@ class Sheet:
 static func ramp(colors: Array, level: float, x: int, y: int) -> Color:
 	var t := clampf(level, 0.0, 0.9999) * (colors.size() - 1)
 	var index := int(t)
-	if (t - index) * 16.0 > NelvarPixelArt.bayer(Vector2i(x, y)) + 0.5:
+	if (t - index) * 16.0 > NelvarPixelArt.BAYER[(y & 3) * 4 + (x & 3)] + 0.5:
 		index += 1
 	return colors[mini(index, colors.size() - 1)]
 
@@ -166,63 +244,113 @@ static func trunk_top(giant: NelvarThicketData.Giant) -> float:
 	return maxf(giant.height + TOP_FADE * 0.5, TRUNK_REACH - giant.radius)
 
 
-static func noise(x: float, y: float, salt: int) -> float:
-	return NelvarPixelArt.value_noise(x, y, salt)
-
-
 # --- Trunks -------------------------------------------------------------------------------
 
 ## A giant's trunk: the foot along the front of its base circle with a flare, the bark of
 ## its kind lit from the right with a bright rim, moss at the foot, shelf fungi, now and then
 ## a hollow; plain bark above the seen height up to trunk_top(). `eye` is the hollow's
-## middle.
+## middle. In one go here; plan_trunk(), paint_trunk_rows() for each band of
+## TrunkPlan.bands() (on any threads) and finish_trunk() paint the same.
 func paint_trunk(giant: NelvarThicketData.Giant) -> NelvarEarthArt:
-	var rng := RandomNumberGenerator.new()
+	var plan := plan_trunk(giant)
+	var bands := []
+	for rows in plan.bands():
+		bands.append(paint_trunk_rows(plan, rows))
+	return finish_trunk(plan, bands)
+
+
+func plan_trunk(giant: NelvarThicketData.Giant) -> TrunkPlan:
+	var plan := TrunkPlan.new()
+	plan.giant = giant
+	var rng := plan.rng
 	rng.seed = giant.appearance_seed
 	var r := giant.radius / STEP
-	var h := giant.height / STEP
-	var tall := trunk_top(giant) / STEP
+	plan.r = r
+	plan.h = giant.height / STEP
+	plan.tall = trunk_top(giant) / STEP
 	var center := giant.center / STEP
-	var flare := 0.16
-	var reach := r * (1.0 + flare) + 14.0
-	var sheet := Sheet.new(Vector2i((center + Vector2(-reach, -tall)).floor()),
-		Vector2i((center + Vector2(reach, r + 3.0)).ceil()))
-	var colors: Array = BARK[giant.species]
-	var salt := rng.randi() & 0xffff
-	var slant := rng.randf_range(-0.05, 0.05)
+	plan.center = center
+	var reach := r * (1.0 + FLARE) + 14.0
+	plan.from = Vector2i((center + Vector2(-reach, -plan.tall)).floor())
+	plan.to = Vector2i((center + Vector2(reach, r + 3.0)).ceil()).max(plan.from)
+	plan.colors = BARK[giant.species]
+	plan.salt = rng.randi() & 0xffff
+	plan.slant = rng.randf_range(-0.05, 0.05)
 	# Buttresses: ridges of the foot running down into the roots (x, half width, reach, height).
 	var buttresses: Array[Vector4] = []
 	for i in rng.randi_range(5, 7):
 		var at := lerpf(-0.92, 0.92, (i + rng.randf_range(0.2, 0.8)) / 6.5)
-		buttresses.append(Vector4(at * r * (1.0 + flare), r * rng.randf_range(0.1, 0.18),
+		buttresses.append(Vector4(at * r * (1.0 + FLARE), r * rng.randf_range(0.1, 0.18),
 			r * rng.randf_range(0.08, 0.2), r * rng.randf_range(0.35, 0.7)))
+	# Height above the ground in each column: the base is the front of the circle, pushed out
+	# where a buttress runs down (the highest one there).
+	var width := plan.to.x - plan.from.x + 1
+	plan.bottoms.resize(width)
+	plan.ridges.resize(width)
+	plan.ridge_dx.resize(width)
+	plan.ridge_reach.resize(width)
+	plan.ridge_height.resize(width)
+	for x in width:
+		var local_x := (Vector2(plan.from + Vector2i(x, 0)) + Vector2(0.5, 0.5) - center).x
+		plan.bottoms[x] = r * sqrt(maxf(0.0, 1.0 - pow(local_x / (r * (1.0 + FLARE)), 2.0)))
+		var ridge := 0.0
+		for b in buttresses:
+			var dx := (local_x - b.x) / b.y
+			if absf(dx) < 1.0:
+				var bump := (1.0 - dx * dx)
+				if bump * b.z > ridge:
+					ridge = bump * b.z
+					plan.ridge_dx[x] = dx
+					plan.ridge_reach[x] = b.z
+					plan.ridge_height[x] = b.w
+		plan.ridges[x] = ridge
+	return plan
+
+
+## The rows (first, last) of a trunk: a band of its picture.
+func paint_trunk_rows(plan: TrunkPlan, rows: Vector2i) -> Sheet:
+	# All the loop reads is in locals, and Sheet.put() is written out: in the editor's build
+	# each call and each read of another object's property takes a lock all threads share.
+	var sheet := plan.band(rows)
+	var species := plan.giant.species
+	var birch := species == Wood.BIRCH
+	var r := plan.r
+	var center := plan.center
+	var colors := plan.colors
+	var bright: Color = colors[colors.size() - 1]
+	var salt := plan.salt
+	var tall := plan.tall
+	var slant := plan.slant
+	var bottoms := plan.bottoms
+	var ridges := plan.ridges
+	var ridge_dx := plan.ridge_dx
+	var ridge_reach := plan.ridge_reach
+	var ridge_height := plan.ridge_height
+	var corner := sheet.corner
+	var width := sheet.size.x
+	var data := sheet.data
+	var owner := sheet.owner
+	var levels := sheet.level
 	for y in sheet.size.y:
-		for x in sheet.size.x:
-			var world := Vector2(sheet.corner + Vector2i(x, y))
+		for x in width:
+			var world := Vector2(corner + Vector2i(x, y))
 			var local := world + Vector2(0.5, 0.5) - center
-			# Height above the ground in this column: the base is the front of the circle,
-			# pushed out where a buttress runs down.
-			var bottom := r * sqrt(maxf(0.0, 1.0 - pow(local.x / (r * (1.0 + flare)), 2.0)))
-			var ridge := 0.0
+			var bottom := bottoms[x]
+			var ridge := ridges[x]
 			var ridge_side := 0.0
-			for b in buttresses:
-				var dx := (local.x - b.x) / b.y
-				if absf(dx) < 1.0:
-					var bump := (1.0 - dx * dx)
-					if bump * b.z > ridge:
-						ridge = bump * b.z
-						ridge_side = dx * minf(1.0, b.w / maxf(1.0, bottom + b.z - local.y))
+			if ridge > 0.0:
+				ridge_side = ridge_dx[x] * minf(1.0, ridge_height[x] / maxf(1.0, bottom + ridge_reach[x] - local.y))
 			bottom += ridge
 			var above := bottom - local.y
 			if above < 0.0 or local.y < -tall:
 				continue
-			var half := r * (1.0 + flare * exp(-above / (r * 0.32)))
+			var half := r * (1.0 + FLARE * exp(-above / (r * 0.32)))
 			var lean := slant * maxf(0.0, -local.y)
 			var u := (local.x - lean) / half
 			if absf(u) > 1.0:
 				continue
-			var gx := sheet.corner.x + x
-			var gy := sheet.corner.y + y
+			var gx := corner.x + x
+			var gy := corner.y + y
 			var nz := sqrt(maxf(0.0, 1.0 - u * u))
 			var lit := u * SUN.x + nz * 0.72
 			var level := 0.3 + lit * 0.5
@@ -231,26 +359,39 @@ func paint_trunk(giant: NelvarThicketData.Giant) -> NelvarEarthArt:
 				level += ridge_side * 0.35 * (1.0 - above / (r * 0.7))
 			# Around the trunk, along its bark: the pattern of each kind.
 			var around := asin(clampf(u, -1.0, 1.0)) * r
-			var color := _bark(giant.species, colors, around, local.y, above, level, gx, gy, salt)
-			if u > 0.88 and giant.species != Wood.BIRCH:
-				color = color.lerp(colors[colors.size() - 1], 0.45)
+			var color := _bark(species, colors, around, local.y, above, level, gx, gy, salt)
+			if u > 0.88 and not birch:
+				color = color.lerp(bright, 0.45)
 			# Moss and soil at the foot, in patches, more on the shaded side.
-			var foot := 3.0 + noise(around * 0.15, 0.0, salt + 7) * 12.0 + (1.0 - u) * 4.0
-			if above < foot * (0.5 if giant.species == Wood.BIRCH else 1.0):
+			var foot := 3.0 + NelvarPixelArt.value_noise(around * 0.15, 0.0, salt + 7) * 12.0 + (1.0 - u) * 4.0
+			if above < foot * (0.5 if birch else 1.0):
 				if above < 2.5:
 					color = ramp(SOIL, level - 0.1, gx, gy)
-				elif noise(gx * 0.3, gy * 0.3, salt + 13) > 0.42:
+				elif NelvarPixelArt.value_noise(gx * 0.3, gy * 0.3, salt + 13) > 0.42:
 					color = ramp(FOOT_MOSS, level, gx, gy)
 			if absf(u) > 0.97:
-				color = OUTLINE if u < 0.0 else color.lerp(colors[colors.size() - 1], 0.6)
+				color = OUTLINE if u < 0.0 else color.lerp(bright, 0.6)
 			if above < 1.0:
 				color = color.darkened(0.45)
-			sheet.put(x, y, color, FADES if above > FOOT_BAND else 255, -1, level)
+			var i := y * width + x
+			data[i * 4] = color.r8
+			data[i * 4 + 1] = color.g8
+			data[i * 4 + 2] = color.b8
+			data[i * 4 + 3] = FADES if above > FOOT_BAND else 255
+			owner[i] = -1
+			levels[i] = level
+	return sheet
+
+
+## The trunk from its bands (in order): the marks on its bark, its hollow.
+func finish_trunk(plan: TrunkPlan, bands: Array) -> NelvarEarthArt:
+	var giant := plan.giant
+	var sheet := plan.sheet(bands)
 	var art := NelvarEarthArt.new()
-	_trunk_marks(sheet, giant, rng, r, h, center, salt)
+	_trunk_marks(sheet, giant, plan.rng, plan.r, plan.h, plan.center, plan.salt)
 	art.image = sheet.image()
 	art.local_rect = Rect2(Vector2(sheet.corner) * STEP - giant.center, Vector2(sheet.size) * STEP)
-	art.eye = _hollow(sheet, giant, rng, r, h, center)
+	art.eye = _hollow(sheet, giant, plan.rng, plan.r, plan.h, plan.center)
 	return art
 
 
@@ -260,10 +401,10 @@ func _bark(species: int, colors: Array, around: float, y: float, above: float, l
 		gx: int, gy: int, salt: int) -> Color:
 	match species:
 		Wood.OAK:
-			var furrow := noise(around * 0.32, y * 0.035, salt)
-			var plates := noise(around * 0.32, y * 0.16, salt + 3)
+			var furrow := NelvarPixelArt.value_noise(around * 0.32, y * 0.035, salt)
+			var plates := NelvarPixelArt.value_noise(around * 0.32, y * 0.16, salt + 3)
 			if furrow < 0.36:
-				if furrow < 0.3 and above < 120.0 and noise(around * 0.5, y * 0.08, salt + 5) > 0.55:
+				if furrow < 0.3 and above < 120.0 and NelvarPixelArt.value_noise(around * 0.5, y * 0.08, salt + 5) > 0.55:
 					return ramp(MOSS, level - 0.05, gx, gy)
 				return ramp(colors, level - 0.4, gx, gy)
 			if plates < 0.2:
@@ -272,7 +413,7 @@ func _bark(species: int, colors: Array, around: float, y: float, above: float, l
 		Wood.PINE:
 			# Thick plates of an old pine: irregular, much longer than wide, split by furrows that
 			# wander up the trunk (cells of a jittered grid measured stretched along the trunk).
-			var warp := (noise(around * 0.04, y * 0.015, salt) - 0.5) * 10.0
+			var warp := (NelvarPixelArt.value_noise(around * 0.04, y * 0.015, salt) - 0.5) * 10.0
 			var q := Vector2(around + warp, y) / PINE_PLATE
 			var base := Vector2i(q.floor())
 			var f1 := INF
@@ -283,8 +424,15 @@ func _bark(species: int, colors: Array, around: float, y: float, above: float, l
 			for j in range(-1, 2):
 				for i in range(-1, 2):
 					var c := base + Vector2i(i, j)
-					var p := Vector2(c) + Vector2(0.15 + 0.7 * NelvarPixelArt.hash01(c.x, c.y, salt + 1),
-						0.1 + 0.8 * NelvarPixelArt.hash01(c.x, c.y, salt + 2))
+					# NelvarPixelArt.hash01(c.x, c.y, salt + 1) and (…, salt + 2), written out (a
+					# call costs more than the hash; nine cells a pixel).
+					var cell := c.x * 374761393 + c.y * 668265263
+					var h1 := (cell + (salt + 1) * 2246822519) & 0xffffffff
+					h1 = ((h1 ^ (h1 >> 13)) * 1274126177) & 0xffffffff
+					var h2 := (cell + (salt + 2) * 2246822519) & 0xffffffff
+					h2 = ((h2 ^ (h2 >> 13)) * 1274126177) & 0xffffffff
+					var p := Vector2(c) + Vector2(0.15 + 0.7 * (float((h1 ^ (h1 >> 16)) & 0xffff) / 65535.0),
+						0.1 + 0.8 * (float((h2 ^ (h2 >> 16)) & 0xffff) / 65535.0))
 					var d := q.distance_to(p)
 					if d < f1:
 						f2 = f1
@@ -301,7 +449,7 @@ func _bark(species: int, colors: Array, around: float, y: float, above: float, l
 			var normal := (second - near).normalized() * PINE_PLATE
 			var edge := (f2 - f1) * 0.5 * normal.length()
 			var across := absf(normal.normalized().x)
-			var furrow := (0.7 + noise(around * 0.2, y * 0.05, salt + 6) * 1.6) * lerpf(0.4, 1.0, across)
+			var furrow := (0.7 + NelvarPixelArt.value_noise(around * 0.2, y * 0.05, salt + 6) * 1.6) * lerpf(0.4, 1.0, across)
 			if edge < furrow:
 				return ramp(colors, level - (0.75 if edge < furrow * 0.5 and across > 0.5 else 0.55), gx, gy)
 			var o := q - near
@@ -315,26 +463,26 @@ func _bark(species: int, colors: Array, around: float, y: float, above: float, l
 				elif second.y > near.y:
 					shade -= 0.15
 			# Fibres along the trunk, and the orange underneath where the top layer flaked off.
-			var fibre := noise(around * 0.6, y * 0.07, salt + 4)
-			var flake := noise(around * 0.15, y * 0.04, salt + 5)
+			var fibre := NelvarPixelArt.value_noise(around * 0.6, y * 0.07, salt + 4)
+			var flake := NelvarPixelArt.value_noise(around * 0.15, y * 0.04, salt + 5)
 			if flake > 0.72 and tone > -0.2:
 				return ramp(colors, level + 0.25 + (fibre - 0.5) * 0.2, gx, gy)
 			return ramp(colors, level + shade + (fibre - 0.5) * 0.25, gx, gy)
 		Wood.BIRCH:
-			if above < 90.0 * noise(around * 0.1, 0.0, salt + 2) + 20.0:
+			if above < 90.0 * NelvarPixelArt.value_noise(around * 0.1, 0.0, salt + 2) + 20.0:
 				# The rough black foot of an old birch.
-				var crack := noise(around * 0.4, y * 0.05, salt)
+				var crack := NelvarPixelArt.value_noise(around * 0.4, y * 0.05, salt)
 				if crack < 0.45:
 					return ramp(CHAGA, level, gx, gy)
 			var mark := NelvarPixelArt.hash01(floori(around / 4.0), gy, salt + 9)
-			if mark < 0.05 or (mark < 0.12 and noise(around * 0.3, y * 0.5, salt + 4) > 0.6):
+			if mark < 0.05 or (mark < 0.12 and NelvarPixelArt.value_noise(around * 0.3, y * 0.5, salt + 4) > 0.6):
 				return BIRCH_MARK
 			return ramp(colors, level + 0.1, gx, gy)
 	# Dead: bare grey wood, long cracks, a scrap of bark here and there.
-	var crack := absf(noise(around * 0.5, y * 0.012, salt) - 0.5)
+	var crack := absf(NelvarPixelArt.value_noise(around * 0.5, y * 0.012, salt) - 0.5)
 	if crack < 0.03:
 		return OUTLINE
-	if noise(around * 0.08, y * 0.03, salt + 8) > 0.72:
+	if NelvarPixelArt.value_noise(around * 0.08, y * 0.03, salt + 8) > 0.72:
 		return ramp(BARK[Wood.OAK], level - 0.1, gx, gy)
 	return ramp(colors, level, gx, gy)
 
@@ -367,7 +515,7 @@ func _trunk_marks(sheet: Sheet, giant: NelvarThicketData.Giant, rng: RandomNumbe
 			var size := rng.randf_range(3.0, 6.0)
 			for y in range(-int(size) - 1, int(size) + 2):
 				for x in range(-int(size) - 1, int(size) + 2):
-					var d := Vector2(x, y).length() / (size * (0.8 + noise(x * 0.7, y * 0.7, salt) * 0.4))
+					var d := Vector2(x, y).length() / (size * (0.8 + NelvarPixelArt.value_noise(x * 0.7, y * 0.7, salt) * 0.4))
 					var p := Vector2i(at.floor()) + Vector2i(x, y) - sheet.corner
 					if d < 1.0 and sheet.inside(p.x, p.y):
 						sheet.put(p.x, p.y, ramp(CHAGA, 0.6 - y / size * 0.3 + x / size * 0.2, p.x, p.y), FADES)
@@ -474,21 +622,28 @@ func paint_root(root: NelvarThicketData.Root, species: int) -> Array[Piece]:
 	var alongs := PackedFloat32Array()
 	alongs.resize(pieces)
 	# Columns of the ridge, from the back rows to the front ones: the front covers the back.
+	# (The root's and the sheet's arrays in locals: see paint_trunk_rows().)
+	var widths := root.widths
+	var heights := root.heights
+	var lifts := root.lifts
+	var parts := root.parts
+	var corner := sheet.corner
+	var width := sheet.size.x
 	for y in sheet.size.y:
-		for x in sheet.size.x:
-			var index := y * sheet.size.x + x
+		for x in width:
+			var index := y * width + x
 			if distance[index] == INF:
 				continue
 			var s := along[index]
 			var k := clampi(int(s / NelvarThicketData.ROOT_STEP), 0, points.size() - 2)
 			var t := s / NelvarThicketData.ROOT_STEP - k
-			var half := lerpf(root.widths[k], root.widths[k + 1], t) / STEP * 0.5
+			var half := lerpf(widths[k], widths[k + 1], t) / STEP * 0.5
 			var across := distance[index] / half
 			if across > 1.0:
 				continue
-			var part := root.parts[k] if t < 0.5 else root.parts[k + 1]
-			var top := lerpf(root.heights[k], root.heights[k + 1], t)
-			var lift := lerpf(root.lifts[k], root.lifts[k + 1], t)
+			var part := parts[k] if t < 0.5 else parts[k + 1]
+			var top := lerpf(heights[k], heights[k + 1], t)
+			var lift := lerpf(lifts[k], lifts[k + 1], t)
 			var profile := sqrt(1.0 - across * across)
 			var low := 0.0
 			var high := top * profile
@@ -497,29 +652,29 @@ func paint_root(root: NelvarThicketData.Root, species: int) -> Array[Piece]:
 				low = lift + body * 0.5 * (1.0 - profile)
 				high = lift + body * (0.5 + 0.5 * profile)
 			var piece := clampi(int(s / NelvarThicketData.PIECE), 0, pieces - 1)
-			var ground := Vector2(sheet.corner + Vector2i(x, y)) + Vector2(1.0, 1.0)
+			var ground := Vector2(corner + Vector2i(x, y)) + Vector2(1.0, 1.0)
 			if not origins[piece].is_finite() or ground.y * STEP > origins[piece].y:
 				origins[piece] = ground * STEP
 				alongs[piece] = s
 			var normal: Vector2 = side[index] * across
 			var shade := normal.x * SUN.x + normal.y * SUN.y + profile * SUN.z
 			var level := 0.25 + shade * 0.55
-			var gx := sheet.corner.x + x
-			var gy := sheet.corner.y + y
+			var gx := corner.x + x
+			var gy := corner.y + y
 			var steps := maxi(1, int(round(high - low)) + 1)
 			for z in steps:
 				var height := high - z
 				var py := y - int(round(height))
 				var color: Color
 				if part == Part.PASS:
-					color = ramp(SOIL, level + 0.15, gx, gy) if noise(gx * 0.6, gy * 0.6, salt) < 0.6 \
+					color = ramp(SOIL, level + 0.15, gx, gy) if NelvarPixelArt.value_noise(gx * 0.6, gy * 0.6, salt) < 0.6 \
 						else ramp(colors, level, gx, gy)
 				elif z == 0:
 					color = _root_top(colors, s, across, level, gx, gy, salt, top)
 				else:
 					color = ramp(colors, level - 0.22 - z * 0.015, gx, gy - z)
 					if height < 1.5 and lift <= 0.0:
-						color = ramp(SOIL, 0.35 + noise(gx, gy, salt + 3) * 0.4, gx, gy)
+						color = ramp(SOIL, 0.35 + NelvarPixelArt.value_noise(gx, gy, salt + 3) * 0.4, gx, gy)
 				sheet.put(x, py, color, 255, piece, level - (0.0 if z == 0 else 0.3))
 	sheet.outline(OUTLINE, 0.42)
 	_rootlets(sheet, root, points, salt)
@@ -528,8 +683,8 @@ func paint_root(root: NelvarThicketData.Root, species: int) -> Array[Piece]:
 
 func _root_top(colors: Array, along: float, across: float, level: float, gx: int, gy: int, salt: int,
 		height: float) -> Color:
-	var ridge := noise(along * 0.08, across * 2.0, salt)
-	if level > 0.45 and across < 0.6 and height > 6.0 and noise(gx * 0.18, gy * 0.18, salt + 11) > 0.58:
+	var ridge := NelvarPixelArt.value_noise(along * 0.08, across * 2.0, salt)
+	if level > 0.45 and across < 0.6 and height > 6.0 and NelvarPixelArt.value_noise(gx * 0.18, gy * 0.18, salt + 11) > 0.58:
 		return ramp(MOSS, level - 0.1, gx, gy)
 	if ridge < 0.3:
 		return ramp(colors, level - 0.3, gx, gy)
@@ -558,11 +713,23 @@ func _rootlets(sheet: Sheet, root: NelvarThicketData.Root, points: PackedVector2
 
 ## The fallen giant: a hollow trunk sunk a little into the ground, its bark half gone, moss,
 ## fungi and ferns on it; the broken end is open from above (its splintered rim, the rotten
-## wood inside); breaches in the south side show the dark inside. Cut along its length.
+## wood inside); breaches in the south side show the dark inside. Cut along its length. In
+## one go here; plan_fallen(), paint_fallen_rows() for each band and finish_fallen() paint the
+## same on several threads.
 func paint_fallen(fallen: NelvarThicketData.Fallen) -> Array[Piece]:
-	var rng := RandomNumberGenerator.new()
+	var plan := plan_fallen(fallen)
+	var bands := []
+	for rows in plan.bands():
+		bands.append(paint_fallen_rows(plan, rows))
+	return finish_fallen(plan, bands)
+
+
+func plan_fallen(fallen: NelvarThicketData.Fallen) -> FallenPlan:
+	var plan := FallenPlan.new()
+	plan.fallen = fallen
+	var rng := plan.rng
 	rng.seed = fallen.appearance_seed
-	var salt := rng.randi() & 0xffff
+	plan.salt = rng.randi() & 0xffff
 	var axis := fallen.axis()
 	var normal := fallen.normal()
 	var start := fallen.start / STEP
@@ -572,10 +739,19 @@ func paint_fallen(fallen: NelvarThicketData.Fallen) -> Array[Piece]:
 	var radius := fallen.radius / STEP / sqrt(1.0 - 0.35 * 0.35)
 	var tunnel := fallen.tunnel / STEP / sqrt(1.0 - 0.4 * 0.4)
 	var sink := radius * 0.35
-	var hollow_center := tunnel * 0.4
 	var top := sink + radius
 	var ground_half := fallen.radius / STEP
-	var open := rng.randf_range(34.0, 52.0)
+	plan.axis = axis
+	plan.normal = normal
+	plan.start = start
+	plan.length = length
+	plan.radius = radius
+	plan.tunnel = tunnel
+	plan.sink = sink
+	plan.hollow_center = tunnel * 0.4
+	plan.top = top
+	plan.ground_half = ground_half
+	plan.open = rng.randf_range(34.0, 52.0)
 	var lo := Vector2.INF
 	var hi := -Vector2.INF
 	for corner: Vector2 in [start + normal * ground_half, start - normal * ground_half,
@@ -584,18 +760,36 @@ func paint_fallen(fallen: NelvarThicketData.Fallen) -> Array[Piece]:
 		hi = hi.max(corner)
 	lo -= Vector2(4.0, top + 6.0)
 	hi += Vector2(4.0, 4.0)
-	var sheet := Sheet.new(Vector2i(lo.floor()), Vector2i(hi.ceil()))
-	var pieces := int(fallen.length() / NelvarThicketData.PIECE) + 1
-	var origins: Array[Vector2] = []
-	var alongs := PackedFloat32Array()
-	for k in pieces:
+	plan.from = Vector2i(lo.floor())
+	plan.to = Vector2i(hi.ceil()).max(plan.from)
+	plan.pieces = int(fallen.length() / NelvarThicketData.PIECE) + 1
+	for k in plan.pieces:
 		var s0 := k * NelvarThicketData.PIECE / STEP
 		var s1 := minf((k + 1) * NelvarThicketData.PIECE / STEP, length)
 		var a := start + axis * s0 + normal * ground_half
 		var b := start + axis * s1 + normal * ground_half
 		var low := a if a.y > b.y else b
-		origins.append(Vector2((a.x + b.x) * 0.5, low.y + 1.0) * STEP)
-		alongs.append(k * NelvarThicketData.PIECE)
+		plan.origins.append(Vector2((a.x + b.x) * 0.5, low.y + 1.0) * STEP)
+		plan.alongs.append(k * NelvarThicketData.PIECE)
+	return plan
+
+
+## The rows (first, last) of the fallen giant: a band of its picture.
+func paint_fallen_rows(plan: FallenPlan, rows: Vector2i) -> Sheet:
+	var sheet := plan.band(rows)
+	var fallen := plan.fallen
+	var salt := plan.salt
+	var axis := plan.axis
+	var normal := plan.normal
+	var start := plan.start
+	var length := plan.length
+	var radius := plan.radius
+	var tunnel := plan.tunnel
+	var sink := plan.sink
+	var hollow_center := plan.hollow_center
+	var top := plan.top
+	var open := plan.open
+	var pieces := plan.pieces
 	var c := normal.y
 	for y in sheet.size.y:
 		for x in sheet.size.x:
@@ -609,7 +803,7 @@ func paint_fallen(fallen: NelvarThicketData.Fallen) -> Array[Piece]:
 			var cut := INF
 			if s > length - open:
 				var t := (s - (length - open)) / open
-				cut = top * (1.0 - t * 0.55) - noise(s * 0.4, 0.0, salt) * top * 0.3 * t
+				cut = top * (1.0 - t * 0.55) - NelvarPixelArt.value_noise(s * 0.4, 0.0, salt) * top * 0.3 * t
 			var surface := 0
 			if z > cut:
 				z = cut
@@ -647,10 +841,11 @@ func paint_fallen(fallen: NelvarThicketData.Fallen) -> Array[Piece]:
 						elif z < arch + 1.0:
 							color = ramp(SPLINTER, 0.6, gx, gy)
 				1:
-					color = ramp(SPLINTER, 0.55 + noise(gx * 0.5, gy * 0.5, salt) * 0.4, gx, gy)
+					color = ramp(SPLINTER, 0.55 + NelvarPixelArt.value_noise(gx * 0.5, gy * 0.5, salt) * 0.4, gx, gy)
 					level = 0.8
 				2:
-					color = ramp(ROT, 0.25 + z / maxf(1.0, tunnel) * 0.5 + noise(gx * 0.3, gy * 0.3, salt + 2) * 0.3, gx, gy)
+					color = ramp(ROT, 0.25 + z / maxf(1.0, tunnel) * 0.5
+						+ NelvarPixelArt.value_noise(gx * 0.3, gy * 0.3, salt + 2) * 0.3, gx, gy)
 					level = 0.3
 					if NelvarPixelArt.hash01(floori(s / 5.0), floori(z / 3.0), salt + 4) < 0.05:
 						color = SPLINTER[1]
@@ -662,9 +857,16 @@ func paint_fallen(fallen: NelvarThicketData.Fallen) -> Array[Piece]:
 						if u < 12.0 and stroke < 1.0 and z > tunnel * 0.3 and z < tunnel * 1.2:
 							color = SPLINTER[2]
 			sheet.put(x, y, color, 255 if z < 3.0 else FADES, piece, level)
+	return sheet
+
+
+## The fallen giant from its bands (in order): its outline, fungi and ferns, cut in pieces.
+func finish_fallen(plan: FallenPlan, bands: Array) -> Array[Piece]:
+	var sheet := plan.sheet(bands)
 	sheet.outline(OUTLINE, 0.36)
-	_fallen_growth(sheet, fallen, rng, start, axis, normal, length, top, sink, radius, ground_half)
-	return sheet.cut(pieces, origins, alongs)
+	_fallen_growth(sheet, plan.fallen, plan.rng, plan.start, plan.axis, plan.normal, plan.length, plan.top, plan.sink,
+		plan.radius, plan.ground_half)
+	return sheet.cut(plan.pieces, plan.origins, plan.alongs)
 
 
 ## The range of heights a ray up from the ground point (q across, sloped by c) spends inside
@@ -688,16 +890,16 @@ func _breach_at(fallen: NelvarThicketData.Fallen, along: float) -> Vector2:
 
 
 func _fallen_bark(s: float, across: float, z: float, level: float, gx: int, gy: int, salt: int, radius: float) -> Color:
-	var bare := noise(s * 0.05, across * 0.08, salt + 1)
-	var crack := noise(s * 0.012, across * 0.4, salt + 2)
-	if level > 0.5 and z > radius * 0.9 and noise(gx * 0.12, gy * 0.12, salt + 3) > 0.45:
+	var bare := NelvarPixelArt.value_noise(s * 0.05, across * 0.08, salt + 1)
+	var crack := NelvarPixelArt.value_noise(s * 0.012, across * 0.4, salt + 2)
+	if level > 0.5 and z > radius * 0.9 and NelvarPixelArt.value_noise(gx * 0.12, gy * 0.12, salt + 3) > 0.45:
 		return ramp(MOSS, level - 0.15, gx, gy)
 	if bare > 0.7:
 		# Bark gone: grey wood with long cracks along the trunk.
 		if absf(crack - 0.5) < 0.04:
 			return OUTLINE
 		return ramp(BARK[Wood.DEAD], level, gx, gy)
-	var furrow := noise(s * 0.03, across * 0.35, salt + 4)
+	var furrow := NelvarPixelArt.value_noise(s * 0.03, across * 0.35, salt + 4)
 	if furrow < 0.34:
 		return ramp(BARK[Wood.OAK], level - 0.35, gx, gy)
 	return ramp(BARK[Wood.OAK], level + (furrow - 0.5) * 0.3, gx, gy)
@@ -764,7 +966,7 @@ func paint_plate(fallen: NelvarThicketData.Fallen) -> Piece:
 				var py := y - int(round(h))
 				# Strands of root fanning out from the stump's middle, earth between them.
 				var spoke := atan2(h - tall * 0.45, local.y * half)
-				var strand := sin(spoke * 11.0 + noise(local.y * 4.0, h * 0.08, salt) * 5.0)
+				var strand := sin(spoke * 11.0 + NelvarPixelArt.value_noise(local.y * 4.0, h * 0.08, salt) * 5.0)
 				var level := 0.35 + local.y * 0.15 * normal.x + (h / tall) * 0.3 + (0.15 if z == 0 else -0.1)
 				var color: Color
 				if strand > 0.55:
@@ -772,7 +974,7 @@ func paint_plate(fallen: NelvarThicketData.Fallen) -> Piece:
 				elif NelvarPixelArt.hash01(floori(local.y * half / 3.0), floori(h / 3.0), salt) < 0.04:
 					color = ramp(STONE, level, gx, gy - z)
 				else:
-					color = ramp(SOIL, level + noise(gx * 0.3, (gy - z) * 0.3, salt + 1) * 0.3, gx, gy - z)
+					color = ramp(SOIL, level + NelvarPixelArt.value_noise(gx * 0.3, (gy - z) * 0.3, salt + 1) * 0.3, gx, gy - z)
 				sheet.put(x, py, color, 255, 0, level)
 	sheet.outline(OUTLINE, 0.4)
 	# Rootlets hanging off the lower edge.

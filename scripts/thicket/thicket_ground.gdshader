@@ -311,14 +311,14 @@ void fragment() {
 		float open = sun + (value_noise(np * 0.06 + 9.0) - 0.5) * 0.35;
 		if (open > 0.45) {
 			color = ramp5(SUNNY, 0.35 + (fbm(np * 0.05 + 3.0) - 0.5) * 0.6 + (open - 0.45) * 0.4, pixel);
-			if (hash12(np * 1.31) < 0.05) {
+			if (hash12(np * 1.31) < 0.025) {
 				color = SUNNY[4];
 			}
 		} else {
 			// Pine needles in the litter: thick under a pine, a few anywhere.
-			vec4 bit = kind == 1 ? needle(pixel, np, 9.0, 0.32 * (1.0 - sun)) : vec4(0.0);
+			vec4 bit = kind == 1 ? needle(pixel, np, 9.0, 0.18 * (1.0 - sun)) : vec4(0.0);
 			if (bit.a == 0.0) {
-				bit = needle(pixel, np + vec2(4.5, 2.5), 13.0, 0.12);
+				bit = needle(pixel, np + vec2(4.5, 2.5), 13.0, 0.05);
 			}
 			if (bit.a > 0.0 && moss < 0.7) {
 				color = bit.rgb;

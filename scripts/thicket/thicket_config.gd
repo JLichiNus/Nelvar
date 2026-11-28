@@ -26,7 +26,7 @@ extends Resource
 @export var start_giant_distance: Vector2 = Vector2(520.0, 620.0)
 
 @export_group("Roots")
-@export var roots_per_giant: Vector2i = Vector2i(5, 9)
+@export var roots_per_giant: Vector2i = Vector2i(0, 0)
 @export var root_length: Vector2 = Vector2(300.0, 900.0)
 ## Width of a root where it leaves the trunk, and at its tip.
 @export var root_width: Vector2 = Vector2(30.0, 140.0)
@@ -67,15 +67,15 @@ extends Resource
 @export var breaches: Vector2i = Vector2i(1, 3)
 
 @export_group("Hazards")
-@export var flytrap_groups: Vector2i = Vector2i(3, 5)
+@export var flytrap_groups: Vector2i = Vector2i(0, 0)
 @export var flytraps_per_group: Vector2i = Vector2i(2, 6)
 @export var flytrap_radius: Vector2 = Vector2(55.0, 85.0)
 @export var puffball_groups: Vector2i = Vector2i(5, 8)
 @export var puffballs_per_group: Vector2i = Vector2i(2, 5)
 @export var puffball_radius: Vector2 = Vector2(24.0, 60.0)
-@export var loose_patches: Vector2i = Vector2i(4, 7)
+@export var loose_patches: Vector2i = Vector2i(0, 0)
 @export var loose_radius: Vector2 = Vector2(80.0, 200.0)
-@export var resin_lobes: Vector2i = Vector2i(2, 4)
+@export var resin_lobes: Vector2i = Vector2i(0, 0)
 @export var resin_radius: Vector2 = Vector2(60.0, 160.0)
 @export var ambers: Vector2i = Vector2i(3, 6)
 ## Hazards keep this far from the start.
@@ -85,8 +85,8 @@ extends Resource
 @export var acorns: Vector2i = Vector2i(20, 35)
 @export var mushroom_groups: Vector2i = Vector2i(6, 12)
 @export var grass_clumps: Vector2i = Vector2i(60, 90)
-@export var clovers: Vector2i = Vector2i(30, 50)
-@export var flowers: Vector2i = Vector2i(10, 16)
+@export var clovers: Vector2i = Vector2i(15, 25)
+@export var flowers: Vector2i = Vector2i(6, 10)
 @export var leaves: Vector2i = Vector2i(40, 60)
 @export var twigs: Vector2i = Vector2i(3, 6)
 @export var shells: Vector2i = Vector2i(2, 4)
